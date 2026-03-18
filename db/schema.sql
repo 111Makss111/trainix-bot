@@ -1,0 +1,71 @@
+CREATE TABLE IF NOT EXISTS profiles (
+  id TEXT PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  google_sub TEXT UNIQUE NOT NULL,
+  role TEXT NOT NULL DEFAULT 'owner',
+  display_name TEXT,
+  avatar_url TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS plans (
+  id TEXT PRIMARY KEY,
+  owner_email TEXT NOT NULL,
+  period TEXT NOT NULL CHECK (period IN ('week', 'month', 'year')),
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_plans_owner_period
+ON plans (owner_email, period, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS web_projects (
+  id TEXT PRIMARY KEY,
+  owner_email TEXT NOT NULL,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  description TEXT,
+  telegram_bot_token TEXT,
+  telegram_bot_name TEXT,
+  telegram_bot_username TEXT,
+  telegram_chat_id TEXT,
+  telegram_chat_title TEXT,
+  telegram_chat_type TEXT,
+  telegram_can_join_groups BOOLEAN NOT NULL DEFAULT FALSE,
+  telegram_can_read_all_group_messages BOOLEAN NOT NULL DEFAULT FALSE,
+  telegram_last_verified_at TIMESTAMPTZ,
+  telegram_webhook_secret TEXT,
+  telegram_webhook_url TEXT,
+  telegram_webhook_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  telegram_webhook_last_enabled_at TIMESTAMPTZ,
+  ai_provider TEXT,
+  ai_model TEXT,
+  smart_replies_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  auto_posts_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (owner_email, slug)
+);
+
+CREATE INDEX IF NOT EXISTS idx_web_projects_owner_updated
+ON web_projects (owner_email, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS telegram_messages (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES web_projects(id) ON DELETE CASCADE,
+  update_id BIGINT NOT NULL,
+  update_type TEXT NOT NULL,
+  telegram_chat_id TEXT,
+  telegram_message_id BIGINT,
+  sender_id TEXT,
+  sender_name TEXT,
+  text_content TEXT,
+  raw_payload TEXT NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (project_id, update_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_telegram_messages_project_received
+ON telegram_messages (project_id, received_at DESC);
