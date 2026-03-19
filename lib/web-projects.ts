@@ -42,6 +42,29 @@ export type TelegramMessageLog = {
   receivedAt: string;
 };
 
+export type WebPostDraft = {
+  id: string;
+  projectId: string;
+  contentType: string;
+  topicHint: string | null;
+  sourceKind: string;
+  sourceKey: string;
+  sourceTitle: string | null;
+  sourceUrl: string | null;
+  title: string;
+  caption: string;
+  imageUrl: string | null;
+  imageAlt: string | null;
+  imageCreditName: string | null;
+  imageCreditUrl: string | null;
+  imageSource: string | null;
+  status: string;
+  publishedMessageId: number | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 function slugify(value: string) {
   return value
     .trim()
@@ -163,6 +186,42 @@ async function ensureWebProjectsTable() {
   await sql`
     CREATE INDEX IF NOT EXISTS idx_telegram_messages_project_received
     ON telegram_messages (project_id, received_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS web_post_drafts (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES web_projects(id) ON DELETE CASCADE,
+      content_type TEXT NOT NULL,
+      topic_hint TEXT,
+      source_kind TEXT NOT NULL,
+      source_key TEXT NOT NULL,
+      source_title TEXT,
+      source_url TEXT,
+      source_payload TEXT NOT NULL,
+      title TEXT NOT NULL,
+      caption TEXT NOT NULL,
+      image_url TEXT,
+      image_alt TEXT,
+      image_credit_name TEXT,
+      image_credit_url TEXT,
+      image_source TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      published_message_id BIGINT,
+      published_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_web_post_drafts_project_status
+    ON web_post_drafts (project_id, status, created_at DESC)
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_web_post_drafts_project_content_published
+    ON web_post_drafts (project_id, content_type, published_at DESC)
   `;
 
   return sql;
@@ -744,5 +803,402 @@ export async function deleteWebProject(input: {
     DELETE FROM web_projects
     WHERE id = ${input.projectId}
       AND owner_email = ${input.ownerEmail}
+  `;
+}
+
+export async function archiveDraftWebPostsForProject(input: {
+  ownerEmail: string;
+  projectId: string;
+}) {
+  const sql = await ensureWebProjectsTable();
+
+  if (!sql) {
+    return;
+  }
+
+  await sql`
+    UPDATE web_post_drafts
+    SET
+      status = 'archived',
+      updated_at = NOW()
+    WHERE project_id = ${input.projectId}
+      AND status = 'draft'
+      AND EXISTS (
+        SELECT 1
+        FROM web_projects
+        WHERE id = ${input.projectId}
+          AND owner_email = ${input.ownerEmail}
+      )
+  `;
+}
+
+export async function createWebPostDrafts(input: {
+  projectId: string;
+  contentType: string;
+  topicHint: string | null;
+  sourceKind: string;
+  sourceKey: string;
+  sourceTitle: string | null;
+  sourceUrl: string | null;
+  sourcePayload: string;
+  drafts: Array<{
+    title: string;
+    caption: string;
+    imageUrl: string | null;
+    imageAlt: string | null;
+    imageCreditName: string | null;
+    imageCreditUrl: string | null;
+    imageSource: string | null;
+  }>;
+}) {
+  const sql = await ensureWebProjectsTable();
+
+  if (!sql || !input.drafts.length) {
+    return;
+  }
+
+  for (const draft of input.drafts) {
+    await sql`
+      INSERT INTO web_post_drafts (
+        id,
+        project_id,
+        content_type,
+        topic_hint,
+        source_kind,
+        source_key,
+        source_title,
+        source_url,
+        source_payload,
+        title,
+        caption,
+        image_url,
+        image_alt,
+        image_credit_name,
+        image_credit_url,
+        image_source,
+        status
+      )
+      VALUES (
+        ${randomUUID()},
+        ${input.projectId},
+        ${input.contentType},
+        ${input.topicHint},
+        ${input.sourceKind},
+        ${input.sourceKey},
+        ${input.sourceTitle},
+        ${input.sourceUrl},
+        ${input.sourcePayload},
+        ${draft.title},
+        ${draft.caption},
+        ${draft.imageUrl},
+        ${draft.imageAlt},
+        ${draft.imageCreditName},
+        ${draft.imageCreditUrl},
+        ${draft.imageSource},
+        'draft'
+      )
+    `;
+  }
+}
+
+function mapWebPostDraft(row: {
+  id: string;
+  project_id: string;
+  content_type: string;
+  topic_hint: string | null;
+  source_kind: string;
+  source_key: string;
+  source_title: string | null;
+  source_url: string | null;
+  title: string;
+  caption: string;
+  image_url: string | null;
+  image_alt: string | null;
+  image_credit_name: string | null;
+  image_credit_url: string | null;
+  image_source: string | null;
+  status: string;
+  published_message_id: number | null;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}) {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    contentType: row.content_type,
+    topicHint: row.topic_hint,
+    sourceKind: row.source_kind,
+    sourceKey: row.source_key,
+    sourceTitle: row.source_title,
+    sourceUrl: row.source_url,
+    title: row.title,
+    caption: row.caption,
+    imageUrl: row.image_url,
+    imageAlt: row.image_alt,
+    imageCreditName: row.image_credit_name,
+    imageCreditUrl: row.image_credit_url,
+    imageSource: row.image_source,
+    status: row.status,
+    publishedMessageId: row.published_message_id,
+    publishedAt: row.published_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  } satisfies WebPostDraft;
+}
+
+export async function listDraftWebPostsForProject(input: {
+  ownerEmail: string;
+  projectId: string;
+  limit?: number;
+}) {
+  const sql = await ensureWebProjectsTable();
+
+  if (!sql) {
+    return [] as WebPostDraft[];
+  }
+
+  const limit = input.limit ?? 3;
+
+  const rows = (await sql`
+    SELECT
+      wpd.id,
+      wpd.project_id,
+      wpd.content_type,
+      wpd.topic_hint,
+      wpd.source_kind,
+      wpd.source_key,
+      wpd.source_title,
+      wpd.source_url,
+      wpd.title,
+      wpd.caption,
+      wpd.image_url,
+      wpd.image_alt,
+      wpd.image_credit_name,
+      wpd.image_credit_url,
+      wpd.image_source,
+      wpd.status,
+      wpd.published_message_id,
+      wpd.published_at,
+      wpd.created_at,
+      wpd.updated_at
+    FROM web_post_drafts wpd
+    INNER JOIN web_projects wp ON wp.id = wpd.project_id
+    WHERE wpd.project_id = ${input.projectId}
+      AND wp.owner_email = ${input.ownerEmail}
+      AND wpd.status = 'draft'
+    ORDER BY wpd.created_at DESC
+    LIMIT ${limit}
+  `) as Array<{
+    id: string;
+    project_id: string;
+    content_type: string;
+    topic_hint: string | null;
+    source_kind: string;
+    source_key: string;
+    source_title: string | null;
+    source_url: string | null;
+    title: string;
+    caption: string;
+    image_url: string | null;
+    image_alt: string | null;
+    image_credit_name: string | null;
+    image_credit_url: string | null;
+    image_source: string | null;
+    status: string;
+    published_message_id: number | null;
+    published_at: string | null;
+    created_at: string;
+    updated_at: string;
+  }>;
+
+  return rows.reverse().map(mapWebPostDraft);
+}
+
+export async function listPublishedWebPostsForProject(input: {
+  ownerEmail: string;
+  projectId: string;
+  limit?: number;
+}) {
+  const sql = await ensureWebProjectsTable();
+
+  if (!sql) {
+    return [] as WebPostDraft[];
+  }
+
+  const limit = input.limit ?? 8;
+
+  const rows = (await sql`
+    SELECT
+      wpd.id,
+      wpd.project_id,
+      wpd.content_type,
+      wpd.topic_hint,
+      wpd.source_kind,
+      wpd.source_key,
+      wpd.source_title,
+      wpd.source_url,
+      wpd.title,
+      wpd.caption,
+      wpd.image_url,
+      wpd.image_alt,
+      wpd.image_credit_name,
+      wpd.image_credit_url,
+      wpd.image_source,
+      wpd.status,
+      wpd.published_message_id,
+      wpd.published_at,
+      wpd.created_at,
+      wpd.updated_at
+    FROM web_post_drafts wpd
+    INNER JOIN web_projects wp ON wp.id = wpd.project_id
+    WHERE wpd.project_id = ${input.projectId}
+      AND wp.owner_email = ${input.ownerEmail}
+      AND wpd.status = 'published'
+    ORDER BY COALESCE(wpd.published_at, wpd.created_at) DESC
+    LIMIT ${limit}
+  `) as Array<{
+    id: string;
+    project_id: string;
+    content_type: string;
+    topic_hint: string | null;
+    source_kind: string;
+    source_key: string;
+    source_title: string | null;
+    source_url: string | null;
+    title: string;
+    caption: string;
+    image_url: string | null;
+    image_alt: string | null;
+    image_credit_name: string | null;
+    image_credit_url: string | null;
+    image_source: string | null;
+    status: string;
+    published_message_id: number | null;
+    published_at: string | null;
+    created_at: string;
+    updated_at: string;
+  }>;
+
+  return rows.map(mapWebPostDraft);
+}
+
+export async function listRecentPublishedPostSourceKeys(input: {
+  projectId: string;
+  contentType: string;
+  limit?: number;
+}) {
+  const sql = await ensureWebProjectsTable();
+
+  if (!sql) {
+    return [] as string[];
+  }
+
+  const limit = input.limit ?? 30;
+  const rows = (await sql`
+    SELECT source_key
+    FROM web_post_drafts
+    WHERE project_id = ${input.projectId}
+      AND content_type = ${input.contentType}
+      AND status = 'published'
+    ORDER BY published_at DESC NULLS LAST, created_at DESC
+    LIMIT ${limit}
+  `) as Array<{ source_key: string }>;
+
+  return rows.map((row) => row.source_key);
+}
+
+export async function getDraftWebPostForOwner(input: {
+  ownerEmail: string;
+  projectId: string;
+  draftId: string;
+}) {
+  const sql = await ensureWebProjectsTable();
+
+  if (!sql) {
+    return null;
+  }
+
+  const rows = (await sql`
+    SELECT
+      wpd.id,
+      wpd.project_id,
+      wpd.content_type,
+      wpd.topic_hint,
+      wpd.source_kind,
+      wpd.source_key,
+      wpd.source_title,
+      wpd.source_url,
+      wpd.title,
+      wpd.caption,
+      wpd.image_url,
+      wpd.image_alt,
+      wpd.image_credit_name,
+      wpd.image_credit_url,
+      wpd.image_source,
+      wpd.status,
+      wpd.published_message_id,
+      wpd.published_at,
+      wpd.created_at,
+      wpd.updated_at
+    FROM web_post_drafts wpd
+    INNER JOIN web_projects wp ON wp.id = wpd.project_id
+    WHERE wpd.id = ${input.draftId}
+      AND wpd.project_id = ${input.projectId}
+      AND wp.owner_email = ${input.ownerEmail}
+    LIMIT 1
+  `) as Array<{
+    id: string;
+    project_id: string;
+    content_type: string;
+    topic_hint: string | null;
+    source_kind: string;
+    source_key: string;
+    source_title: string | null;
+    source_url: string | null;
+    title: string;
+    caption: string;
+    image_url: string | null;
+    image_alt: string | null;
+    image_credit_name: string | null;
+    image_credit_url: string | null;
+    image_source: string | null;
+    status: string;
+    published_message_id: number | null;
+    published_at: string | null;
+    created_at: string;
+    updated_at: string;
+  }>;
+
+  return rows[0] ? mapWebPostDraft(rows[0]) : null;
+}
+
+export async function markWebPostDraftPublished(input: {
+  ownerEmail: string;
+  projectId: string;
+  draftId: string;
+  publishedMessageId: number | null;
+}) {
+  const sql = await ensureWebProjectsTable();
+
+  if (!sql) {
+    return;
+  }
+
+  await sql`
+    UPDATE web_post_drafts
+    SET
+      status = 'published',
+      published_message_id = ${input.publishedMessageId},
+      published_at = NOW(),
+      updated_at = NOW()
+    WHERE id = ${input.draftId}
+      AND project_id = ${input.projectId}
+      AND EXISTS (
+        SELECT 1
+        FROM web_projects
+        WHERE id = ${input.projectId}
+          AND owner_email = ${input.ownerEmail}
+      )
   `;
 }

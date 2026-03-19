@@ -70,3 +70,33 @@ CREATE TABLE IF NOT EXISTS telegram_messages (
 
 CREATE INDEX IF NOT EXISTS idx_telegram_messages_project_received
 ON telegram_messages (project_id, received_at DESC);
+
+CREATE TABLE IF NOT EXISTS web_post_drafts (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES web_projects(id) ON DELETE CASCADE,
+  content_type TEXT NOT NULL,
+  topic_hint TEXT,
+  source_kind TEXT NOT NULL,
+  source_key TEXT NOT NULL,
+  source_title TEXT,
+  source_url TEXT,
+  source_payload TEXT NOT NULL,
+  title TEXT NOT NULL,
+  caption TEXT NOT NULL,
+  image_url TEXT,
+  image_alt TEXT,
+  image_credit_name TEXT,
+  image_credit_url TEXT,
+  image_source TEXT,
+  status TEXT NOT NULL DEFAULT 'draft',
+  published_message_id BIGINT,
+  published_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_web_post_drafts_project_status
+ON web_post_drafts (project_id, status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_web_post_drafts_project_content_published
+ON web_post_drafts (project_id, content_type, published_at DESC);

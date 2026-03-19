@@ -1,17 +1,20 @@
 import type { WebProject } from "@/lib/web-projects";
 import { deleteWebProjectAction } from "@/app/cabinet/web/actions";
 import { WebAiCard } from "./WebAiCard";
+import { WebPostsStudio } from "./WebPostsStudio";
 import { WebTelegramMessages } from "./WebTelegramMessages";
 import { WebTelegramCard } from "./WebTelegramCard";
-import { WebStatusCard } from "./WebStatusCard";
-import type { TelegramMessageLog } from "@/lib/web-projects";
+import type { TelegramMessageLog, WebPostDraft } from "@/lib/web-projects";
 import { FormSubmitButton } from "./FormSubmitButton";
 
 type WebProjectOverviewProps = {
   project: WebProject | null;
   telegramNotice?: string;
   aiNotice?: string;
+  postNotice?: string;
   telegramMessages: TelegramMessageLog[];
+  postDrafts: WebPostDraft[];
+  publishedPosts: WebPostDraft[];
   aiRuntime: {
     provider: string;
     model: string;
@@ -25,7 +28,10 @@ export function WebProjectOverview({
   project,
   telegramNotice,
   aiNotice,
+  postNotice,
   telegramMessages,
+  postDrafts,
+  publishedPosts,
   aiRuntime,
 }: WebProjectOverviewProps) {
   if (!project) {
@@ -80,52 +86,14 @@ export function WebProjectOverview({
         <WebTelegramCard project={project} notice={telegramNotice} />
 
         <WebAiCard project={project} notice={aiNotice} aiRuntime={aiRuntime} />
-
-        <WebStatusCard
-          eyebrow="Posts"
-          title="Auto Posts"
-          status={project.autoPostsEnabled ? "Enabled" : "Draft"}
-          statusTone={project.autoPostsEnabled ? "active" : "neutral"}
-          items={[
-            {
-              label: "Auto publish",
-              value: project.autoPostsEnabled ? "Увімкнено" : "Вимкнено",
-            },
-            {
-              label: "Workflow",
-              value: "Draft -> Review -> Publish",
-            },
-            {
-              label: "Content style",
-              value: "Ще не задано",
-            },
-          ]}
-          note="Я рекомендую почати з генерації draft-постів, а не прямої автопублікації в групу."
-        />
-
-        <WebStatusCard
-          eyebrow="Sources"
-          title="Knowledge Sources"
-          status="Planned"
-          items={[
-            {
-              label: "Telegram data",
-              value: "Питання клієнтів",
-            },
-            {
-              label: "Project brief",
-              value: project.description || "Буде взято з опису проєкту",
-            },
-            {
-              label: "AI knowledge base",
-              value: project.aiInstructions?.trim()
-                ? "Заповнено"
-                : "Поки порожньо",
-            },
-          ]}
-          note="Зараз бот бере базовий опис проєкту і розширений AI-контекст. Пізніше сюди можна додати окремі джерела, FAQ та зовнішні API."
-        />
       </div>
+
+      <WebPostsStudio
+        project={project}
+        notice={postNotice}
+        drafts={postDrafts}
+        publishedPosts={publishedPosts}
+      />
 
       <WebTelegramMessages
         initialMessages={telegramMessages}

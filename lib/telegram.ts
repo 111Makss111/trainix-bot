@@ -121,3 +121,16 @@ export async function sendTelegramTextMessage(input: {
 
   return callTelegramApi<TelegramSentMessage>(input.botToken, "sendMessage", payload);
 }
+
+export async function sendTelegramPhotoMessage(input: {
+  botToken: string;
+  chatId: string;
+  photoUrl: string;
+  caption: string;
+}) {
+  return callTelegramApi<TelegramSentMessage>(input.botToken, "sendPhoto", {
+    chat_id: input.chatId,
+    photo: input.photoUrl,
+    caption: input.caption.slice(0, 1024),
+  });
+}

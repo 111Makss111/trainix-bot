@@ -6,16 +6,28 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import {
+  fetchPostSource,
+  generatePostDrafts,
+  isPostContentType,
+} from "@/lib/post-studio";
+import {
   deleteTelegramWebhook,
   getTelegramWebhookInfo,
+  sendTelegramPhotoMessage,
+  sendTelegramTextMessage,
   setTelegramWebhook,
   verifyTelegramConnection,
 } from "@/lib/telegram";
 import {
+  archiveDraftWebPostsForProject,
+  createWebPostDrafts,
+  getDraftWebPostForOwner,
   clearWebProjectTelegramWebhook,
   createWebProject,
   deleteWebProject,
   getWebProjectForOwner,
+  listRecentPublishedPostSourceKeys,
+  markWebPostDraftPublished,
   saveWebProjectTelegramVerification,
   setWebProjectTelegramWebhook,
   updateWebProjectAiInstructions,
@@ -73,6 +85,10 @@ function redirectToTelegramState(projectId: string, state: string): never {
 
 function redirectToAiState(projectId: string, state: string): never {
   redirect(`/cabinet/web?project=${projectId}&ai=${state}`);
+}
+
+function redirectToPostState(projectId: string, state: string): never {
+  redirect(`/cabinet/web?project=${projectId}&post=${state}`);
 }
 
 function getTelegramWebhookBaseUrl() {
@@ -317,4 +333,190 @@ export async function updateProjectAiInstructionsAction(formData: FormData) {
 
   revalidatePath("/cabinet/web");
   redirectToAiState(projectId, "saved");
+}
+
+function buildPublishedPostMessage(input: {
+  title: string;
+  caption: string;
+  imageSource: string | null;
+  imageCreditName: string | null;
+}) {
+  const baseText = [input.title.trim(), input.caption.trim()]
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+
+  const creditLine =
+    input.imageSource === "Pexels" && input.imageCreditName
+      ? `\n\nPhoto: ${input.imageCreditName} / Pexels`
+      : "";
+
+  return `${baseText}${creditLine}`.trim();
+}
+
+export async function generatePostDraftsAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const projectId = formData.get("projectId");
+  const contentType = formData.get("contentType");
+  const topicHint = formData.get("topicHint");
+
+  if (
+    typeof projectId !== "string" ||
+    typeof contentType !== "string" ||
+    !isPostContentType(contentType)
+  ) {
+    return;
+  }
+
+  const project = await getWebProjectForOwner({
+    ownerEmail,
+    projectId,
+  });
+
+  if (!project) {
+    redirect("/cabinet/web");
+  }
+
+  if (!process.env.GEMINI_API_KEY?.trim()) {
+    redirectToPostState(projectId, "missing-ai-key");
+  }
+
+  try {
+    const recentSourceKeys = await listRecentPublishedPostSourceKeys({
+      projectId,
+      contentType,
+      limit: 36,
+    });
+    const normalizedTopicHint =
+      typeof topicHint === "string" && topicHint.trim() ? topicHint.trim() : null;
+    const source = await fetchPostSource({
+      contentType,
+      topicHint: normalizedTopicHint,
+      recentSourceKeys,
+    });
+
+    if (!source) {
+      redirectToPostState(projectId, "source-unavailable");
+    }
+
+    const drafts = await generatePostDrafts({
+      project,
+      contentType,
+      topicHint: normalizedTopicHint,
+      source,
+    });
+
+    await archiveDraftWebPostsForProject({
+      ownerEmail,
+      projectId,
+    });
+
+    await createWebPostDrafts({
+      projectId,
+      contentType,
+      topicHint: normalizedTopicHint,
+      sourceKind: source.sourceKind,
+      sourceKey: source.sourceKey,
+      sourceTitle: source.sourceTitle,
+      sourceUrl: source.sourceUrl,
+      sourcePayload: source.sourcePayload,
+      drafts: drafts.map((draft) => ({
+        title: draft.title,
+        caption: draft.caption,
+        imageUrl: source.imageUrl,
+        imageAlt: draft.imageAlt || source.imageAlt,
+        imageCreditName: source.imageCreditName,
+        imageCreditUrl: source.imageCreditUrl,
+        imageSource: source.imageSource,
+      })),
+    });
+
+    revalidatePath("/cabinet/web");
+    redirectToPostState(projectId, "generated");
+  } catch (error) {
+    console.error("Failed to generate post drafts", error);
+    redirectToPostState(projectId, "generation-failed");
+  }
+}
+
+export async function publishWebPostDraftAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const projectId = formData.get("projectId");
+  const draftId = formData.get("draftId");
+
+  if (typeof projectId !== "string" || typeof draftId !== "string") {
+    return;
+  }
+
+  const project = await getWebProjectForOwner({
+    ownerEmail,
+    projectId,
+  });
+
+  if (!project?.telegramBotToken || !project.telegramChatId) {
+    redirectToPostState(projectId, "missing-telegram");
+  }
+
+  const draft = await getDraftWebPostForOwner({
+    ownerEmail,
+    projectId,
+    draftId,
+  });
+
+  if (!draft) {
+    redirectToPostState(projectId, "draft-not-found");
+  }
+
+  const messageText = buildPublishedPostMessage({
+    title: draft.title,
+    caption: draft.caption,
+    imageSource: draft.imageSource,
+    imageCreditName: draft.imageCreditName,
+  });
+
+  try {
+    let publishedMessageId: number | null = null;
+
+    if (draft.imageUrl) {
+      try {
+        const sentPhoto = await sendTelegramPhotoMessage({
+          botToken: project.telegramBotToken,
+          chatId: project.telegramChatId,
+          photoUrl: draft.imageUrl,
+          caption: messageText,
+        });
+
+        publishedMessageId = sentPhoto.message_id;
+      } catch {
+        const sentText = await sendTelegramTextMessage({
+          botToken: project.telegramBotToken,
+          chatId: project.telegramChatId,
+          text: messageText,
+        });
+
+        publishedMessageId = sentText.message_id;
+      }
+    } else {
+      const sentText = await sendTelegramTextMessage({
+        botToken: project.telegramBotToken,
+        chatId: project.telegramChatId,
+        text: messageText,
+      });
+
+      publishedMessageId = sentText.message_id;
+    }
+
+    await markWebPostDraftPublished({
+      ownerEmail,
+      projectId,
+      draftId,
+      publishedMessageId,
+    });
+
+    revalidatePath("/cabinet/web");
+    redirectToPostState(projectId, "published");
+  } catch (error) {
+    console.error("Failed to publish post draft", error);
+    redirectToPostState(projectId, "publish-failed");
+  }
 }

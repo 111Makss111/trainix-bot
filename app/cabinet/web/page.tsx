@@ -9,6 +9,8 @@ import {
 import { authOptions } from "@/lib/auth";
 import { loadProjectKnowledge } from "@/lib/project-knowledge";
 import {
+  listDraftWebPostsForProject,
+  listPublishedWebPostsForProject,
   listRecentTelegramMessagesForProject,
   listWebProjectsForOwner,
 } from "@/lib/web-projects";
@@ -18,6 +20,7 @@ type WebPageProps = {
     project?: string;
     telegram?: string;
     ai?: string;
+    post?: string;
   }>;
 };
 
@@ -37,6 +40,20 @@ export default async function WebPage({ searchParams }: WebPageProps) {
         ownerEmail: session.user.email,
         projectId: activeProject.id,
         limit: 20,
+      })
+    : [];
+  const postDrafts = activeProject
+    ? await listDraftWebPostsForProject({
+        ownerEmail: session.user.email,
+        projectId: activeProject.id,
+        limit: 3,
+      })
+    : [];
+  const publishedPosts = activeProject
+    ? await listPublishedWebPostsForProject({
+        ownerEmail: session.user.email,
+        projectId: activeProject.id,
+        limit: 8,
       })
     : [];
   const projectKnowledge = activeProject
@@ -72,7 +89,10 @@ export default async function WebPage({ searchParams }: WebPageProps) {
           typeof params.telegram === "string" ? params.telegram : undefined
         }
         aiNotice={typeof params.ai === "string" ? params.ai : undefined}
+        postNotice={typeof params.post === "string" ? params.post : undefined}
         telegramMessages={telegramMessages}
+        postDrafts={postDrafts}
+        publishedPosts={publishedPosts}
         aiRuntime={aiRuntime}
       />
     </>
