@@ -16,6 +16,8 @@ type WebProjectOverviewProps = {
     provider: string;
     model: string;
     apiKeyConfigured: boolean;
+    knowledgeFilePath: string | null;
+    knowledgeLoaded: boolean;
   };
 };
 

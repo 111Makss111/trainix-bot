@@ -10,6 +10,8 @@ type WebAiCardProps = {
     provider: string;
     model: string;
     apiKeyConfigured: boolean;
+    knowledgeFilePath: string | null;
+    knowledgeLoaded: boolean;
   };
 };
 
@@ -26,7 +28,11 @@ export function WebAiCard({ project, notice, aiRuntime }: WebAiCardProps) {
     project.smartRepliesEnabled &&
     project.telegramWebhookEnabled &&
     aiRuntime.apiKeyConfigured &&
-    Boolean(project.aiInstructions?.trim() || project.description?.trim());
+    Boolean(
+      aiRuntime.knowledgeLoaded ||
+        project.aiInstructions?.trim() ||
+        project.description?.trim(),
+    );
 
   return (
     <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
@@ -90,6 +96,18 @@ export function WebAiCard({ project, notice, aiRuntime }: WebAiCardProps) {
             {project.smartRepliesEnabled ? "Увімкнено" : "Вимкнено"}
           </span>
         </div>
+        <div className="flex items-center justify-between gap-3 rounded-[1.3rem] border border-white/8 bg-[#091122]/72 px-4 py-3">
+          <span className="text-sm text-white/46">JSON knowledge base</span>
+          <span className="text-sm font-medium text-white/84">
+            {aiRuntime.knowledgeLoaded ? "Підключено" : "Не знайдено"}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-3 rounded-[1.3rem] border border-white/8 bg-[#091122]/72 px-4 py-3">
+          <span className="text-sm text-white/46">Knowledge file</span>
+          <span className="max-w-[18rem] truncate text-sm font-medium text-white/84">
+            {aiRuntime.knowledgeFilePath || "Ще не задано"}
+          </span>
+        </div>
       </div>
 
       <form action={updateProjectAiInstructionsAction} className="mt-5 space-y-4">
@@ -97,7 +115,7 @@ export function WebAiCard({ project, notice, aiRuntime }: WebAiCardProps) {
 
         <label className="grid gap-2">
           <span className="text-xs uppercase tracking-[0.24em] text-white/36">
-            Project knowledge
+            Owner notes / extra context
           </span>
           <textarea
             name="aiInstructions"
@@ -115,9 +133,9 @@ export function WebAiCard({ project, notice, aiRuntime }: WebAiCardProps) {
         </label>
 
         <div className="rounded-[1.5rem] border border-white/8 bg-[#091122]/60 px-4 py-4 text-sm leading-7 text-white/52">
-          Тут краще описати проект нормальною мовою: що це за сервіс, які в нього
-          функції, для кого він, якого тону має триматись бот, що можна і що не
-          можна відповідати. Саме цей текст піде в основу AI-відповідей.
+          Основна структурована база знань тепер може лежати в JSON-файлі всередині
+          проєкту. Це поле залишилось як додаткові owner notes: нюанси тону,
+          уточнення, заборони і тимчасові інструкції.
         </div>
 
         <div className="flex flex-wrap gap-3">

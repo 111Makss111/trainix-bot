@@ -1,3 +1,8 @@
+import {
+  buildKnowledgePromptSections,
+  isWorkoutRequest,
+  loadProjectKnowledge,
+} from "./project-knowledge";
 import type { TelegramMessageLog, WebProject } from "./web-projects";
 
 type SmartReplyInput = {
@@ -18,11 +23,11 @@ type GeminiGenerateContentResponse = {
   }>;
 };
 
-function buildPrompt(input: SmartReplyInput) {
-  const projectSummary =
-    input.project.description?.trim() || "No short project summary provided.";
-  const projectKnowledge =
-    input.project.aiInstructions?.trim() || "No extra knowledge base provided yet.";
+function buildPrompt(input: SmartReplyInput & {
+  projectSummary: string;
+  ownerNotes: string;
+  knowledgeBase: string;
+}) {
   const sender = input.senderName?.trim() || "Unknown user";
   const chat = input.chatTitle?.trim() || "Telegram group";
   const recentHistory = (input.recentMessages ?? [])
@@ -39,9 +44,11 @@ function buildPrompt(input: SmartReplyInput) {
   return [
     "You are an intelligent Telegram assistant for the owner's private web project.",
     `Project name: ${input.project.name}`,
-    `Project summary: ${projectSummary}`,
-    "Project knowledge base:",
-    projectKnowledge,
+    `Project summary: ${input.projectSummary}`,
+    "Owner notes:",
+    input.ownerNotes,
+    "Structured JSON knowledge base:",
+    input.knowledgeBase,
     `Chat: ${chat}`,
     `Sender: ${sender}`,
     "Rules:",
@@ -53,6 +60,8 @@ function buildPrompt(input: SmartReplyInput) {
     "- If the user asks what the project is, explain it using the provided project knowledge.",
     "- Do not invent features, pricing, or guarantees that are not present in the project knowledge.",
     "- Continue the conversation naturally using the recent chat history when it helps.",
+    "- If the user asks for a workout or exercises, prefer giving one practical workout from the knowledge base instead of only describing the project.",
+    "- If workout templates are available, structure the answer as a short actionable plan.",
     "- If the question is vague, ask one short clarifying question.",
     "- If the message is not a real question or request, answer naturally and briefly.",
     "",
@@ -85,6 +94,27 @@ export async function generateSmartTelegramReply(input: SmartReplyInput) {
     return null;
   }
 
+  const structuredKnowledge = await loadProjectKnowledge(input.project);
+  const formattedKnowledge = buildKnowledgePromptSections({
+    knowledge: structuredKnowledge.data,
+    messageText: input.messageText,
+  });
+  const ownerNotes = [
+    input.project.aiInstructions?.trim() || "",
+    structuredKnowledge.relativePath
+      ? `JSON knowledge source: ${structuredKnowledge.relativePath}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n") || "No extra owner notes provided yet.";
+  const projectSummary = [
+    input.project.description?.trim() || "",
+    isWorkoutRequest(input.messageText)
+      ? "The user is asking for workout guidance. Prefer using workout templates if available."
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ") || "No short project summary provided.";
   const model = input.project.aiModel?.trim() || process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
@@ -99,7 +129,12 @@ export async function generateSmartTelegramReply(input: SmartReplyInput) {
           {
             parts: [
               {
-                text: buildPrompt(input),
+                text: buildPrompt({
+                  ...input,
+                  projectSummary,
+                  ownerNotes,
+                  knowledgeBase: formattedKnowledge,
+                }),
               },
             ],
           },

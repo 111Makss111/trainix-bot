@@ -7,6 +7,7 @@ import {
   WebProjectSwitcher,
 } from "@/components/web";
 import { authOptions } from "@/lib/auth";
+import { loadProjectKnowledge } from "@/lib/project-knowledge";
 import {
   listRecentTelegramMessagesForProject,
   listWebProjectsForOwner,
@@ -38,10 +39,15 @@ export default async function WebPage({ searchParams }: WebPageProps) {
         limit: 20,
       })
     : [];
+  const projectKnowledge = activeProject
+    ? await loadProjectKnowledge(activeProject)
+    : { data: null, key: null, relativePath: null };
   const aiRuntime = {
     provider: "Gemini (default)",
     model: process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
     apiKeyConfigured: Boolean(process.env.GEMINI_API_KEY?.trim()),
+    knowledgeFilePath: projectKnowledge.relativePath,
+    knowledgeLoaded: Boolean(projectKnowledge.data),
   };
 
   return (
