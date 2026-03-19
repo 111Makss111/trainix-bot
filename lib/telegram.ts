@@ -63,6 +63,19 @@ async function callTelegramApi<T>(
   return data.result;
 }
 
+function parseDataUrl(value: string) {
+  const match = /^data:([^;]+);base64,([\s\S]+)$/.exec(value);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    mimeType: match[1],
+    base64: match[2],
+  };
+}
+
 export async function verifyTelegramConnection(input: {
   botToken: string;
   chatId: string;
@@ -134,6 +147,42 @@ export async function sendTelegramPhotoMessage(input: {
   caption: string;
   messageThreadId?: number | null;
 }) {
+  const dataUrl = parseDataUrl(input.photoUrl);
+
+  if (dataUrl) {
+    const formData = new FormData();
+    const buffer = Buffer.from(dataUrl.base64, "base64");
+    const extension = dataUrl.mimeType.split("/")[1] || "png";
+
+    formData.set("chat_id", input.chatId);
+    formData.set("caption", input.caption.slice(0, 1024));
+    formData.set(
+      "photo",
+      new Blob([buffer], { type: dataUrl.mimeType }),
+      `generated-post.${extension}`,
+    );
+
+    if (typeof input.messageThreadId === "number") {
+      formData.set("message_thread_id", String(input.messageThreadId));
+    }
+
+    const response = await fetch(
+      `https://api.telegram.org/bot${input.botToken}/sendPhoto`,
+      {
+        method: "POST",
+        body: formData,
+        cache: "no-store",
+      },
+    );
+    const data = (await response.json()) as TelegramApiResult<TelegramSentMessage>;
+
+    if (!data.ok || !data.result) {
+      throw new Error(data.description || "Telegram API request failed");
+    }
+
+    return data.result;
+  }
+
   const payload: Record<string, unknown> = {
     chat_id: input.chatId,
     photo: input.photoUrl,

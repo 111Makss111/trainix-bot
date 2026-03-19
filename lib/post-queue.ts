@@ -61,11 +61,11 @@ export async function createPostDraftBatchForProject(input: {
     drafts: drafts.map((draft) => ({
       title: draft.title,
       caption: draft.caption,
-      imageUrl: source.imageUrl,
+      imageUrl: draft.imageUrl ?? source.imageUrl,
       imageAlt: draft.imageAlt || source.imageAlt,
-      imageCreditName: source.imageCreditName,
-      imageCreditUrl: source.imageCreditUrl,
-      imageSource: source.imageSource,
+      imageCreditName: draft.imageCreditName ?? source.imageCreditName,
+      imageCreditUrl: draft.imageCreditUrl ?? source.imageCreditUrl,
+      imageSource: draft.imageSource ?? source.imageSource,
     })),
   });
 

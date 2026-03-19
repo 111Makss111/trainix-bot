@@ -6,6 +6,10 @@ export type PostDraftSeed = {
   title: string;
   caption: string;
   imageAlt: string | null;
+  imageUrl?: string | null;
+  imageCreditName?: string | null;
+  imageCreditUrl?: string | null;
+  imageSource?: string | null;
 };
 
 type PexelsPhoto = {
@@ -86,6 +90,10 @@ type GeminiGenerateContentResponse = {
     content?: {
       parts?: Array<{
         text?: string;
+        inline_data?: {
+          mime_type?: string;
+          data?: string;
+        };
       }>;
     };
   }>;
@@ -634,6 +642,140 @@ function normalizeDraftCaption(value: string) {
     .slice(0, 880);
 }
 
+function getGeminiImageModel() {
+  return process.env.GEMINI_IMAGE_MODEL?.trim() || "gemini-2.5-flash-image";
+}
+
+function buildImagePrompt(input: {
+  project: WebProject;
+  contentType: PostContentType;
+  source: PostSource;
+  draft: Pick<PostDraftSeed, "title" | "caption">;
+}) {
+  const visualStyle =
+    input.contentType === "workout"
+      ? "Create a clean, modern, energetic fitness editorial image with believable lighting, athletic body language, and a premium social-media look."
+      : "Create a bright, fresh, healthy food editorial image for a fitness audience, with light ingredients, clean plating, and a premium lifestyle look.";
+
+  return [
+    `Project: ${input.project.name}`,
+    `Post type: ${input.contentType}`,
+    `Draft title: ${input.draft.title}`,
+    `Draft caption summary: ${input.draft.caption.slice(0, 360)}`,
+    "Source facts:",
+    input.source.promptFacts.slice(0, 2000),
+    "",
+    visualStyle,
+    "Rules:",
+    "- No text overlays, captions, logos, watermarks, or UI elements.",
+    "- Make the image feel unique to this draft, not a generic stock duplicate.",
+    "- Keep it realistic, polished, and useful for a Telegram post.",
+    input.contentType === "recipe"
+      ? "- The meal must look lighter and training-friendly, not greasy, not indulgent, and not heavy."
+      : "- Focus on clear exercise energy, posture, and movement without clutter.",
+    "- Landscape composition, social-media friendly, premium quality.",
+  ].join("\n");
+}
+
+async function generateDraftImageDataUrl(input: {
+  project: WebProject;
+  contentType: PostContentType;
+  source: PostSource;
+  draft: Pick<PostDraftSeed, "title" | "caption" | "imageAlt">;
+}) {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+
+  if (!apiKey) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+        getGeminiImageModel(),
+      )}:generateContent`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: buildImagePrompt(input),
+                },
+              ],
+            },
+          ],
+        }),
+        cache: "no-store",
+      },
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = (await response.json()) as GeminiGenerateContentResponse;
+    const imagePart = data.candidates?.[0]?.content?.parts?.find(
+      (part) => part.inline_data?.data && part.inline_data?.mime_type,
+    );
+    const mimeType = imagePart?.inline_data?.mime_type;
+    const base64 = imagePart?.inline_data?.data;
+
+    if (!mimeType || !base64) {
+      return null;
+    }
+
+    return {
+      imageUrl: `data:${mimeType};base64,${base64}`,
+      imageAlt:
+        input.draft.imageAlt ||
+        input.source.imageAlt ||
+        `${input.project.name} post image`,
+      imageCreditName: null,
+      imageCreditUrl: null,
+      imageSource: "Gemini Image",
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function attachGeneratedImagesToDrafts(input: {
+  project: WebProject;
+  contentType: PostContentType;
+  source: PostSource;
+  drafts: PostDraftSeed[];
+}) {
+  const generatedImages = await Promise.all(
+    input.drafts.map((draft) =>
+      generateDraftImageDataUrl({
+        project: input.project,
+        contentType: input.contentType,
+        source: input.source,
+        draft,
+      }),
+    ),
+  );
+
+  return input.drafts.map((draft, index) => {
+    const generated = generatedImages[index];
+
+    return {
+      ...draft,
+      imageUrl: generated?.imageUrl || input.source.imageUrl,
+      imageAlt: generated?.imageAlt || draft.imageAlt || input.source.imageAlt,
+      imageCreditName: generated?.imageCreditName || input.source.imageCreditName,
+      imageCreditUrl: generated?.imageCreditUrl || input.source.imageCreditUrl,
+      imageSource: generated?.imageSource || input.source.imageSource,
+    } satisfies PostDraftSeed;
+  });
+}
+
 function parseGeminiDrafts(text: string) {
   const parsed = JSON.parse(extractJsonText(text)) as GeminiDraftResponse;
   const drafts = (parsed.drafts ?? [])
@@ -768,5 +910,12 @@ export async function generatePostDrafts(input: {
     throw new Error("Gemini returned an empty response");
   }
 
-  return parseGeminiDrafts(text);
+  const drafts = parseGeminiDrafts(text);
+
+  return attachGeneratedImagesToDrafts({
+    project: input.project,
+    contentType: input.contentType,
+    source: input.source,
+    drafts,
+  });
 }

@@ -127,9 +127,11 @@ export function WebPostsStudio({
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm text-white/46">Image mode</span>
               <span className="text-sm font-medium text-white/84">
-                {process.env.PEXELS_API_KEY?.trim()
-                  ? "Pexels enabled"
-                  : "API image fallback"}
+                {process.env.GEMINI_API_KEY?.trim()
+                  ? "Gemini image + fallback"
+                  : process.env.PEXELS_API_KEY?.trim()
+                    ? "Pexels enabled"
+                    : "Fallback only"}
               </span>
             </div>
           </div>
@@ -190,17 +192,18 @@ export function WebPostsStudio({
 
         <div className="rounded-[1.5rem] border border-white/8 bg-[#091122]/60 px-4 py-4 text-sm leading-7 text-white/52">
           Для `Workout` ми беремо свіжі вправи з `WGER`, для `Nutrition / Recipe`
-          використовуємо `TheMealDB`. Якщо вказаний `PEXELS_API_KEY`, студія
-          спробує підтягнути й кращу картинку для workout-постів.
+          використовуємо `TheMealDB`. Для зображень студія спершу пробує
+          згенерувати унікальний візуал через Gemini image model, а якщо це не
+          вдається, переходить на fallback із зовнішнього джерела.
         </div>
 
         <FormPendingState label="Генерую 3 нові драфти для цього проєкту." />
       </form>
 
-      <div className="mt-8 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)]">
+      <div className="mt-8 grid gap-4 2xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)]">
         <form
           action={updateProjectPostSettingsAction}
-          className="space-y-4 rounded-[1.6rem] border border-white/8 bg-[#091122]/60 p-5"
+          className="min-w-0 space-y-4 rounded-[1.6rem] border border-white/8 bg-[#091122]/60 p-5"
         >
           <input type="hidden" name="projectId" value={project.id} />
 
@@ -231,15 +234,15 @@ export function WebPostsStudio({
             </span>
           </label>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <label className="grid gap-2">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <label className="grid min-w-0 gap-2">
               <span className="text-xs uppercase tracking-[0.24em] text-white/36">
                 Interval
               </span>
               <select
                 name="postGenerationIntervalHours"
                 defaultValue={String(project.postGenerationIntervalHours || 2)}
-                className="h-12 rounded-[1.2rem] border border-white/10 bg-[#091122] px-4 text-sm text-white outline-none transition focus:border-white/18"
+                className="h-12 min-w-0 rounded-[1.2rem] border border-white/10 bg-[#091122] px-4 text-sm text-white outline-none transition focus:border-white/18"
               >
                 <option value="2">Кожні 2 години</option>
                 <option value="4">Кожні 4 години</option>
@@ -250,14 +253,14 @@ export function WebPostsStudio({
               </select>
             </label>
 
-            <label className="grid gap-2">
+            <label className="grid min-w-0 gap-2">
               <span className="text-xs uppercase tracking-[0.24em] text-white/36">
                 Queue mode
               </span>
               <select
                 name="postGenerationContentType"
                 defaultValue={project.postGenerationContentType || "mixed"}
-                className="h-12 rounded-[1.2rem] border border-white/10 bg-[#091122] px-4 text-sm text-white outline-none transition focus:border-white/18"
+                className="h-12 min-w-0 rounded-[1.2rem] border border-white/10 bg-[#091122] px-4 text-sm text-white outline-none transition focus:border-white/18"
               >
                 <option value="mixed">Mixed</option>
                 <option value="workout">Workout only</option>
@@ -265,7 +268,7 @@ export function WebPostsStudio({
               </select>
             </label>
 
-            <label className="grid gap-2">
+            <label className="grid min-w-0 gap-2">
               <span className="text-xs uppercase tracking-[0.24em] text-white/36">
                 Telegram topic id (optional)
               </span>
@@ -274,7 +277,7 @@ export function WebPostsStudio({
                 name="postGenerationThreadId"
                 defaultValue={project.postGenerationThreadId ?? ""}
                 placeholder="Наприклад: 12"
-                className="h-12 rounded-[1.2rem] border border-white/10 bg-[#091122] px-4 text-sm text-white outline-none transition placeholder:text-white/26 focus:border-white/18"
+                className="h-12 min-w-0 rounded-[1.2rem] border border-white/10 bg-[#091122] px-4 text-sm text-white outline-none transition placeholder:text-white/26 focus:border-white/18"
               />
             </label>
           </div>
@@ -299,7 +302,7 @@ export function WebPostsStudio({
           <FormPendingState label="Зберігаю налаштування черги постів." />
         </form>
 
-        <div className="space-y-4 rounded-[1.6rem] border border-white/8 bg-[#091122]/60 p-5">
+        <div className="min-w-0 space-y-4 rounded-[1.6rem] border border-white/8 bg-[#091122]/60 p-5">
           <div>
             <p className="text-[0.72rem] uppercase tracking-[0.24em] text-white/36">
               Queue runtime
