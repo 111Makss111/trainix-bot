@@ -4,6 +4,7 @@ import { WebTelegramMessages } from "./WebTelegramMessages";
 import { WebTelegramCard } from "./WebTelegramCard";
 import { WebStatusCard } from "./WebStatusCard";
 import type { TelegramMessageLog } from "@/lib/web-projects";
+import { FormSubmitButton } from "./FormSubmitButton";
 
 type WebProjectOverviewProps = {
   project: WebProject | null;
@@ -56,12 +57,11 @@ export function WebProjectOverview({
             </p>
             <form action={deleteWebProjectAction} className="mt-4">
               <input type="hidden" name="projectId" value={project.id} />
-              <button
-                type="submit"
+              <FormSubmitButton
+                idleLabel="Видалити проєкт"
+                pendingLabel="Видаляю..."
                 className="rounded-full border border-red-300/18 bg-red-300/10 px-4 py-2.5 text-sm font-medium text-red-50 transition hover:bg-red-300/16"
-              >
-                Видалити проєкт
-              </button>
+              />
             </form>
           </div>
         </div>
@@ -136,7 +136,11 @@ export function WebProjectOverview({
         />
       </div>
 
-      <WebTelegramMessages messages={telegramMessages} />
+      <WebTelegramMessages
+        initialMessages={telegramMessages}
+        projectId={project.id}
+        webhookEnabled={project.telegramWebhookEnabled}
+      />
     </div>
   );
 }

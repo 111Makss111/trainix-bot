@@ -5,6 +5,8 @@ import {
   verifyTelegramSettingsAction,
 } from "@/app/cabinet/web/actions";
 import type { WebProject } from "@/lib/web-projects";
+import { FormPendingState } from "./FormPendingState";
+import { FormSubmitButton } from "./FormSubmitButton";
 
 type WebTelegramCardProps = {
   project: WebProject;
@@ -175,21 +177,21 @@ export function WebTelegramCard({ project, notice }: WebTelegramCardProps) {
         </label>
 
         <div className="flex flex-wrap gap-3">
-          <button
-            type="submit"
+          <FormSubmitButton
             formAction={updateTelegramSettingsAction}
+            idleLabel="Зберегти Telegram"
+            pendingLabel="Зберігаю..."
             className="rounded-full border border-white/14 bg-white/8 px-4 py-2.5 text-sm font-medium text-white/88 transition hover:bg-white/12"
-          >
-            Зберегти Telegram
-          </button>
-          <button
-            type="submit"
+          />
+          <FormSubmitButton
             formAction={verifyTelegramSettingsAction}
+            idleLabel="Перевірити підключення"
+            pendingLabel="Перевіряю..."
             className="rounded-full border border-white/14 bg-[linear-gradient(135deg,rgba(124,150,255,0.22),rgba(255,255,255,0.08))] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[linear-gradient(135deg,rgba(124,150,255,0.3),rgba(255,255,255,0.12))]"
-          >
-            Перевірити підключення
-          </button>
+          />
         </div>
+
+        <FormPendingState label="Обробляю Telegram-запит. Це може тривати кілька секунд." />
       </form>
 
       <div className="mt-5 grid gap-3">
@@ -238,22 +240,20 @@ export function WebTelegramCard({ project, notice }: WebTelegramCardProps) {
       <div className="mt-5 flex flex-wrap gap-3">
         <form action={enableTelegramWebhookAction}>
           <input type="hidden" name="projectId" value={project.id} />
-          <button
-            type="submit"
+          <FormSubmitButton
+            idleLabel="Увімкнути webhook"
+            pendingLabel="Вмикаю..."
             className="rounded-full border border-white/14 bg-[linear-gradient(135deg,rgba(124,150,255,0.22),rgba(255,255,255,0.08))] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[linear-gradient(135deg,rgba(124,150,255,0.3),rgba(255,255,255,0.12))]"
-          >
-            Увімкнути webhook
-          </button>
+          />
         </form>
 
         <form action={disableTelegramWebhookAction}>
           <input type="hidden" name="projectId" value={project.id} />
-          <button
-            type="submit"
+          <FormSubmitButton
+            idleLabel="Вимкнути webhook"
+            pendingLabel="Вимикаю..."
             className="rounded-full border border-white/14 bg-white/6 px-4 py-2.5 text-sm font-medium text-white/84 transition hover:bg-white/10"
-          >
-            Вимкнути webhook
-          </button>
+          />
         </form>
       </div>
 

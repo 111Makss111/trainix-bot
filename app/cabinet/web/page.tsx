@@ -34,6 +34,7 @@ export default async function WebPage({ searchParams }: WebPageProps) {
     ? await listRecentTelegramMessagesForProject({
         ownerEmail: session.user.email,
         projectId: activeProject.id,
+        limit: 20,
       })
     : [];
 
