@@ -1,10 +1,11 @@
-import type { WebProject } from "./web-projects";
+import type { TelegramMessageLog, WebProject } from "./web-projects";
 
 type SmartReplyInput = {
   project: WebProject;
   messageText: string;
   senderName: string | null;
   chatTitle: string | null;
+  recentMessages?: TelegramMessageLog[];
 };
 
 type GeminiGenerateContentResponse = {
@@ -24,6 +25,16 @@ function buildPrompt(input: SmartReplyInput) {
     input.project.aiInstructions?.trim() || "No extra knowledge base provided yet.";
   const sender = input.senderName?.trim() || "Unknown user";
   const chat = input.chatTitle?.trim() || "Telegram group";
+  const recentHistory = (input.recentMessages ?? [])
+    .filter((message) => message.text?.trim())
+    .slice(-8)
+    .map((message) => {
+      const role = message.updateType === "bot_reply" ? "Assistant" : "User";
+      const author = message.senderName?.trim() || role;
+
+      return `${role} (${author}): ${message.text?.trim()}`;
+    })
+    .join("\n");
 
   return [
     "You are an intelligent Telegram assistant for the owner's private web project.",
@@ -41,8 +52,12 @@ function buildPrompt(input: SmartReplyInput) {
     "- Use the project summary and knowledge base as your primary source of truth.",
     "- If the user asks what the project is, explain it using the provided project knowledge.",
     "- Do not invent features, pricing, or guarantees that are not present in the project knowledge.",
+    "- Continue the conversation naturally using the recent chat history when it helps.",
     "- If the question is vague, ask one short clarifying question.",
     "- If the message is not a real question or request, answer naturally and briefly.",
+    "",
+    "Recent conversation:",
+    recentHistory || "No recent conversation history.",
     "",
     "User message:",
     input.messageText.trim().slice(0, 4000),

@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { generateSmartTelegramReply } from "@/lib/smart-replies";
 import { sendTelegramTextMessage } from "@/lib/telegram";
-import { getWebProjectById, logTelegramIncomingMessage } from "@/lib/web-projects";
+import {
+  getWebProjectById,
+  listRecentTelegramMessagesForChat,
+  logTelegramIncomingMessage,
+  logTelegramOutgoingMessage,
+} from "@/lib/web-projects";
 
 type TelegramUpdateMessage = {
   message_id?: number;
@@ -216,20 +221,42 @@ export async function POST(
     messageText
   ) {
     try {
+      const telegramChatId = String(payload.chat.id);
+      const recentMessages = (
+        await listRecentTelegramMessagesForChat({
+          projectId,
+          telegramChatId,
+          limit: 9,
+        })
+      ).filter((message) => message.updateId !== update.update_id);
+
       const reply = await generateSmartTelegramReply({
         project,
         messageText,
         senderName: buildSenderName(payload.from),
         chatTitle: payload.chat?.title ?? payload.chat?.username ?? null,
+        recentMessages,
       });
 
       if (reply) {
-        await sendTelegramTextMessage({
+        const sentMessage = await sendTelegramTextMessage({
           botToken: project.telegramBotToken,
-          chatId: String(payload.chat.id),
+          chatId: telegramChatId,
           text: reply,
           replyToMessageId:
             typeof payload.message_id === "number" ? payload.message_id : null,
+        });
+
+        await logTelegramOutgoingMessage({
+          projectId,
+          telegramChatId,
+          telegramMessageId: sentMessage.message_id,
+          senderId: null,
+          senderName: project.telegramBotUsername
+            ? `@${project.telegramBotUsername}`
+            : project.telegramBotName,
+          text: reply,
+          rawPayload: JSON.stringify(sentMessage),
         });
       }
     } catch (error) {

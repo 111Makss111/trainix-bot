@@ -30,6 +30,14 @@ type TelegramWebhookInfo = {
   ip_address?: string;
 };
 
+type TelegramSentMessage = {
+  message_id: number;
+  chat?: {
+    id?: number | string;
+  };
+  text?: string;
+};
+
 async function callTelegramApi<T>(
   token: string,
   method: string,
@@ -111,5 +119,5 @@ export async function sendTelegramTextMessage(input: {
     };
   }
 
-  return callTelegramApi(input.botToken, "sendMessage", payload);
+  return callTelegramApi<TelegramSentMessage>(input.botToken, "sendMessage", payload);
 }

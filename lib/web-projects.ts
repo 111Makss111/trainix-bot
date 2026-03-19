@@ -599,6 +599,65 @@ export async function listRecentTelegramMessagesForProject(input: {
   }));
 }
 
+export async function listRecentTelegramMessagesForChat(input: {
+  projectId: string;
+  telegramChatId: string;
+  limit?: number;
+}) {
+  const sql = await ensureWebProjectsTable();
+
+  if (!sql) {
+    return [] as TelegramMessageLog[];
+  }
+
+  const limit = input.limit ?? 8;
+
+  const rows = (await sql`
+    SELECT
+      id,
+      project_id,
+      update_id,
+      update_type,
+      telegram_chat_id,
+      telegram_message_id,
+      sender_id,
+      sender_name,
+      text_content,
+      received_at
+    FROM telegram_messages
+    WHERE project_id = ${input.projectId}
+      AND telegram_chat_id = ${input.telegramChatId}
+    ORDER BY received_at DESC
+    LIMIT ${limit}
+  `) as Array<{
+    id: string;
+    project_id: string;
+    update_id: number;
+    update_type: string;
+    telegram_chat_id: string | null;
+    telegram_message_id: number | null;
+    sender_id: string | null;
+    sender_name: string | null;
+    text_content: string | null;
+    received_at: string;
+  }>;
+
+  return rows
+    .map((row) => ({
+      id: row.id,
+      projectId: row.project_id,
+      updateId: row.update_id,
+      updateType: row.update_type,
+      telegramChatId: row.telegram_chat_id,
+      telegramMessageId: row.telegram_message_id,
+      senderId: row.sender_id,
+      senderName: row.sender_name,
+      text: row.text_content,
+      receivedAt: row.received_at,
+    }))
+    .reverse();
+}
+
 export async function logTelegramIncomingMessage(input: {
   projectId: string;
   updateId: number;
@@ -643,6 +702,30 @@ export async function logTelegramIncomingMessage(input: {
     )
     ON CONFLICT (project_id, update_id) DO NOTHING
   `;
+}
+
+export async function logTelegramOutgoingMessage(input: {
+  projectId: string;
+  telegramChatId: string;
+  telegramMessageId: number | null;
+  senderId: string | null;
+  senderName: string | null;
+  text: string | null;
+  rawPayload: string;
+}) {
+  const syntheticUpdateId = -(Date.now() * 1000 + Math.floor(Math.random() * 1000));
+
+  await logTelegramIncomingMessage({
+    projectId: input.projectId,
+    updateId: syntheticUpdateId,
+    updateType: "bot_reply",
+    telegramChatId: input.telegramChatId,
+    telegramMessageId: input.telegramMessageId,
+    senderId: input.senderId,
+    senderName: input.senderName,
+    text: input.text,
+    rawPayload: input.rawPayload,
+  });
 }
 
 export async function deleteWebProject(input: {
