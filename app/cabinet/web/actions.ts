@@ -182,6 +182,7 @@ export async function verifyTelegramSettingsAction(formData: FormData) {
       projectId,
       botName: bot.first_name,
       botUsername: bot.username ?? null,
+      resolvedChatId: String(chat.id),
       chatTitle: chat.title ?? chat.username ?? null,
       chatType: chat.type,
       canJoinGroups: Boolean(bot.can_join_groups),

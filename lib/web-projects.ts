@@ -430,6 +430,7 @@ export async function saveWebProjectTelegramVerification(input: {
   projectId: string;
   botName: string;
   botUsername: string | null;
+  resolvedChatId: string;
   chatTitle: string | null;
   chatType: string;
   canJoinGroups: boolean;
@@ -446,6 +447,7 @@ export async function saveWebProjectTelegramVerification(input: {
     SET
       telegram_bot_name = ${input.botName},
       telegram_bot_username = ${input.botUsername},
+      telegram_chat_id = ${input.resolvedChatId},
       telegram_chat_title = ${input.chatTitle},
       telegram_chat_type = ${input.chatType},
       telegram_can_join_groups = ${input.canJoinGroups},

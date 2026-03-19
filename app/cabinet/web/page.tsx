@@ -37,6 +37,11 @@ export default async function WebPage({ searchParams }: WebPageProps) {
         limit: 20,
       })
     : [];
+  const aiRuntime = {
+    provider: "Gemini (default)",
+    model: process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
+    apiKeyConfigured: Boolean(process.env.GEMINI_API_KEY?.trim()),
+  };
 
   return (
     <>
@@ -60,6 +65,7 @@ export default async function WebPage({ searchParams }: WebPageProps) {
           typeof params.telegram === "string" ? params.telegram : undefined
         }
         telegramMessages={telegramMessages}
+        aiRuntime={aiRuntime}
       />
     </>
   );

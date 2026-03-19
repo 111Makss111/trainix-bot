@@ -92,3 +92,24 @@ export async function deleteTelegramWebhook(botToken: string) {
 export async function getTelegramWebhookInfo(botToken: string) {
   return callTelegramApi<TelegramWebhookInfo>(botToken, "getWebhookInfo");
 }
+
+export async function sendTelegramTextMessage(input: {
+  botToken: string;
+  chatId: string;
+  text: string;
+  replyToMessageId?: number | null;
+}) {
+  const payload: Record<string, unknown> = {
+    chat_id: input.chatId,
+    text: input.text,
+  };
+
+  if (typeof input.replyToMessageId === "number") {
+    payload.reply_parameters = {
+      message_id: input.replyToMessageId,
+      allow_sending_without_reply: true,
+    };
+  }
+
+  return callTelegramApi(input.botToken, "sendMessage", payload);
+}

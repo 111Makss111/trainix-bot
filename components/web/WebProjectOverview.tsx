@@ -10,12 +10,18 @@ type WebProjectOverviewProps = {
   project: WebProject | null;
   telegramNotice?: string;
   telegramMessages: TelegramMessageLog[];
+  aiRuntime: {
+    provider: string;
+    model: string;
+    apiKeyConfigured: boolean;
+  };
 };
 
 export function WebProjectOverview({
   project,
   telegramNotice,
   telegramMessages,
+  aiRuntime,
 }: WebProjectOverviewProps) {
   if (!project) {
     return (
@@ -26,7 +32,10 @@ export function WebProjectOverview({
     );
   }
 
-  const aiReady = Boolean(project.aiProvider && project.aiModel);
+  const aiReady =
+    project.smartRepliesEnabled &&
+    project.telegramWebhookEnabled &&
+    aiRuntime.apiKeyConfigured;
 
   return (
     <div className="grid gap-4">
@@ -73,23 +82,31 @@ export function WebProjectOverview({
         <WebStatusCard
           eyebrow="AI"
           title="Brain Layer"
-          status={aiReady ? "Configured" : "Draft"}
+          status={aiReady ? "Ready" : "Needs setup"}
           statusTone={aiReady ? "active" : "neutral"}
           items={[
             {
               label: "Provider",
-              value: project.aiProvider || "Ще не обрано",
+              value: project.aiProvider || aiRuntime.provider,
             },
             {
               label: "Model",
-              value: project.aiModel || "Ще не обрано",
+              value: project.aiModel || aiRuntime.model,
             },
             {
               label: "Smart replies",
               value: project.smartRepliesEnabled ? "Увімкнено" : "Вимкнено",
             },
+            {
+              label: "Gemini API key",
+              value: aiRuntime.apiKeyConfigured ? "Підключено" : "Відсутній",
+            },
           ]}
-          note="Тут буде перемикач між OpenAI та Gemini, модель і бренд-інструкція для розумних відповідей."
+          note={
+            aiRuntime.apiKeyConfigured
+              ? "Gemini runtime доступний. Якщо бот не відповідає, перевір redeploy після останньої зміни env у Vercel."
+              : "На цьому середовищі не знайдено GEMINI_API_KEY, тому бот може логити повідомлення, але не згенерує відповідь."
+          }
         />
 
         <WebStatusCard
