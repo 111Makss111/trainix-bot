@@ -5,6 +5,8 @@ import {
   markWebProjectPostGenerationRun,
 } from "@/lib/web-projects";
 
+export const dynamic = "force-dynamic";
+
 function isAuthorized(request: Request) {
   const secret = process.env.CRON_SECRET?.trim();
 
@@ -19,48 +21,53 @@ function isAuthorized(request: Request) {
 
 export async function GET(request: Request) {
   if (!isAuthorized(request)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    return new NextResponse("Unauthorized", {
+      status: 401,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+      },
+    });
   }
 
-  const projects = await listWebProjectsDueForPostGeneration();
-  const results: Array<{
-    projectId: string;
-    projectName: string;
-    status: "generated" | "failed";
-    detail: string;
-  }> = [];
+  try {
+    const projects = await listWebProjectsDueForPostGeneration();
+    let generated = 0;
+    let failed = 0;
 
-  for (const project of projects) {
-    try {
-      const batch = await createScheduledPostDraftBatch({
-        project,
-      });
+    for (const project of projects) {
+      try {
+        await createScheduledPostDraftBatch({
+          project,
+        });
 
-      await markWebProjectPostGenerationRun(project.id);
-
-      results.push({
-        projectId: project.id,
-        projectName: project.name,
-        status: "generated",
-        detail: `${batch.count} drafts (${batch.contentType})`,
-      });
-    } catch (error) {
-      console.error("Scheduled post generation failed", {
-        projectId: project.id,
-        error,
-      });
-      results.push({
-        projectId: project.id,
-        projectName: project.name,
-        status: "failed",
-        detail: error instanceof Error ? error.message : "Unknown error",
-      });
+        await markWebProjectPostGenerationRun(project.id);
+        generated += 1;
+      } catch (error) {
+        failed += 1;
+        console.error("Scheduled post generation failed", {
+          projectId: project.id,
+          error,
+        });
+      }
     }
-  }
 
-  return NextResponse.json({
-    ok: true,
-    processed: results.length,
-    results,
-  });
+    return new NextResponse(
+      `OK processed=${projects.length} generated=${generated} failed=${failed}`,
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+        },
+      },
+    );
+  } catch (error) {
+    console.error("Scheduled post generation route failed", error);
+
+    return new NextResponse("Error", {
+      status: 500,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+      },
+    });
+  }
 }
