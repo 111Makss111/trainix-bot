@@ -16,6 +16,7 @@ type WebPageProps = {
   searchParams?: Promise<{
     project?: string;
     telegram?: string;
+    ai?: string;
   }>;
 };
 
@@ -64,6 +65,7 @@ export default async function WebPage({ searchParams }: WebPageProps) {
         telegramNotice={
           typeof params.telegram === "string" ? params.telegram : undefined
         }
+        aiNotice={typeof params.ai === "string" ? params.ai : undefined}
         telegramMessages={telegramMessages}
         aiRuntime={aiRuntime}
       />

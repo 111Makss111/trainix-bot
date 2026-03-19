@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS web_projects (
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
   description TEXT,
+  ai_instructions TEXT,
   telegram_bot_token TEXT,
   telegram_bot_name TEXT,
   telegram_bot_username TEXT,

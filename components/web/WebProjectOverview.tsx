@@ -1,5 +1,6 @@
 import type { WebProject } from "@/lib/web-projects";
 import { deleteWebProjectAction } from "@/app/cabinet/web/actions";
+import { WebAiCard } from "./WebAiCard";
 import { WebTelegramMessages } from "./WebTelegramMessages";
 import { WebTelegramCard } from "./WebTelegramCard";
 import { WebStatusCard } from "./WebStatusCard";
@@ -9,6 +10,7 @@ import { FormSubmitButton } from "./FormSubmitButton";
 type WebProjectOverviewProps = {
   project: WebProject | null;
   telegramNotice?: string;
+  aiNotice?: string;
   telegramMessages: TelegramMessageLog[];
   aiRuntime: {
     provider: string;
@@ -20,6 +22,7 @@ type WebProjectOverviewProps = {
 export function WebProjectOverview({
   project,
   telegramNotice,
+  aiNotice,
   telegramMessages,
   aiRuntime,
 }: WebProjectOverviewProps) {
@@ -31,11 +34,6 @@ export function WebProjectOverview({
       </section>
     );
   }
-
-  const aiReady =
-    project.smartRepliesEnabled &&
-    project.telegramWebhookEnabled &&
-    aiRuntime.apiKeyConfigured;
 
   return (
     <div className="grid gap-4">
@@ -79,35 +77,7 @@ export function WebProjectOverview({
       <div className="grid gap-4 xl:grid-cols-2">
         <WebTelegramCard project={project} notice={telegramNotice} />
 
-        <WebStatusCard
-          eyebrow="AI"
-          title="Brain Layer"
-          status={aiReady ? "Ready" : "Needs setup"}
-          statusTone={aiReady ? "active" : "neutral"}
-          items={[
-            {
-              label: "Provider",
-              value: project.aiProvider || aiRuntime.provider,
-            },
-            {
-              label: "Model",
-              value: project.aiModel || aiRuntime.model,
-            },
-            {
-              label: "Smart replies",
-              value: project.smartRepliesEnabled ? "Увімкнено" : "Вимкнено",
-            },
-            {
-              label: "Gemini API key",
-              value: aiRuntime.apiKeyConfigured ? "Підключено" : "Відсутній",
-            },
-          ]}
-          note={
-            aiRuntime.apiKeyConfigured
-              ? "Gemini runtime доступний. Якщо бот не відповідає, перевір redeploy після останньої зміни env у Vercel."
-              : "На цьому середовищі не знайдено GEMINI_API_KEY, тому бот може логити повідомлення, але не згенерує відповідь."
-          }
-        />
+        <WebAiCard project={project} notice={aiNotice} aiRuntime={aiRuntime} />
 
         <WebStatusCard
           eyebrow="Posts"
@@ -141,15 +111,17 @@ export function WebProjectOverview({
               value: "Питання клієнтів",
             },
             {
-              label: "External APIs",
-              value: "Спорт / харчування",
-            },
-            {
-              label: "Project context",
+              label: "Project brief",
               value: project.description || "Буде взято з опису проєкту",
             },
+            {
+              label: "AI knowledge base",
+              value: project.aiInstructions?.trim()
+                ? "Заповнено"
+                : "Поки порожньо",
+            },
           ]}
-          note="Саме цей блок пізніше керуватиме тим, з чого бот братиме факти для відповідей і постів."
+          note="Зараз бот бере базовий опис проєкту і розширений AI-контекст. Пізніше сюди можна додати окремі джерела, FAQ та зовнішні API."
         />
       </div>
 

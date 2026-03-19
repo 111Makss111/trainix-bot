@@ -18,6 +18,7 @@ import {
   getWebProjectForOwner,
   saveWebProjectTelegramVerification,
   setWebProjectTelegramWebhook,
+  updateWebProjectAiInstructions,
   updateWebProjectTelegramSettings,
 } from "@/lib/web-projects";
 
@@ -68,6 +69,10 @@ export async function deleteWebProjectAction(formData: FormData) {
 
 function redirectToTelegramState(projectId: string, state: string): never {
   redirect(`/cabinet/web?project=${projectId}&telegram=${state}`);
+}
+
+function redirectToAiState(projectId: string, state: string): never {
+  redirect(`/cabinet/web?project=${projectId}&ai=${state}`);
 }
 
 function getTelegramWebhookBaseUrl() {
@@ -293,4 +298,23 @@ export async function disableTelegramWebhookAction(formData: FormData) {
 
   revalidatePath("/cabinet/web");
   redirectToTelegramState(projectId, "webhook-disabled");
+}
+
+export async function updateProjectAiInstructionsAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const projectId = formData.get("projectId");
+  const aiInstructions = formData.get("aiInstructions");
+
+  if (typeof projectId !== "string" || typeof aiInstructions !== "string") {
+    return;
+  }
+
+  await updateWebProjectAiInstructions({
+    ownerEmail,
+    projectId,
+    aiInstructions,
+  });
+
+  revalidatePath("/cabinet/web");
+  redirectToAiState(projectId, "saved");
 }

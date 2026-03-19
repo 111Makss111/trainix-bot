@@ -7,6 +7,7 @@ export type WebProject = {
   name: string;
   slug: string;
   description: string | null;
+  aiInstructions: string | null;
   telegramBotToken: string | null;
   telegramBotName: string | null;
   telegramBotUsername: string | null;
@@ -64,6 +65,7 @@ async function ensureWebProjectsTable() {
       name TEXT NOT NULL,
       slug TEXT NOT NULL,
       description TEXT,
+      ai_instructions TEXT,
       telegram_bot_token TEXT,
       telegram_bot_name TEXT,
       telegram_bot_username TEXT,
@@ -92,6 +94,10 @@ async function ensureWebProjectsTable() {
     ON web_projects (owner_email, updated_at DESC)
   `;
 
+  await sql`
+    ALTER TABLE web_projects
+    ADD COLUMN IF NOT EXISTS ai_instructions TEXT
+  `;
   await sql`
     ALTER TABLE web_projects
     ADD COLUMN IF NOT EXISTS telegram_bot_name TEXT
@@ -176,6 +182,7 @@ export async function listWebProjectsForOwner(ownerEmail: string) {
       name,
       slug,
       description,
+      ai_instructions,
       telegram_bot_token,
       telegram_bot_name,
       telegram_bot_username,
@@ -204,6 +211,7 @@ export async function listWebProjectsForOwner(ownerEmail: string) {
     name: string;
     slug: string;
     description: string | null;
+    ai_instructions: string | null;
     telegram_bot_token: string | null;
     telegram_bot_name: string | null;
     telegram_bot_username: string | null;
@@ -231,6 +239,7 @@ export async function listWebProjectsForOwner(ownerEmail: string) {
     name: row.name,
     slug: row.slug,
     description: row.description,
+    aiInstructions: row.ai_instructions,
     telegramBotToken: row.telegram_bot_token,
     telegramBotName: row.telegram_bot_name,
     telegramBotUsername: row.telegram_bot_username,
@@ -314,6 +323,7 @@ export async function getWebProjectById(projectId: string) {
       name,
       slug,
       description,
+      ai_instructions,
       telegram_bot_token,
       telegram_bot_name,
       telegram_bot_username,
@@ -342,6 +352,7 @@ export async function getWebProjectById(projectId: string) {
     name: string;
     slug: string;
     description: string | null;
+    ai_instructions: string | null;
     telegram_bot_token: string | null;
     telegram_bot_name: string | null;
     telegram_bot_username: string | null;
@@ -375,6 +386,7 @@ export async function getWebProjectById(projectId: string) {
     name: row.name,
     slug: row.slug,
     description: row.description,
+    aiInstructions: row.ai_instructions,
     telegramBotToken: row.telegram_bot_token,
     telegramBotName: row.telegram_bot_name,
     telegramBotUsername: row.telegram_bot_username,
@@ -419,6 +431,29 @@ export async function updateWebProjectTelegramSettings(input: {
       telegram_bot_token = ${botToken || null},
       telegram_chat_id = ${chatId || null},
       smart_replies_enabled = ${input.smartRepliesEnabled},
+      updated_at = NOW()
+    WHERE id = ${input.projectId}
+      AND owner_email = ${input.ownerEmail}
+  `;
+}
+
+export async function updateWebProjectAiInstructions(input: {
+  ownerEmail: string;
+  projectId: string;
+  aiInstructions: string;
+}) {
+  const sql = await ensureWebProjectsTable();
+
+  if (!sql) {
+    return;
+  }
+
+  const aiInstructions = input.aiInstructions.trim();
+
+  await sql`
+    UPDATE web_projects
+    SET
+      ai_instructions = ${aiInstructions || null},
       updated_at = NOW()
     WHERE id = ${input.projectId}
       AND owner_email = ${input.ownerEmail}

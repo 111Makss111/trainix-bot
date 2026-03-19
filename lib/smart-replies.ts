@@ -18,14 +18,19 @@ type GeminiGenerateContentResponse = {
 };
 
 function buildPrompt(input: SmartReplyInput) {
-  const projectContext = input.project.description?.trim() || "No extra project context.";
+  const projectSummary =
+    input.project.description?.trim() || "No short project summary provided.";
+  const projectKnowledge =
+    input.project.aiInstructions?.trim() || "No extra knowledge base provided yet.";
   const sender = input.senderName?.trim() || "Unknown user";
   const chat = input.chatTitle?.trim() || "Telegram group";
 
   return [
     "You are an intelligent Telegram assistant for the owner's private web project.",
     `Project name: ${input.project.name}`,
-    `Project context: ${projectContext}`,
+    `Project summary: ${projectSummary}`,
+    "Project knowledge base:",
+    projectKnowledge,
     `Chat: ${chat}`,
     `Sender: ${sender}`,
     "Rules:",
@@ -33,6 +38,9 @@ function buildPrompt(input: SmartReplyInput) {
     "- Keep the answer concise, clear, and useful.",
     "- Use plain text only.",
     "- Avoid emojis unless the user's style clearly asks for them.",
+    "- Use the project summary and knowledge base as your primary source of truth.",
+    "- If the user asks what the project is, explain it using the provided project knowledge.",
+    "- Do not invent features, pricing, or guarantees that are not present in the project knowledge.",
     "- If the question is vague, ask one short clarifying question.",
     "- If the message is not a real question or request, answer naturally and briefly.",
     "",
