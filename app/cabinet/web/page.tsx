@@ -46,7 +46,7 @@ export default async function WebPage({ searchParams }: WebPageProps) {
     ? await listDraftWebPostsForProject({
         ownerEmail: session.user.email,
         projectId: activeProject.id,
-        limit: 3,
+        limit: 24,
       })
     : [];
   const publishedPosts = activeProject

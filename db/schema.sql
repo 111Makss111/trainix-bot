@@ -45,6 +45,11 @@ CREATE TABLE IF NOT EXISTS web_projects (
   ai_model TEXT,
   smart_replies_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   auto_posts_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  post_generation_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  post_generation_interval_hours INTEGER NOT NULL DEFAULT 2,
+  post_generation_content_type TEXT NOT NULL DEFAULT 'mixed',
+  post_generation_thread_id TEXT,
+  post_generation_last_run_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (owner_email, slug)

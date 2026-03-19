@@ -105,12 +105,17 @@ export async function sendTelegramTextMessage(input: {
   botToken: string;
   chatId: string;
   text: string;
+  messageThreadId?: number | null;
   replyToMessageId?: number | null;
 }) {
   const payload: Record<string, unknown> = {
     chat_id: input.chatId,
     text: input.text,
   };
+
+  if (typeof input.messageThreadId === "number") {
+    payload.message_thread_id = input.messageThreadId;
+  }
 
   if (typeof input.replyToMessageId === "number") {
     payload.reply_parameters = {
@@ -127,10 +132,17 @@ export async function sendTelegramPhotoMessage(input: {
   chatId: string;
   photoUrl: string;
   caption: string;
+  messageThreadId?: number | null;
 }) {
-  return callTelegramApi<TelegramSentMessage>(input.botToken, "sendPhoto", {
+  const payload: Record<string, unknown> = {
     chat_id: input.chatId,
     photo: input.photoUrl,
     caption: input.caption.slice(0, 1024),
-  });
+  };
+
+  if (typeof input.messageThreadId === "number") {
+    payload.message_thread_id = input.messageThreadId;
+  }
+
+  return callTelegramApi<TelegramSentMessage>(input.botToken, "sendPhoto", payload);
 }

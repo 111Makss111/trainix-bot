@@ -5,11 +5,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import {
-  fetchPostSource,
-  generatePostDrafts,
-  isPostContentType,
-} from "@/lib/post-studio";
+import { createPostDraftBatchForProject, createScheduledPostDraftBatch } from "@/lib/post-queue";
+import { isPostContentType } from "@/lib/post-studio";
 import {
   deleteTelegramWebhook,
   getTelegramWebhookInfo,
@@ -19,15 +16,13 @@ import {
   verifyTelegramConnection,
 } from "@/lib/telegram";
 import {
-  archiveDraftWebPostsForProject,
-  createWebPostDrafts,
-  getDraftWebPostForOwner,
   clearWebProjectTelegramWebhook,
   createWebProject,
   deleteWebProject,
   getWebProjectForOwner,
-  listRecentPublishedPostSourceKeys,
+  getDraftWebPostForOwner,
   markWebPostDraftPublished,
+  updateWebProjectPostSettings,
   saveWebProjectTelegramVerification,
   setWebProjectTelegramWebhook,
   updateWebProjectAiInstructions,
@@ -335,6 +330,36 @@ export async function updateProjectAiInstructionsAction(formData: FormData) {
   redirectToAiState(projectId, "saved");
 }
 
+export async function updateProjectPostSettingsAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const projectId = formData.get("projectId");
+  const postGenerationEnabled = formData.get("postGenerationEnabled") === "on";
+  const postGenerationIntervalHours = formData.get("postGenerationIntervalHours");
+  const postGenerationContentType = formData.get("postGenerationContentType");
+  const postGenerationThreadId = formData.get("postGenerationThreadId");
+
+  if (
+    typeof projectId !== "string" ||
+    typeof postGenerationIntervalHours !== "string" ||
+    typeof postGenerationContentType !== "string"
+  ) {
+    return;
+  }
+
+  await updateWebProjectPostSettings({
+    ownerEmail,
+    projectId,
+    postGenerationEnabled,
+    postGenerationIntervalHours: Number(postGenerationIntervalHours),
+    postGenerationContentType,
+    postGenerationThreadId:
+      typeof postGenerationThreadId === "string" ? postGenerationThreadId : null,
+  });
+
+  revalidatePath("/cabinet/web");
+  redirectToPostState(projectId, "settings-saved");
+}
+
 function buildPublishedPostMessage(input: {
   title: string;
   caption: string;
@@ -352,6 +377,16 @@ function buildPublishedPostMessage(input: {
       : "";
 
   return `${baseText}${creditLine}`.trim();
+}
+
+function parseMessageThreadId(value: string | null | undefined) {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  const parsed = Number(value.trim());
+
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 export async function generatePostDraftsAction(formData: FormData) {
@@ -382,59 +417,52 @@ export async function generatePostDraftsAction(formData: FormData) {
   }
 
   try {
-    const recentSourceKeys = await listRecentPublishedPostSourceKeys({
-      projectId,
-      contentType,
-      limit: 36,
-    });
-    const normalizedTopicHint =
-      typeof topicHint === "string" && topicHint.trim() ? topicHint.trim() : null;
-    const source = await fetchPostSource({
-      contentType,
-      topicHint: normalizedTopicHint,
-      recentSourceKeys,
-    });
-
-    if (!source) {
-      redirectToPostState(projectId, "source-unavailable");
-    }
-
-    const drafts = await generatePostDrafts({
+    await createPostDraftBatchForProject({
       project,
       contentType,
-      topicHint: normalizedTopicHint,
-      source,
-    });
-
-    await archiveDraftWebPostsForProject({
-      ownerEmail,
-      projectId,
-    });
-
-    await createWebPostDrafts({
-      projectId,
-      contentType,
-      topicHint: normalizedTopicHint,
-      sourceKind: source.sourceKind,
-      sourceKey: source.sourceKey,
-      sourceTitle: source.sourceTitle,
-      sourceUrl: source.sourceUrl,
-      sourcePayload: source.sourcePayload,
-      drafts: drafts.map((draft) => ({
-        title: draft.title,
-        caption: draft.caption,
-        imageUrl: source.imageUrl,
-        imageAlt: draft.imageAlt || source.imageAlt,
-        imageCreditName: source.imageCreditName,
-        imageCreditUrl: source.imageCreditUrl,
-        imageSource: source.imageSource,
-      })),
+      topicHint: typeof topicHint === "string" ? topicHint : null,
     });
 
     revalidatePath("/cabinet/web");
     redirectToPostState(projectId, "generated");
   } catch (error) {
     console.error("Failed to generate post drafts", error);
+    const message = error instanceof Error ? error.message.toLowerCase() : "";
+
+    if (message.includes("no suitable source")) {
+      redirectToPostState(projectId, "source-unavailable");
+    }
+
+    redirectToPostState(projectId, "generation-failed");
+  }
+}
+
+export async function runScheduledPostGenerationNowAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const projectId = formData.get("projectId");
+
+  if (typeof projectId !== "string") {
+    return;
+  }
+
+  const project = await getWebProjectForOwner({
+    ownerEmail,
+    projectId,
+  });
+
+  if (!project) {
+    redirect("/cabinet/web");
+  }
+
+  try {
+    await createScheduledPostDraftBatch({
+      project,
+    });
+
+    revalidatePath("/cabinet/web");
+    redirectToPostState(projectId, "queue-generated");
+  } catch (error) {
+    console.error("Failed to generate scheduled post drafts", error);
     redirectToPostState(projectId, "generation-failed");
   }
 }
@@ -473,6 +501,7 @@ export async function publishWebPostDraftAction(formData: FormData) {
     imageSource: draft.imageSource,
     imageCreditName: draft.imageCreditName,
   });
+  const messageThreadId = parseMessageThreadId(project.postGenerationThreadId);
 
   try {
     let publishedMessageId: number | null = null;
@@ -484,6 +513,7 @@ export async function publishWebPostDraftAction(formData: FormData) {
           chatId: project.telegramChatId,
           photoUrl: draft.imageUrl,
           caption: messageText,
+          messageThreadId,
         });
 
         publishedMessageId = sentPhoto.message_id;
@@ -492,6 +522,7 @@ export async function publishWebPostDraftAction(formData: FormData) {
           botToken: project.telegramBotToken,
           chatId: project.telegramChatId,
           text: messageText,
+          messageThreadId,
         });
 
         publishedMessageId = sentText.message_id;
@@ -501,6 +532,7 @@ export async function publishWebPostDraftAction(formData: FormData) {
         botToken: project.telegramBotToken,
         chatId: project.telegramChatId,
         text: messageText,
+        messageThreadId,
       });
 
       publishedMessageId = sentText.message_id;

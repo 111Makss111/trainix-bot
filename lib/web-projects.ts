@@ -25,6 +25,11 @@ export type WebProject = {
   aiModel: string | null;
   smartRepliesEnabled: boolean;
   autoPostsEnabled: boolean;
+  postGenerationEnabled: boolean;
+  postGenerationIntervalHours: number;
+  postGenerationContentType: string;
+  postGenerationThreadId: string | null;
+  postGenerationLastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -106,6 +111,11 @@ async function ensureWebProjectsTable() {
       ai_model TEXT,
       smart_replies_enabled BOOLEAN NOT NULL DEFAULT FALSE,
       auto_posts_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+      post_generation_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+      post_generation_interval_hours INTEGER NOT NULL DEFAULT 2,
+      post_generation_content_type TEXT NOT NULL DEFAULT 'mixed',
+      post_generation_thread_id TEXT,
+      post_generation_last_run_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE (owner_email, slug)
@@ -164,6 +174,26 @@ async function ensureWebProjectsTable() {
   await sql`
     ALTER TABLE web_projects
     ADD COLUMN IF NOT EXISTS telegram_webhook_last_enabled_at TIMESTAMPTZ
+  `;
+  await sql`
+    ALTER TABLE web_projects
+    ADD COLUMN IF NOT EXISTS post_generation_enabled BOOLEAN NOT NULL DEFAULT FALSE
+  `;
+  await sql`
+    ALTER TABLE web_projects
+    ADD COLUMN IF NOT EXISTS post_generation_interval_hours INTEGER NOT NULL DEFAULT 2
+  `;
+  await sql`
+    ALTER TABLE web_projects
+    ADD COLUMN IF NOT EXISTS post_generation_content_type TEXT NOT NULL DEFAULT 'mixed'
+  `;
+  await sql`
+    ALTER TABLE web_projects
+    ADD COLUMN IF NOT EXISTS post_generation_thread_id TEXT
+  `;
+  await sql`
+    ALTER TABLE web_projects
+    ADD COLUMN IF NOT EXISTS post_generation_last_run_at TIMESTAMPTZ
   `;
 
   await sql`
@@ -259,6 +289,11 @@ export async function listWebProjectsForOwner(ownerEmail: string) {
       ai_model,
       smart_replies_enabled,
       auto_posts_enabled,
+      post_generation_enabled,
+      post_generation_interval_hours,
+      post_generation_content_type,
+      post_generation_thread_id,
+      post_generation_last_run_at,
       created_at,
       updated_at
     FROM web_projects
@@ -288,6 +323,11 @@ export async function listWebProjectsForOwner(ownerEmail: string) {
     ai_model: string | null;
     smart_replies_enabled: boolean;
     auto_posts_enabled: boolean;
+    post_generation_enabled: boolean;
+    post_generation_interval_hours: number;
+    post_generation_content_type: string;
+    post_generation_thread_id: string | null;
+    post_generation_last_run_at: string | null;
     created_at: string;
     updated_at: string;
   }>;
@@ -316,6 +356,11 @@ export async function listWebProjectsForOwner(ownerEmail: string) {
     aiModel: row.ai_model,
     smartRepliesEnabled: row.smart_replies_enabled,
     autoPostsEnabled: row.auto_posts_enabled,
+    postGenerationEnabled: row.post_generation_enabled,
+    postGenerationIntervalHours: row.post_generation_interval_hours,
+    postGenerationContentType: row.post_generation_content_type,
+    postGenerationThreadId: row.post_generation_thread_id,
+    postGenerationLastRunAt: row.post_generation_last_run_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
@@ -400,6 +445,11 @@ export async function getWebProjectById(projectId: string) {
       ai_model,
       smart_replies_enabled,
       auto_posts_enabled,
+      post_generation_enabled,
+      post_generation_interval_hours,
+      post_generation_content_type,
+      post_generation_thread_id,
+      post_generation_last_run_at,
       created_at,
       updated_at
     FROM web_projects
@@ -429,6 +479,11 @@ export async function getWebProjectById(projectId: string) {
     ai_model: string | null;
     smart_replies_enabled: boolean;
     auto_posts_enabled: boolean;
+    post_generation_enabled: boolean;
+    post_generation_interval_hours: number;
+    post_generation_content_type: string;
+    post_generation_thread_id: string | null;
+    post_generation_last_run_at: string | null;
     created_at: string;
     updated_at: string;
   }>;
@@ -463,6 +518,11 @@ export async function getWebProjectById(projectId: string) {
     aiModel: row.ai_model,
     smartRepliesEnabled: row.smart_replies_enabled,
     autoPostsEnabled: row.auto_posts_enabled,
+    postGenerationEnabled: row.post_generation_enabled,
+    postGenerationIntervalHours: row.post_generation_interval_hours,
+    postGenerationContentType: row.post_generation_content_type,
+    postGenerationThreadId: row.post_generation_thread_id,
+    postGenerationLastRunAt: row.post_generation_last_run_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   } satisfies WebProject;
@@ -513,6 +573,45 @@ export async function updateWebProjectAiInstructions(input: {
     UPDATE web_projects
     SET
       ai_instructions = ${aiInstructions || null},
+      updated_at = NOW()
+    WHERE id = ${input.projectId}
+      AND owner_email = ${input.ownerEmail}
+  `;
+}
+
+export async function updateWebProjectPostSettings(input: {
+  ownerEmail: string;
+  projectId: string;
+  postGenerationEnabled: boolean;
+  postGenerationIntervalHours: number;
+  postGenerationContentType: string;
+  postGenerationThreadId: string | null;
+}) {
+  const sql = await ensureWebProjectsTable();
+
+  if (!sql) {
+    return;
+  }
+
+  const intervalHours = Math.min(
+    24,
+    Math.max(1, Math.floor(input.postGenerationIntervalHours || 2)),
+  );
+  const contentType =
+    input.postGenerationContentType === "workout" ||
+    input.postGenerationContentType === "recipe" ||
+    input.postGenerationContentType === "mixed"
+      ? input.postGenerationContentType
+      : "mixed";
+  const threadId = input.postGenerationThreadId?.trim() || null;
+
+  await sql`
+    UPDATE web_projects
+    SET
+      post_generation_enabled = ${input.postGenerationEnabled},
+      post_generation_interval_hours = ${intervalHours},
+      post_generation_content_type = ${contentType},
+      post_generation_thread_id = ${threadId},
       updated_at = NOW()
     WHERE id = ${input.projectId}
       AND owner_email = ${input.ownerEmail}
@@ -597,6 +696,138 @@ export async function clearWebProjectTelegramWebhook(input: {
       updated_at = NOW()
     WHERE id = ${input.projectId}
       AND owner_email = ${input.ownerEmail}
+  `;
+}
+
+export async function listWebProjectsDueForPostGeneration() {
+  const sql = await ensureWebProjectsTable();
+
+  if (!sql) {
+    return [] as WebProject[];
+  }
+
+  const rows = (await sql`
+    SELECT
+      id,
+      owner_email,
+      name,
+      slug,
+      description,
+      ai_instructions,
+      telegram_bot_token,
+      telegram_bot_name,
+      telegram_bot_username,
+      telegram_chat_id,
+      telegram_chat_title,
+      telegram_chat_type,
+      telegram_can_join_groups,
+      telegram_can_read_all_group_messages,
+      telegram_last_verified_at,
+      telegram_webhook_secret,
+      telegram_webhook_url,
+      telegram_webhook_enabled,
+      telegram_webhook_last_enabled_at,
+      ai_provider,
+      ai_model,
+      smart_replies_enabled,
+      auto_posts_enabled,
+      post_generation_enabled,
+      post_generation_interval_hours,
+      post_generation_content_type,
+      post_generation_thread_id,
+      post_generation_last_run_at,
+      created_at,
+      updated_at
+    FROM web_projects
+    WHERE post_generation_enabled = TRUE
+      AND telegram_bot_token IS NOT NULL
+      AND telegram_chat_id IS NOT NULL
+      AND COALESCE(post_generation_interval_hours, 0) > 0
+      AND (
+        post_generation_last_run_at IS NULL
+        OR post_generation_last_run_at <= NOW() - make_interval(hours => post_generation_interval_hours)
+      )
+    ORDER BY COALESCE(post_generation_last_run_at, to_timestamp(0)) ASC, updated_at ASC
+  `) as Array<{
+    id: string;
+    owner_email: string;
+    name: string;
+    slug: string;
+    description: string | null;
+    ai_instructions: string | null;
+    telegram_bot_token: string | null;
+    telegram_bot_name: string | null;
+    telegram_bot_username: string | null;
+    telegram_chat_id: string | null;
+    telegram_chat_title: string | null;
+    telegram_chat_type: string | null;
+    telegram_can_join_groups: boolean;
+    telegram_can_read_all_group_messages: boolean;
+    telegram_last_verified_at: string | null;
+    telegram_webhook_secret: string | null;
+    telegram_webhook_url: string | null;
+    telegram_webhook_enabled: boolean;
+    telegram_webhook_last_enabled_at: string | null;
+    ai_provider: string | null;
+    ai_model: string | null;
+    smart_replies_enabled: boolean;
+    auto_posts_enabled: boolean;
+    post_generation_enabled: boolean;
+    post_generation_interval_hours: number;
+    post_generation_content_type: string;
+    post_generation_thread_id: string | null;
+    post_generation_last_run_at: string | null;
+    created_at: string;
+    updated_at: string;
+  }>;
+
+  return rows.map((row) => ({
+    id: row.id,
+    ownerEmail: row.owner_email,
+    name: row.name,
+    slug: row.slug,
+    description: row.description,
+    aiInstructions: row.ai_instructions,
+    telegramBotToken: row.telegram_bot_token,
+    telegramBotName: row.telegram_bot_name,
+    telegramBotUsername: row.telegram_bot_username,
+    telegramChatId: row.telegram_chat_id,
+    telegramChatTitle: row.telegram_chat_title,
+    telegramChatType: row.telegram_chat_type,
+    telegramCanJoinGroups: row.telegram_can_join_groups,
+    telegramCanReadAllGroupMessages: row.telegram_can_read_all_group_messages,
+    telegramLastVerifiedAt: row.telegram_last_verified_at,
+    telegramWebhookSecret: row.telegram_webhook_secret,
+    telegramWebhookUrl: row.telegram_webhook_url,
+    telegramWebhookEnabled: row.telegram_webhook_enabled,
+    telegramWebhookLastEnabledAt: row.telegram_webhook_last_enabled_at,
+    aiProvider: row.ai_provider,
+    aiModel: row.ai_model,
+    smartRepliesEnabled: row.smart_replies_enabled,
+    autoPostsEnabled: row.auto_posts_enabled,
+    postGenerationEnabled: row.post_generation_enabled,
+    postGenerationIntervalHours: row.post_generation_interval_hours,
+    postGenerationContentType: row.post_generation_content_type,
+    postGenerationThreadId: row.post_generation_thread_id,
+    postGenerationLastRunAt: row.post_generation_last_run_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+export async function markWebProjectPostGenerationRun(projectId: string) {
+  const sql = await ensureWebProjectsTable();
+
+  if (!sql) {
+    return;
+  }
+
+  await sql`
+    UPDATE web_projects
+    SET
+      post_generation_last_run_at = NOW(),
+      updated_at = NOW()
+    WHERE id = ${projectId}
   `;
 }
 
@@ -958,7 +1189,7 @@ export async function listDraftWebPostsForProject(input: {
     return [] as WebPostDraft[];
   }
 
-  const limit = input.limit ?? 3;
+  const limit = input.limit ?? 24;
 
   const rows = (await sql`
     SELECT
@@ -1012,7 +1243,7 @@ export async function listDraftWebPostsForProject(input: {
     updated_at: string;
   }>;
 
-  return rows.reverse().map(mapWebPostDraft);
+  return rows.map(mapWebPostDraft);
 }
 
 export async function listPublishedWebPostsForProject(input: {

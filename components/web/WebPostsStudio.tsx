@@ -1,6 +1,8 @@
 import {
   generatePostDraftsAction,
   publishWebPostDraftAction,
+  runScheduledPostGenerationNowAction,
+  updateProjectPostSettingsAction,
 } from "@/app/cabinet/web/actions";
 import type { WebPostDraft, WebProject } from "@/lib/web-projects";
 import { FormPendingState } from "./FormPendingState";
@@ -36,6 +38,14 @@ const postNoticeMessages: Record<
   "draft-not-found": {
     tone: "error",
     text: "Обраний драфт не знайдено. Спробуй згенерувати варіанти ще раз.",
+  },
+  "settings-saved": {
+    tone: "success",
+    text: "Налаштування черги постів збережені. Тепер можна або запускати генератор вручну, або підв’язати cron до route.",
+  },
+  "queue-generated": {
+    tone: "success",
+    text: "Черга відпрацювала вручну й докинула нові драфти в backlog.",
   },
   "source-unavailable": {
     tone: "error",
@@ -181,6 +191,149 @@ export function WebPostsStudio({
 
         <FormPendingState label="Генерую 3 нові драфти для цього проєкту." />
       </form>
+
+      <div className="mt-8 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)]">
+        <form
+          action={updateProjectPostSettingsAction}
+          className="space-y-4 rounded-[1.6rem] border border-white/8 bg-[#091122]/60 p-5"
+        >
+          <input type="hidden" name="projectId" value={project.id} />
+
+          <div>
+            <p className="text-[0.72rem] uppercase tracking-[0.24em] text-white/36">
+              Queue settings
+            </p>
+            <h4 className="mt-2 text-lg font-medium text-white">
+              Автогенерація драфтів
+            </h4>
+          </div>
+
+          <label className="flex items-center gap-3 rounded-[1.3rem] border border-white/10 bg-black/10 px-4 py-3">
+            <input
+              name="postGenerationEnabled"
+              type="checkbox"
+              defaultChecked={project.postGenerationEnabled}
+              className="h-4 w-4 rounded border-white/20 bg-transparent text-white"
+            />
+            <span>
+              <span className="block text-sm font-medium text-white/86">
+                Увімкнути накопичення драфтів
+              </span>
+              <span className="mt-1 block text-sm leading-6 text-white/44">
+                Коли черга запущена по cron, вона буде докидати нові 3 драфти в
+                backlog без видалення старих.
+              </span>
+            </span>
+          </label>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <label className="grid gap-2">
+              <span className="text-xs uppercase tracking-[0.24em] text-white/36">
+                Interval
+              </span>
+              <select
+                name="postGenerationIntervalHours"
+                defaultValue={String(project.postGenerationIntervalHours || 2)}
+                className="h-12 rounded-[1.2rem] border border-white/10 bg-[#091122] px-4 text-sm text-white outline-none transition focus:border-white/18"
+              >
+                <option value="2">Кожні 2 години</option>
+                <option value="4">Кожні 4 години</option>
+                <option value="6">Кожні 6 годин</option>
+                <option value="8">Кожні 8 годин</option>
+                <option value="12">Кожні 12 годин</option>
+                <option value="24">Раз на добу</option>
+              </select>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-xs uppercase tracking-[0.24em] text-white/36">
+                Queue mode
+              </span>
+              <select
+                name="postGenerationContentType"
+                defaultValue={project.postGenerationContentType || "mixed"}
+                className="h-12 rounded-[1.2rem] border border-white/10 bg-[#091122] px-4 text-sm text-white outline-none transition focus:border-white/18"
+              >
+                <option value="mixed">Mixed</option>
+                <option value="workout">Workout only</option>
+                <option value="recipe">Nutrition / Recipe only</option>
+              </select>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-xs uppercase tracking-[0.24em] text-white/36">
+                Telegram topic id
+              </span>
+              <input
+                type="text"
+                name="postGenerationThreadId"
+                defaultValue={project.postGenerationThreadId ?? ""}
+                placeholder="Наприклад: 12"
+                className="h-12 rounded-[1.2rem] border border-white/10 bg-[#091122] px-4 text-sm text-white outline-none transition placeholder:text-white/26 focus:border-white/18"
+              />
+            </label>
+          </div>
+
+          <div className="rounded-[1.4rem] border border-white/8 bg-black/10 px-4 py-4 text-sm leading-7 text-white/50">
+            Якщо твоя Telegram-група працює як `forum supergroup`, тут можна
+            вказати `message_thread_id`, і ручна публікація також піде в цю
+            гілку. Автогенерація вже готова до cron-роута
+            `GET /api/cron/web-posts` через `Bearer CRON_SECRET`.
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <FormSubmitButton
+              idleLabel="Зберегти queue"
+              pendingLabel="Зберігаю..."
+              className="rounded-full border border-white/14 bg-white/8 px-4 py-2.5 text-sm font-medium text-white/88 transition hover:bg-white/12"
+            />
+          </div>
+
+          <FormPendingState label="Зберігаю налаштування черги постів." />
+        </form>
+
+        <div className="space-y-4 rounded-[1.6rem] border border-white/8 bg-[#091122]/60 p-5">
+          <div>
+            <p className="text-[0.72rem] uppercase tracking-[0.24em] text-white/36">
+              Queue runtime
+            </p>
+            <h4 className="mt-2 text-lg font-medium text-white">
+              Швидкий запуск і стан
+            </h4>
+          </div>
+
+          <div className="grid gap-3">
+            <div className="flex items-center justify-between gap-3 rounded-[1.3rem] border border-white/8 bg-black/10 px-4 py-3">
+              <span className="text-sm text-white/46">Status</span>
+              <span className="text-sm font-medium text-white/84">
+                {project.postGenerationEnabled ? "Увімкнено" : "Вимкнено"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-[1.3rem] border border-white/8 bg-black/10 px-4 py-3">
+              <span className="text-sm text-white/46">Last queue run</span>
+              <span className="text-sm font-medium text-white/84">
+                {formatPostDate(project.postGenerationLastRunAt)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-[1.3rem] border border-white/8 bg-black/10 px-4 py-3">
+              <span className="text-sm text-white/46">Thread target</span>
+              <span className="text-sm font-medium text-white/84">
+                {project.postGenerationThreadId || "У загальний чат"}
+              </span>
+            </div>
+          </div>
+
+          <form action={runScheduledPostGenerationNowAction} className="space-y-3">
+            <input type="hidden" name="projectId" value={project.id} />
+            <FormSubmitButton
+              idleLabel="Запустити queue зараз"
+              pendingLabel="Генерую..."
+              className="w-full rounded-full border border-sky-300/18 bg-sky-300/10 px-4 py-2.5 text-sm font-medium text-sky-50 transition hover:bg-sky-300/16"
+            />
+            <FormPendingState label="Запускаю ручний цикл генерації backlog-постів." />
+          </form>
+        </div>
+      </div>
 
       <div className="mt-8">
         <div className="flex items-center justify-between gap-4">

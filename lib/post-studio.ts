@@ -424,9 +424,99 @@ function extractMealIngredients(meal: MealDbMeal) {
   return ingredients;
 }
 
+function scoreMealFitnessProfile(meal: MealDbMeal, ingredients: string[]) {
+  const category = normalizeText(meal.strCategory).toLowerCase();
+  const title = normalizeText(meal.strMeal).toLowerCase();
+  const instructions = stripHtml(meal.strInstructions).toLowerCase();
+  const haystack = [category, title, instructions, ...ingredients]
+    .join(" ")
+    .toLowerCase();
+
+  const positiveKeywords = [
+    "chicken",
+    "turkey",
+    "tuna",
+    "salmon",
+    "cod",
+    "prawn",
+    "shrimp",
+    "egg",
+    "eggs",
+    "yogurt",
+    "greek yogurt",
+    "cottage cheese",
+    "quark",
+    "tofu",
+    "broccoli",
+    "spinach",
+    "asparagus",
+    "cucumber",
+    "tomato",
+    "lettuce",
+    "beans",
+    "lentil",
+    "chickpea",
+    "oats",
+    "quinoa",
+    "rice",
+    "vegetable",
+    "salad",
+  ];
+  const negativeKeywords = [
+    "bacon",
+    "pork",
+    "sausage",
+    "salami",
+    "chorizo",
+    "lard",
+    "duck",
+    "goose",
+    "cream",
+    "double cream",
+    "heavy cream",
+    "mayonnaise",
+    "mayo",
+    "butter",
+    "fried",
+    "deep fry",
+    "fries",
+    "pastry",
+    "syrup",
+    "chocolate",
+    "dessert",
+    "ice cream",
+    "condensed milk",
+  ];
+
+  let score = 0;
+
+  for (const keyword of positiveKeywords) {
+    if (haystack.includes(keyword)) {
+      score += 2;
+    }
+  }
+
+  for (const keyword of negativeKeywords) {
+    if (haystack.includes(keyword)) {
+      score -= 4;
+    }
+  }
+
+  if (category.includes("vegetarian") || category.includes("seafood")) {
+    score += 2;
+  }
+
+  if (category.includes("dessert") || category.includes("pork")) {
+    score -= 5;
+  }
+
+  return score;
+}
+
 function buildRecipePromptFacts(meal: MealDbMeal, ingredients: string[], topicHint: string | null) {
   return [
     topicHint ? `Topic hint from owner: ${topicHint}` : null,
+    "Nutrition direction: prefer lighter, lower-calorie, training-friendly meals with lean protein, vegetables, simple cooking, and without heavy fatty ingredients.",
     `Meal name: ${normalizeText(meal.strMeal)}`,
     normalizeText(meal.strCategory)
       ? `Category: ${normalizeText(meal.strCategory)}`
@@ -445,7 +535,7 @@ async function fetchRecipeSource(input: {
   topicHint: string | null;
   recentSourceKeys: string[];
 }) {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
+  for (let attempt = 0; attempt < 18; attempt += 1) {
     const data = await fetchJson<MealDbRandomResponse>(
       "https://www.themealdb.com/api/json/v1/1/random.php",
     );
@@ -464,8 +554,14 @@ async function fetchRecipeSource(input: {
 
     const ingredients = extractMealIngredients(meal);
     const mealName = normalizeText(meal.strMeal);
+    const fitnessScore = scoreMealFitnessProfile(meal, ingredients);
 
-    if (!mealName || !ingredients.length || !stripHtml(meal.strInstructions)) {
+    if (
+      !mealName ||
+      !ingredients.length ||
+      !stripHtml(meal.strInstructions) ||
+      fitnessScore < 2
+    ) {
       continue;
     }
 
@@ -605,7 +701,10 @@ function buildGenerationPrompt(input: {
     "- Use plain text only, no markdown tables.",
     input.contentType === "workout"
       ? "- For workout drafts, turn the source into a practical mini-workout with clear structure and rest cues when appropriate."
-      : "- For recipe drafts, include enough ingredients and simple steps so the post feels actionable.",
+      : "- For recipe drafts, keep the meal clearly fit-friendly: lighter, simpler, lower-calorie in spirit, with leaner ingredients and no heavy fatty framing.",
+    input.contentType === "recipe"
+      ? "- If the source feels too heavy, do not glorify indulgence; keep the tone focused on a cleaner, more training-friendly meal."
+      : null,
     "- End with a short CTA that fits a Telegram group.",
   ]
     .filter(Boolean)
