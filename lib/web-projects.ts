@@ -1433,3 +1433,27 @@ export async function markWebPostDraftPublished(input: {
       )
   `;
 }
+
+export async function deleteWebPostDraftForOwner(input: {
+  ownerEmail: string;
+  projectId: string;
+  draftId: string;
+}) {
+  const sql = await ensureWebProjectsTable();
+
+  if (!sql) {
+    return;
+  }
+
+  await sql`
+    DELETE FROM web_post_drafts
+    WHERE id = ${input.draftId}
+      AND project_id = ${input.projectId}
+      AND EXISTS (
+        SELECT 1
+        FROM web_projects
+        WHERE id = ${input.projectId}
+          AND owner_email = ${input.ownerEmail}
+      )
+  `;
+}

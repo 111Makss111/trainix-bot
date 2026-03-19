@@ -1,4 +1,5 @@
 import {
+  deleteWebPostDraftAction,
   generatePostDraftsAction,
   publishWebPostDraftAction,
   runScheduledPostGenerationNowAction,
@@ -38,6 +39,10 @@ const postNoticeMessages: Record<
   "draft-not-found": {
     tone: "error",
     text: "Обраний драфт не знайдено. Спробуй згенерувати варіанти ще раз.",
+  },
+  "draft-deleted": {
+    tone: "success",
+    text: "Зайвий драфт видалено зі списку. Telegram-публікації це не торкається.",
   },
   "settings-saved": {
     tone: "success",
@@ -262,7 +267,7 @@ export function WebPostsStudio({
 
             <label className="grid gap-2">
               <span className="text-xs uppercase tracking-[0.24em] text-white/36">
-                Telegram topic id
+                Telegram topic id (optional)
               </span>
               <input
                 type="text"
@@ -275,9 +280,11 @@ export function WebPostsStudio({
           </div>
 
           <div className="rounded-[1.4rem] border border-white/8 bg-black/10 px-4 py-4 text-sm leading-7 text-white/50">
-            Якщо твоя Telegram-група працює як `forum supergroup`, тут можна
-            вказати `message_thread_id`, і ручна публікація також піде в цю
-            гілку. Автогенерація вже готова до cron-роута
+            Це поле потрібне тільки якщо твоя Telegram-група увімкнена як
+            `forum` і всередині є окремі гілки/теми. Тоді сюди ставиться
+            `message_thread_id`, і ручна публікація також піде саме в цю тему.
+            Якщо в тебе звичайна група без тем, просто залиш це поле порожнім.
+            Автогенерація вже готова до cron-роута
             `GET /api/cron/web-posts` через `Bearer CRON_SECRET`.
           </div>
 
@@ -433,16 +440,29 @@ export function WebPostsStudio({
                     ) : null}
                   </div>
 
-                  <form action={publishWebPostDraftAction} className="space-y-3">
-                    <input type="hidden" name="projectId" value={project.id} />
-                    <input type="hidden" name="draftId" value={draft.id} />
-                    <FormSubmitButton
-                      idleLabel="Publish to Telegram"
-                      pendingLabel="Публікую..."
-                      className="w-full rounded-full border border-emerald-300/18 bg-emerald-300/10 px-4 py-2.5 text-sm font-medium text-emerald-50 transition hover:bg-emerald-300/16"
-                    />
-                    <FormPendingState label="Відправляю цей пост у Telegram." />
-                  </form>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <form action={publishWebPostDraftAction} className="space-y-3">
+                      <input type="hidden" name="projectId" value={project.id} />
+                      <input type="hidden" name="draftId" value={draft.id} />
+                      <FormSubmitButton
+                        idleLabel="Publish to Telegram"
+                        pendingLabel="Публікую..."
+                        className="w-full rounded-full border border-emerald-300/18 bg-emerald-300/10 px-4 py-2.5 text-sm font-medium text-emerald-50 transition hover:bg-emerald-300/16"
+                      />
+                      <FormPendingState label="Відправляю цей пост у Telegram." />
+                    </form>
+
+                    <form action={deleteWebPostDraftAction} className="space-y-3">
+                      <input type="hidden" name="projectId" value={project.id} />
+                      <input type="hidden" name="draftId" value={draft.id} />
+                      <FormSubmitButton
+                        idleLabel="Видалити драфт"
+                        pendingLabel="Видаляю..."
+                        className="w-full rounded-full border border-red-300/18 bg-red-300/10 px-4 py-2.5 text-sm font-medium text-red-50 transition hover:bg-red-300/16"
+                      />
+                      <FormPendingState label="Прибираю зайвий драфт зі списку." />
+                    </form>
+                  </div>
                 </div>
               </article>
             ))}

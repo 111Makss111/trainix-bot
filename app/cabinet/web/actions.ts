@@ -19,6 +19,7 @@ import {
   clearWebProjectTelegramWebhook,
   createWebProject,
   deleteWebProject,
+  deleteWebPostDraftForOwner,
   getWebProjectForOwner,
   getDraftWebPostForOwner,
   markWebPostDraftPublished,
@@ -465,6 +466,25 @@ export async function runScheduledPostGenerationNowAction(formData: FormData) {
     console.error("Failed to generate scheduled post drafts", error);
     redirectToPostState(projectId, "generation-failed");
   }
+}
+
+export async function deleteWebPostDraftAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const projectId = formData.get("projectId");
+  const draftId = formData.get("draftId");
+
+  if (typeof projectId !== "string" || typeof draftId !== "string") {
+    return;
+  }
+
+  await deleteWebPostDraftForOwner({
+    ownerEmail,
+    projectId,
+    draftId,
+  });
+
+  revalidatePath("/cabinet/web");
+  redirectToPostState(projectId, "draft-deleted");
 }
 
 export async function publishWebPostDraftAction(formData: FormData) {
