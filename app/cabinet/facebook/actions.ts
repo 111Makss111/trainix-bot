@@ -10,7 +10,9 @@ import {
   deleteFacebookDraft,
   generateFacebookDrafts,
   getFacebookContentSettings,
+  normalizeFacebookWorkspaceTab,
   saveFacebookContentSettings,
+  type FacebookWorkspaceTab,
 } from "@/lib/social/facebook";
 
 async function requireOwnerEmail() {
@@ -23,12 +25,27 @@ async function requireOwnerEmail() {
   return session.user.email.trim().toLowerCase();
 }
 
-function redirectToFacebookState(state: string): never {
-  redirect(`/cabinet/facebook?state=${state}`);
+function getFacebookWorkspaceTab(
+  formData: FormData,
+  fallback: FacebookWorkspaceTab,
+) {
+  const value = formData.get("tab");
+
+  return normalizeFacebookWorkspaceTab(
+    typeof value === "string" ? value : fallback,
+  );
+}
+
+function redirectToFacebookState(
+  state: string,
+  tab: FacebookWorkspaceTab,
+): never {
+  redirect(`/cabinet/facebook?tab=${tab}&state=${state}`);
 }
 
 export async function saveFacebookContentSettingsAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
+  const tab = getFacebookWorkspaceTab(formData, "settings");
   const toneProfile = formData.get("toneProfile");
   const postStyle = formData.get("postStyle");
   const primaryGoal = formData.get("primaryGoal");
@@ -71,11 +88,12 @@ export async function saveFacebookContentSettingsAction(formData: FormData) {
   });
 
   revalidatePath("/cabinet/facebook");
-  redirectToFacebookState("saved");
+  redirectToFacebookState("saved", tab);
 }
 
 export async function generateFacebookDraftsAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
+  const tab = getFacebookWorkspaceTab(formData, "drafts");
   const topicHint = formData.get("topicHint");
   const settings = await getFacebookContentSettings(ownerEmail);
 
@@ -94,15 +112,16 @@ export async function generateFacebookDraftsAction(formData: FormData) {
     });
 
     revalidatePath("/cabinet/facebook");
-    redirectToFacebookState("drafts-generated");
+    redirectToFacebookState("drafts-generated", tab);
   } catch (error) {
     console.error("Failed to generate Facebook drafts", error);
-    redirectToFacebookState("drafts-failed");
+    redirectToFacebookState("drafts-failed", tab);
   }
 }
 
 export async function deleteFacebookDraftAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
+  const tab = getFacebookWorkspaceTab(formData, "drafts");
   const draftId = formData.get("draftId");
 
   if (typeof draftId !== "string") {
@@ -115,5 +134,5 @@ export async function deleteFacebookDraftAction(formData: FormData) {
   });
 
   revalidatePath("/cabinet/facebook");
-  redirectToFacebookState("draft-deleted");
+  redirectToFacebookState("draft-deleted", tab);
 }

@@ -17,6 +17,9 @@ export type FacebookPostDraft = {
   body: string;
   cta: string;
   imageDirection: string | null;
+  imageUrl: string | null;
+  imageAlt: string | null;
+  imageSource: string | null;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -37,6 +40,9 @@ type DraftRow = {
   body: string;
   cta: string;
   image_direction: string | null;
+  image_url: string | null;
+  image_alt: string | null;
+  image_source: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -65,6 +71,9 @@ async function ensureFacebookDraftsTable() {
       body TEXT NOT NULL,
       cta TEXT NOT NULL,
       image_direction TEXT,
+      image_url TEXT,
+      image_alt TEXT,
+      image_source TEXT,
       status TEXT NOT NULL DEFAULT 'draft',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -74,6 +83,21 @@ async function ensureFacebookDraftsTable() {
   await sql`
     CREATE INDEX IF NOT EXISTS idx_facebook_post_drafts_owner_status
     ON facebook_post_drafts (owner_email, status, created_at DESC)
+  `;
+
+  await sql`
+    ALTER TABLE facebook_post_drafts
+    ADD COLUMN IF NOT EXISTS image_url TEXT
+  `;
+
+  await sql`
+    ALTER TABLE facebook_post_drafts
+    ADD COLUMN IF NOT EXISTS image_alt TEXT
+  `;
+
+  await sql`
+    ALTER TABLE facebook_post_drafts
+    ADD COLUMN IF NOT EXISTS image_source TEXT
   `;
 
   return sql;
@@ -95,6 +119,9 @@ function mapDraft(row: DraftRow) {
     body: row.body,
     cta: row.cta,
     imageDirection: row.image_direction,
+    imageUrl: row.image_url,
+    imageAlt: row.image_alt,
+    imageSource: row.image_source,
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -136,6 +163,9 @@ export async function createFacebookDrafts(input: {
     body: string;
     cta: string;
     imageDirection: string | null;
+    imageUrl: string | null;
+    imageAlt: string | null;
+    imageSource: string | null;
   }>;
 }) {
   const sql = await ensureFacebookDraftsTable();
@@ -160,7 +190,10 @@ export async function createFacebookDrafts(input: {
         hook,
         body,
         cta,
-        image_direction
+        image_direction,
+        image_url,
+        image_alt,
+        image_source
       )
       VALUES (
         ${randomUUID()},
@@ -176,7 +209,10 @@ export async function createFacebookDrafts(input: {
         ${draft.hook},
         ${draft.body},
         ${draft.cta},
-        ${draft.imageDirection}
+        ${draft.imageDirection},
+        ${draft.imageUrl},
+        ${draft.imageAlt},
+        ${draft.imageSource}
       )
     `;
   }
@@ -205,6 +241,9 @@ export async function listFacebookDrafts(ownerEmail: string, limit = 6) {
       body,
       cta,
       image_direction,
+      image_url,
+      image_alt,
+      image_source,
       status,
       created_at,
       updated_at

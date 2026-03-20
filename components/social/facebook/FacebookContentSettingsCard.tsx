@@ -1,10 +1,14 @@
 import { saveFacebookContentSettingsAction } from "@/app/cabinet/facebook/actions";
-import type { FacebookContentSettings } from "@/lib/social/facebook";
+import type {
+  FacebookContentSettings,
+  FacebookWorkspaceTab,
+} from "@/lib/social/facebook";
 import { SocialPendingState } from "@/components/social/shared/SocialPendingState";
 import { SocialSubmitButton } from "@/components/social/shared/SocialSubmitButton";
 
 type FacebookContentSettingsCardProps = {
   settings: FacebookContentSettings;
+  activeTab: FacebookWorkspaceTab;
   notice?: string;
 };
 
@@ -100,6 +104,7 @@ function SelectField(props: {
 
 export function FacebookContentSettingsCard({
   settings,
+  activeTab,
   notice,
 }: FacebookContentSettingsCardProps) {
   const message = notice ? noticeMessages[notice] : null;
@@ -128,6 +133,8 @@ export function FacebookContentSettingsCard({
       ) : null}
 
       <form action={saveFacebookContentSettingsAction} className="mt-5 space-y-5">
+        <input type="hidden" name="tab" value={activeTab} />
+
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <SelectField
             name="toneProfile"

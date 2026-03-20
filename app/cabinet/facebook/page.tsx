@@ -5,11 +5,13 @@ import { authOptions } from "@/lib/auth";
 import {
   getFacebookContentSettings,
   listFacebookDrafts,
+  normalizeFacebookWorkspaceTab,
 } from "@/lib/social/facebook";
 
 type FacebookPageProps = {
   searchParams?: Promise<{
     state?: string;
+    tab?: string;
   }>;
 };
 
@@ -24,6 +26,9 @@ export default async function FacebookPage({
 
   const params = (await searchParams) ?? {};
   const ownerEmail = session.user.email.trim().toLowerCase();
+  const activeTab = normalizeFacebookWorkspaceTab(
+    typeof params.tab === "string" ? params.tab : undefined,
+  );
   const settings = await getFacebookContentSettings(ownerEmail);
   const drafts = await listFacebookDrafts(ownerEmail, 6);
 
@@ -31,6 +36,7 @@ export default async function FacebookPage({
     <FacebookWorkspace
       settings={settings}
       drafts={drafts}
+      activeTab={activeTab}
       notice={typeof params.state === "string" ? params.state : undefined}
     />
   );

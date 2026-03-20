@@ -1,6 +1,7 @@
 import type {
   FacebookContentSettings,
   FacebookPostDraft,
+  FacebookWorkspaceTab,
 } from "@/lib/social/facebook";
 import {
   deleteFacebookDraftAction,
@@ -12,6 +13,7 @@ import { SocialSubmitButton } from "@/components/social/shared/SocialSubmitButto
 type FacebookDraftQueueCardProps = {
   settings: FacebookContentSettings;
   drafts: FacebookPostDraft[];
+  activeTab: FacebookWorkspaceTab;
   notice?: string;
 };
 
@@ -71,6 +73,7 @@ function readableValue<T extends keyof typeof labelMap>(
 export function FacebookDraftQueueCard({
   settings,
   drafts,
+  activeTab,
   notice,
 }: FacebookDraftQueueCardProps) {
   const message = notice ? noticeMessages[notice] : null;
@@ -104,6 +107,8 @@ export function FacebookDraftQueueCard({
       ) : null}
 
       <form action={generateFacebookDraftsAction} className="mt-5 space-y-4">
+        <input type="hidden" name="tab" value={activeTab} />
+
         <label className="grid gap-2">
           <span className="text-xs uppercase tracking-[0.24em] text-white/36">
             Topic hint
@@ -152,6 +157,27 @@ export function FacebookDraftQueueCard({
                 key={draft.id}
                 className="rounded-[1.6rem] border border-white/8 bg-[#091122]/72 p-5"
               >
+                {draft.imageUrl ? (
+                  <div className="overflow-hidden rounded-[1.35rem] border border-white/10 bg-black/20">
+                    <div
+                      role="img"
+                      aria-label={
+                        draft.imageAlt || draft.imageDirection || draft.title
+                      }
+                      className="aspect-[4/3] bg-cover bg-center"
+                      style={{
+                        backgroundImage: `url("${draft.imageUrl}")`,
+                      }}
+                    />
+                    <div className="flex items-center justify-between gap-3 border-t border-white/8 px-4 py-3 text-[0.72rem] uppercase tracking-[0.2em] text-white/48">
+                      <span>Visual</span>
+                      <span className="max-w-[12rem] truncate text-right text-white/68">
+                        {draft.imageSource || "AI image"}
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="flex flex-wrap gap-2">
                   <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] uppercase tracking-[0.24em] text-white/60">
                     Option {index + 1}
@@ -195,7 +221,7 @@ export function FacebookDraftQueueCard({
                   </div>
                   <div className="flex items-start justify-between gap-3">
                     <span className="text-white/42">Image direction</span>
-                    <span className="max-w-[12rem] text-right text-white/78">
+                    <span className="max-w-[12rem] break-words text-right text-white/78">
                       {draft.imageDirection || "Ще не задано"}
                     </span>
                   </div>
@@ -203,6 +229,7 @@ export function FacebookDraftQueueCard({
 
                 <form action={deleteFacebookDraftAction} className="mt-4 space-y-3">
                   <input type="hidden" name="draftId" value={draft.id} />
+                  <input type="hidden" name="tab" value={activeTab} />
                   <SocialSubmitButton
                     idleLabel="Видалити draft"
                     pendingLabel="Видаляю..."

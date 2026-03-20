@@ -18,3 +18,8 @@ export {
 } from "./drafts";
 
 export { generateFacebookDrafts } from "./generator";
+export {
+  FACEBOOK_WORKSPACE_TABS,
+  normalizeFacebookWorkspaceTab,
+  type FacebookWorkspaceTab,
+} from "./tabs";

@@ -141,6 +141,9 @@ CREATE TABLE IF NOT EXISTS facebook_post_drafts (
   body TEXT NOT NULL,
   cta TEXT NOT NULL,
   image_direction TEXT,
+  image_url TEXT,
+  image_alt TEXT,
+  image_source TEXT,
   status TEXT NOT NULL DEFAULT 'draft',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
