@@ -4,7 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { saveFacebookContentSettings } from "@/lib/social/facebook";
+import {
+  archiveFacebookDrafts,
+  createFacebookDrafts,
+  deleteFacebookDraft,
+  generateFacebookDrafts,
+  getFacebookContentSettings,
+  saveFacebookContentSettings,
+} from "@/lib/social/facebook";
 
 async function requireOwnerEmail() {
   const session = await getServerSession(authOptions);
@@ -17,7 +24,7 @@ async function requireOwnerEmail() {
 }
 
 function redirectToFacebookState(state: string): never {
-  redirect(`/cabinet/facebook?settings=${state}`);
+  redirect(`/cabinet/facebook?state=${state}`);
 }
 
 export async function saveFacebookContentSettingsAction(formData: FormData) {
@@ -65,4 +72,48 @@ export async function saveFacebookContentSettingsAction(formData: FormData) {
 
   revalidatePath("/cabinet/facebook");
   redirectToFacebookState("saved");
+}
+
+export async function generateFacebookDraftsAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const topicHint = formData.get("topicHint");
+  const settings = await getFacebookContentSettings(ownerEmail);
+
+  try {
+    const drafts = await generateFacebookDrafts({
+      settings,
+      topicHint: typeof topicHint === "string" ? topicHint : null,
+    });
+
+    await archiveFacebookDrafts(ownerEmail);
+    await createFacebookDrafts({
+      ownerEmail,
+      topicHint: typeof topicHint === "string" ? topicHint.trim() || null : null,
+      settings,
+      drafts,
+    });
+
+    revalidatePath("/cabinet/facebook");
+    redirectToFacebookState("drafts-generated");
+  } catch (error) {
+    console.error("Failed to generate Facebook drafts", error);
+    redirectToFacebookState("drafts-failed");
+  }
+}
+
+export async function deleteFacebookDraftAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const draftId = formData.get("draftId");
+
+  if (typeof draftId !== "string") {
+    return;
+  }
+
+  await deleteFacebookDraft({
+    ownerEmail,
+    draftId,
+  });
+
+  revalidatePath("/cabinet/facebook");
+  redirectToFacebookState("draft-deleted");
 }

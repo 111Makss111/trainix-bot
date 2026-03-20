@@ -2,11 +2,14 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { FacebookWorkspace } from "@/components/social";
 import { authOptions } from "@/lib/auth";
-import { getFacebookContentSettings } from "@/lib/social/facebook";
+import {
+  getFacebookContentSettings,
+  listFacebookDrafts,
+} from "@/lib/social/facebook";
 
 type FacebookPageProps = {
   searchParams?: Promise<{
-    settings?: string;
+    state?: string;
   }>;
 };
 
@@ -20,14 +23,15 @@ export default async function FacebookPage({
   }
 
   const params = (await searchParams) ?? {};
-  const settings = await getFacebookContentSettings(
-    session.user.email.trim().toLowerCase(),
-  );
+  const ownerEmail = session.user.email.trim().toLowerCase();
+  const settings = await getFacebookContentSettings(ownerEmail);
+  const drafts = await listFacebookDrafts(ownerEmail, 6);
 
   return (
     <FacebookWorkspace
       settings={settings}
-      notice={typeof params.settings === "string" ? params.settings : undefined}
+      drafts={drafts}
+      notice={typeof params.state === "string" ? params.state : undefined}
     />
   );
 }

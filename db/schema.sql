@@ -125,3 +125,26 @@ CREATE TABLE IF NOT EXISTS facebook_content_settings (
 
 CREATE INDEX IF NOT EXISTS idx_facebook_content_settings_updated
 ON facebook_content_settings (updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS facebook_post_drafts (
+  id TEXT PRIMARY KEY,
+  owner_email TEXT NOT NULL,
+  topic_hint TEXT,
+  primary_goal TEXT NOT NULL,
+  tone_profile TEXT NOT NULL,
+  post_style TEXT NOT NULL,
+  product_presence TEXT NOT NULL,
+  emotional_level TEXT NOT NULL,
+  visual_style TEXT NOT NULL,
+  title TEXT NOT NULL,
+  hook TEXT NOT NULL,
+  body TEXT NOT NULL,
+  cta TEXT NOT NULL,
+  image_direction TEXT,
+  status TEXT NOT NULL DEFAULT 'draft',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_facebook_post_drafts_owner_status
+ON facebook_post_drafts (owner_email, status, created_at DESC);

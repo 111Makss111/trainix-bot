@@ -1,5 +1,8 @@
 import { CabinetTopbar } from "@/components/cabinet";
-import type { FacebookContentSettings } from "@/lib/social/facebook";
+import type {
+  FacebookContentSettings,
+  FacebookPostDraft,
+} from "@/lib/social/facebook";
 import { FacebookConnectionCard } from "./FacebookConnectionCard";
 import { FacebookContentSettingsCard } from "./FacebookContentSettingsCard";
 import { FacebookDraftQueueCard } from "./FacebookDraftQueueCard";
@@ -7,11 +10,13 @@ import { FacebookSettingsSummaryCard } from "./FacebookSettingsSummaryCard";
 
 type FacebookWorkspaceProps = {
   settings: FacebookContentSettings;
+  drafts: FacebookPostDraft[];
   notice?: string;
 };
 
 export function FacebookWorkspace({
   settings,
+  drafts,
   notice,
 }: FacebookWorkspaceProps) {
   return (
@@ -29,7 +34,11 @@ export function FacebookWorkspace({
 
       <div className="grid gap-4 xl:grid-cols-2">
         <FacebookConnectionCard />
-        <FacebookDraftQueueCard />
+        <FacebookDraftQueueCard
+          settings={settings}
+          drafts={drafts}
+          notice={notice}
+        />
       </div>
     </>
   );

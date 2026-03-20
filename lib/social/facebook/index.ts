@@ -8,3 +8,13 @@ export {
   saveFacebookContentSettings,
   type FacebookContentSettings,
 } from "./settings";
+
+export {
+  archiveFacebookDrafts,
+  createFacebookDrafts,
+  deleteFacebookDraft,
+  listFacebookDrafts,
+  type FacebookPostDraft,
+} from "./drafts";
+
+export { generateFacebookDrafts } from "./generator";
