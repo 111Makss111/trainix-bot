@@ -126,6 +126,22 @@ CREATE TABLE IF NOT EXISTS facebook_content_settings (
 CREATE INDEX IF NOT EXISTS idx_facebook_content_settings_updated
 ON facebook_content_settings (updated_at DESC);
 
+CREATE TABLE IF NOT EXISTS facebook_page_connections (
+  owner_email TEXT PRIMARY KEY,
+  page_id TEXT,
+  page_name TEXT,
+  page_category TEXT,
+  page_link TEXT,
+  page_picture_url TEXT,
+  page_access_token TEXT,
+  last_verified_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_facebook_page_connections_updated
+ON facebook_page_connections (updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS facebook_post_drafts (
   id TEXT PRIMARY KEY,
   owner_email TEXT NOT NULL,
@@ -146,6 +162,8 @@ CREATE TABLE IF NOT EXISTS facebook_post_drafts (
   image_alt TEXT,
   image_source TEXT,
   status TEXT NOT NULL DEFAULT 'draft',
+  published_post_id TEXT,
+  published_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

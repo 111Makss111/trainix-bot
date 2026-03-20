@@ -1,5 +1,6 @@
 import type {
   FacebookContentSettings,
+  FacebookPageConnection,
   FacebookPostDraft,
   FacebookWorkspaceTab,
 } from "@/lib/social/facebook";
@@ -8,6 +9,7 @@ import {
   clearFacebookDraftImageAction,
   deleteFacebookDraftAction,
   generateFacebookDraftsAction,
+  publishFacebookDraftAction,
 } from "@/app/cabinet/facebook/actions";
 import { CopyTextButton } from "@/components/social/shared/CopyTextButton";
 import { SocialPendingState } from "@/components/social/shared/SocialPendingState";
@@ -16,6 +18,7 @@ import { SocialSubmitButton } from "@/components/social/shared/SocialSubmitButto
 type FacebookDraftQueueCardProps = {
   settings: FacebookContentSettings;
   drafts: FacebookPostDraft[];
+  connection: FacebookPageConnection | null;
   activeTab: FacebookWorkspaceTab;
   notice?: string;
 };
@@ -47,6 +50,22 @@ const noticeMessages: Record<
   "draft-deleted": {
     tone: "success",
     text: "Зайвий Facebook draft видалено.",
+  },
+  "draft-published": {
+    tone: "success",
+    text: "Пост успішно відправлено у Facebook Page. Опублікований драфт прибрано з активної черги.",
+  },
+  "publish-connection-missing": {
+    tone: "warning",
+    text: "Спершу підключи Facebook Page у вкладці Facebook, і тоді publish-кнопка почне працювати.",
+  },
+  "publish-failed": {
+    tone: "error",
+    text: "Meta не прийняла publish-запит. Перевір Page connection, token і спробуй ще раз.",
+  },
+  "publish-missing": {
+    tone: "error",
+    text: "Не вдалося знайти цей draft для публікації. Спробуй оновити сторінку або згенерувати нові драфти.",
   },
 };
 
@@ -88,10 +107,12 @@ function readableValue<T extends keyof typeof labelMap>(
 export function FacebookDraftQueueCard({
   settings,
   drafts,
+  connection,
   activeTab,
   notice,
 }: FacebookDraftQueueCardProps) {
   const message = notice ? noticeMessages[notice] : null;
+  const canPublish = Boolean(connection?.pageId && connection.hasPageAccessToken);
 
   return (
     <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
@@ -146,6 +167,32 @@ export function FacebookDraftQueueCard({
           {readableValue("productPresence", settings.productPresence)}`.
         </div>
 
+        <div
+          className={[
+            "rounded-[1.5rem] border px-4 py-4 text-sm leading-7",
+            canPublish
+              ? "border-emerald-300/14 bg-emerald-300/[0.07] text-emerald-50"
+              : "border-amber-300/16 bg-amber-300/[0.08] text-amber-50",
+          ].join(" ")}
+        >
+          {canPublish ? (
+            <>
+              Facebook Page вже підключена:
+              {" "}
+              <span className="font-medium text-white">
+                {connection?.pageName || connection?.pageId}
+              </span>
+              . Тепер кожен драфт нижче можна відправити однією кнопкою.
+            </>
+          ) : (
+            <>
+              Publish поки заблокований, бо Facebook Page ще не підключена.
+              Зайди у вкладку `Facebook`, збережи `page id` і `page access token`,
+              а потім зроби verify.
+            </>
+          )}
+        </div>
+
         <div className="flex flex-wrap gap-3">
           <SocialSubmitButton
             idleLabel="Generate 3 Facebook drafts"
@@ -176,15 +223,11 @@ export function FacebookDraftQueueCard({
               >
                 {draft.imageUrl ? (
                   <div className="overflow-hidden rounded-[1.35rem] border border-white/10 bg-black/20">
-                    <div
-                      role="img"
-                      aria-label={
-                        draft.imageAlt || draft.imageDirection || draft.title
-                      }
-                      className="aspect-[4/3] bg-cover bg-center"
-                      style={{
-                        backgroundImage: `url("${draft.imageUrl}")`,
-                      }}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={draft.imageUrl}
+                      alt={draft.imageAlt || draft.imageDirection || draft.title}
+                      className="aspect-[4/3] w-full object-cover"
                     />
                     <div className="flex items-center justify-between gap-3 border-t border-white/8 px-4 py-3 text-[0.72rem] uppercase tracking-[0.2em] text-white/48">
                       <span>Visual</span>
@@ -356,6 +399,22 @@ export function FacebookDraftQueueCard({
                     <SocialPendingState label="Прибираю прикріплену картинку." />
                   </form>
                 ) : null}
+
+                <form action={publishFacebookDraftAction} className="mt-4 space-y-3">
+                  <input type="hidden" name="draftId" value={draft.id} />
+                  <input type="hidden" name="tab" value={activeTab} />
+                  <SocialSubmitButton
+                    idleLabel={
+                      canPublish
+                        ? "Опублікувати у Facebook"
+                        : "Спершу підключи Facebook Page"
+                    }
+                    pendingLabel="Публікую..."
+                    disabled={!canPublish}
+                    className="w-full rounded-full border border-emerald-300/18 bg-emerald-300/12 px-4 py-2.5 text-sm font-medium text-emerald-50 transition hover:bg-emerald-300/18"
+                  />
+                  <SocialPendingState label="Відправляю цей draft у Facebook Page." />
+                </form>
 
                 <form action={deleteFacebookDraftAction} className="mt-4 space-y-3">
                   <input type="hidden" name="draftId" value={draft.id} />

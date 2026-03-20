@@ -4,6 +4,7 @@ import { FacebookWorkspace } from "@/components/social";
 import { authOptions } from "@/lib/auth";
 import {
   getFacebookContentSettings,
+  getFacebookPageConnection,
   listFacebookDrafts,
   normalizeFacebookWorkspaceTab,
 } from "@/lib/social/facebook";
@@ -29,13 +30,17 @@ export default async function FacebookPage({
   const activeTab = normalizeFacebookWorkspaceTab(
     typeof params.tab === "string" ? params.tab : undefined,
   );
-  const settings = await getFacebookContentSettings(ownerEmail);
-  const drafts = await listFacebookDrafts(ownerEmail, 6);
+  const [settings, drafts, connection] = await Promise.all([
+    getFacebookContentSettings(ownerEmail),
+    listFacebookDrafts(ownerEmail, 6),
+    getFacebookPageConnection(ownerEmail),
+  ]);
 
   return (
     <FacebookWorkspace
       settings={settings}
       drafts={drafts}
+      connection={connection}
       activeTab={activeTab}
       notice={typeof params.state === "string" ? params.state : undefined}
     />

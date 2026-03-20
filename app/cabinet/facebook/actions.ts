@@ -7,14 +7,21 @@ import { authOptions } from "@/lib/auth";
 import {
   archiveFacebookDrafts,
   attachFacebookDraftImage,
+  clearFacebookPageConnection,
   clearFacebookDraftImage,
   createFacebookDrafts,
   deleteFacebookDraft,
+  getFacebookDraftById,
   generateFacebookDrafts,
   generateFacebookSettingsContext,
   getFacebookContentSettings,
+  getFacebookPageConnectionCredentials,
+  markFacebookDraftPublished,
   normalizeFacebookWorkspaceTab,
+  publishFacebookDraft,
+  saveFacebookPageConnection,
   saveFacebookContentSettings,
+  verifyFacebookPageConnection,
   type FacebookWorkspaceTab,
 } from "@/lib/social/facebook";
 
@@ -65,6 +72,16 @@ function normalizeImageUrl(value: FormDataEntryValue | null) {
   }
 
   return null;
+}
+
+function normalizeTextInput(value: FormDataEntryValue | null) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+
+  return normalized || null;
 }
 
 async function fileToDataUrl(file: File) {
@@ -267,4 +284,115 @@ export async function clearFacebookDraftImageAction(formData: FormData) {
 
   revalidatePath("/cabinet/facebook");
   redirectToFacebookState("image-cleared", tab);
+}
+
+export async function saveFacebookPageConnectionAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const tab = getFacebookWorkspaceTab(formData, "facebook");
+  const existingConnection =
+    await getFacebookPageConnectionCredentials(ownerEmail);
+  const pageId =
+    normalizeTextInput(formData.get("pageId")) ?? existingConnection?.pageId;
+  const pageAccessToken =
+    normalizeTextInput(formData.get("pageAccessToken")) ??
+    existingConnection?.pageAccessToken;
+
+  if (!pageId || !pageAccessToken) {
+    redirectToFacebookState("connection-invalid", tab);
+  }
+
+  await saveFacebookPageConnection({
+    ownerEmail,
+    pageId,
+    pageAccessToken,
+  });
+
+  revalidatePath("/cabinet/facebook");
+  redirectToFacebookState("connection-saved", tab);
+}
+
+export async function verifyFacebookPageConnectionAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const tab = getFacebookWorkspaceTab(formData, "facebook");
+  const existingConnection =
+    await getFacebookPageConnectionCredentials(ownerEmail);
+  const pageId =
+    normalizeTextInput(formData.get("pageId")) ?? existingConnection?.pageId;
+  const pageAccessToken =
+    normalizeTextInput(formData.get("pageAccessToken")) ??
+    existingConnection?.pageAccessToken;
+
+  if (!pageId || !pageAccessToken) {
+    redirectToFacebookState("connection-invalid", tab);
+  }
+
+  try {
+    await verifyFacebookPageConnection({
+      ownerEmail,
+      pageId,
+      pageAccessToken,
+    });
+
+    revalidatePath("/cabinet/facebook");
+    redirectToFacebookState("connection-verified", tab);
+  } catch (error) {
+    console.error("Failed to verify Facebook Page connection", error);
+    redirectToFacebookState("connection-verify-failed", tab);
+  }
+}
+
+export async function clearFacebookPageConnectionAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const tab = getFacebookWorkspaceTab(formData, "facebook");
+
+  await clearFacebookPageConnection(ownerEmail);
+
+  revalidatePath("/cabinet/facebook");
+  redirectToFacebookState("connection-cleared", tab);
+}
+
+export async function publishFacebookDraftAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const tab = getFacebookWorkspaceTab(formData, "drafts");
+  const draftId = normalizeTextInput(formData.get("draftId"));
+  const connection = await getFacebookPageConnectionCredentials(ownerEmail);
+
+  if (!draftId) {
+    redirectToFacebookState("publish-failed", tab);
+  }
+
+  if (!connection?.pageId || !connection.pageAccessToken) {
+    redirectToFacebookState("publish-connection-missing", tab);
+  }
+
+  const draft = await getFacebookDraftById({
+    ownerEmail,
+    draftId,
+  });
+
+  if (!draft || draft.status !== "draft") {
+    redirectToFacebookState("publish-missing", tab);
+  }
+
+  try {
+    const result = await publishFacebookDraft({
+      draft,
+      connection: {
+        pageId: connection.pageId,
+        pageAccessToken: connection.pageAccessToken,
+      },
+    });
+
+    await markFacebookDraftPublished({
+      ownerEmail,
+      draftId,
+      publishedPostId: result.publishedPostId,
+    });
+
+    revalidatePath("/cabinet/facebook");
+    redirectToFacebookState("draft-published", tab);
+  } catch (error) {
+    console.error("Failed to publish Facebook draft", error);
+    redirectToFacebookState("publish-failed", tab);
+  }
 }

@@ -22,8 +22,14 @@ export type FacebookPostDraft = {
   imageAlt: string | null;
   imageSource: string | null;
   status: string;
+  publishedPostId: string | null;
+  publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type FacebookPublishableDraft = FacebookPostDraft & {
+  storedImageUrl: string | null;
 };
 
 type DraftRow = {
@@ -46,6 +52,8 @@ type DraftRow = {
   image_alt: string | null;
   image_source: string | null;
   status: string;
+  published_post_id: string | null;
+  published_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -78,6 +86,8 @@ async function ensureFacebookDraftsTable() {
       image_alt TEXT,
       image_source TEXT,
       status TEXT NOT NULL DEFAULT 'draft',
+      published_post_id TEXT,
+      published_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
@@ -108,17 +118,31 @@ async function ensureFacebookDraftsTable() {
     ADD COLUMN IF NOT EXISTS image_source TEXT
   `;
 
+  await sql`
+    ALTER TABLE facebook_post_drafts
+    ADD COLUMN IF NOT EXISTS published_post_id TEXT
+  `;
+
+  await sql`
+    ALTER TABLE facebook_post_drafts
+    ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ
+  `;
+
   return sql;
 }
 
-function mapDraft(row: DraftRow) {
+function mapDraft(
+  row: DraftRow,
+  options?: {
+    includeStoredImageUrl?: boolean;
+  },
+) {
   const rawImageUrl = row.image_url;
   const imageUrl =
     typeof rawImageUrl === "string" && rawImageUrl.startsWith("data:image/")
       ? `/api/cabinet/facebook/drafts/${row.id}/image`
       : rawImageUrl;
-
-  return {
+  const baseDraft = {
     id: row.id,
     ownerEmail: row.owner_email,
     topicHint: row.topic_hint,
@@ -138,9 +162,20 @@ function mapDraft(row: DraftRow) {
     imageAlt: row.image_alt,
     imageSource: row.image_source,
     status: row.status,
+    publishedPostId: row.published_post_id,
+    publishedAt: row.published_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   } satisfies FacebookPostDraft;
+
+  if (options?.includeStoredImageUrl) {
+    return {
+      ...baseDraft,
+      storedImageUrl: row.image_url,
+    } satisfies FacebookPublishableDraft;
+  }
+
+  return baseDraft;
 }
 
 export async function archiveFacebookDrafts(ownerEmail: string) {
@@ -264,6 +299,8 @@ export async function listFacebookDrafts(ownerEmail: string, limit = 6) {
       image_alt,
       image_source,
       status,
+      published_post_id,
+      published_at,
       created_at,
       updated_at
     FROM facebook_post_drafts
@@ -273,7 +310,7 @@ export async function listFacebookDrafts(ownerEmail: string, limit = 6) {
     LIMIT ${limit}
   `) as DraftRow[];
 
-  return rows.map(mapDraft);
+  return rows.map((row) => mapDraft(row));
 }
 
 export async function deleteFacebookDraft(input: {
@@ -288,6 +325,77 @@ export async function deleteFacebookDraft(input: {
 
   await sql`
     DELETE FROM facebook_post_drafts
+    WHERE id = ${input.draftId}
+      AND owner_email = ${input.ownerEmail}
+  `;
+}
+
+export async function getFacebookDraftById(input: {
+  ownerEmail: string;
+  draftId: string;
+}) {
+  const sql = await ensureFacebookDraftsTable();
+
+  if (!sql) {
+    return null;
+  }
+
+  const rows = (await sql`
+    SELECT
+      id,
+      owner_email,
+      topic_hint,
+      primary_goal,
+      tone_profile,
+      post_style,
+      product_presence,
+      emotional_level,
+      visual_style,
+      title,
+      hook,
+      body,
+      cta,
+      image_direction,
+      image_prompt,
+      image_url,
+      image_alt,
+      image_source,
+      status,
+      published_post_id,
+      published_at,
+      created_at,
+      updated_at
+    FROM facebook_post_drafts
+    WHERE id = ${input.draftId}
+      AND owner_email = ${input.ownerEmail}
+    LIMIT 1
+  `) as DraftRow[];
+
+  return rows[0]
+    ? (mapDraft(rows[0], {
+        includeStoredImageUrl: true,
+      }) as FacebookPublishableDraft)
+    : null;
+}
+
+export async function markFacebookDraftPublished(input: {
+  ownerEmail: string;
+  draftId: string;
+  publishedPostId: string | null;
+}) {
+  const sql = await ensureFacebookDraftsTable();
+
+  if (!sql) {
+    return;
+  }
+
+  await sql`
+    UPDATE facebook_post_drafts
+    SET
+      status = 'published',
+      published_post_id = ${input.publishedPostId},
+      published_at = NOW(),
+      updated_at = NOW()
     WHERE id = ${input.draftId}
       AND owner_email = ${input.ownerEmail}
   `;

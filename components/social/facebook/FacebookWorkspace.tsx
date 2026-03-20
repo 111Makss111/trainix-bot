@@ -1,6 +1,7 @@
 import { CabinetTopbar } from "@/components/cabinet";
 import type {
   FacebookContentSettings,
+  FacebookPageConnection,
   FacebookPostDraft,
   FacebookWorkspaceTab,
 } from "@/lib/social/facebook";
@@ -13,6 +14,7 @@ import { FacebookWorkspaceTabs } from "./FacebookWorkspaceTabs";
 type FacebookWorkspaceProps = {
   settings: FacebookContentSettings;
   drafts: FacebookPostDraft[];
+  connection: FacebookPageConnection | null;
   activeTab: FacebookWorkspaceTab;
   notice?: string;
 };
@@ -20,6 +22,7 @@ type FacebookWorkspaceProps = {
 export function FacebookWorkspace({
   settings,
   drafts,
+  connection,
   activeTab,
   notice,
 }: FacebookWorkspaceProps) {
@@ -48,6 +51,7 @@ export function FacebookWorkspace({
         <FacebookDraftQueueCard
           settings={settings}
           drafts={drafts}
+          connection={connection}
           notice={notice}
           activeTab={activeTab}
         />
@@ -55,7 +59,11 @@ export function FacebookWorkspace({
 
       {activeTab === "facebook" ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(22rem,1.08fr)]">
-          <FacebookConnectionCard />
+          <FacebookConnectionCard
+            connection={connection}
+            notice={notice}
+            activeTab={activeTab}
+          />
           <FacebookSettingsSummaryCard settings={settings} />
         </div>
       ) : null}
