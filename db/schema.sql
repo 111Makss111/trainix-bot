@@ -105,3 +105,23 @@ ON web_post_drafts (project_id, status, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_web_post_drafts_project_content_published
 ON web_post_drafts (project_id, content_type, published_at DESC);
+
+CREATE TABLE IF NOT EXISTS facebook_content_settings (
+  owner_email TEXT PRIMARY KEY,
+  tone_profile TEXT NOT NULL DEFAULT 'human',
+  post_style TEXT NOT NULL DEFAULT 'medium',
+  primary_goal TEXT NOT NULL DEFAULT 'awareness',
+  product_presence TEXT NOT NULL DEFAULT 'balanced',
+  cta_style TEXT NOT NULL DEFAULT 'soft',
+  emotional_level TEXT NOT NULL DEFAULT 'warm',
+  visual_style TEXT NOT NULL DEFAULT 'mixed',
+  posting_cadence TEXT NOT NULL DEFAULT '4-per-week',
+  audience_focus TEXT,
+  brand_notes TEXT,
+  founder_story_angle TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_facebook_content_settings_updated
+ON facebook_content_settings (updated_at DESC);
