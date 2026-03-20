@@ -15,6 +15,7 @@ export {
   clearFacebookDraftImage,
   createFacebookDrafts,
   deleteFacebookDraft,
+  getFacebookDraftStoredImage,
   listFacebookDrafts,
   type FacebookPostDraft,
 } from "./drafts";

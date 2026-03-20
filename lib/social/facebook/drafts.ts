@@ -112,6 +112,12 @@ async function ensureFacebookDraftsTable() {
 }
 
 function mapDraft(row: DraftRow) {
+  const rawImageUrl = row.image_url;
+  const imageUrl =
+    typeof rawImageUrl === "string" && rawImageUrl.startsWith("data:image/")
+      ? `/api/cabinet/facebook/drafts/${row.id}/image`
+      : rawImageUrl;
+
   return {
     id: row.id,
     ownerEmail: row.owner_email,
@@ -128,7 +134,7 @@ function mapDraft(row: DraftRow) {
     cta: row.cta,
     imageDirection: row.image_direction,
     imagePrompt: row.image_prompt,
-    imageUrl: row.image_url,
+    imageUrl,
     imageAlt: row.image_alt,
     imageSource: row.image_source,
     status: row.status,
@@ -332,4 +338,32 @@ export async function clearFacebookDraftImage(input: {
     WHERE id = ${input.draftId}
       AND owner_email = ${input.ownerEmail}
   `;
+}
+
+export async function getFacebookDraftStoredImage(input: {
+  ownerEmail: string;
+  draftId: string;
+}) {
+  const sql = await ensureFacebookDraftsTable();
+
+  if (!sql) {
+    return null;
+  }
+
+  const rows = (await sql`
+    SELECT
+      image_url,
+      image_alt,
+      image_source
+    FROM facebook_post_drafts
+    WHERE id = ${input.draftId}
+      AND owner_email = ${input.ownerEmail}
+    LIMIT 1
+  `) as Array<{
+    image_url: string | null;
+    image_alt: string | null;
+    image_source: string | null;
+  }>;
+
+  return rows[0] || null;
 }
