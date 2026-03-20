@@ -9,6 +9,7 @@ import {
   createFacebookDrafts,
   deleteFacebookDraft,
   generateFacebookDrafts,
+  generateFacebookSettingsContext,
   getFacebookContentSettings,
   normalizeFacebookWorkspaceTab,
   saveFacebookContentSettings,
@@ -43,9 +44,7 @@ function redirectToFacebookState(
   redirect(`/cabinet/facebook?tab=${tab}&state=${state}`);
 }
 
-export async function saveFacebookContentSettingsAction(formData: FormData) {
-  const ownerEmail = await requireOwnerEmail();
-  const tab = getFacebookWorkspaceTab(formData, "settings");
+function readFacebookContentSettingsFromFormData(formData: FormData) {
   const toneProfile = formData.get("toneProfile");
   const postStyle = formData.get("postStyle");
   const primaryGoal = formData.get("primaryGoal");
@@ -68,11 +67,10 @@ export async function saveFacebookContentSettingsAction(formData: FormData) {
     typeof visualStyle !== "string" ||
     typeof postingCadence !== "string"
   ) {
-    return;
+    return null;
   }
 
-  await saveFacebookContentSettings({
-    ownerEmail,
+  return {
     toneProfile,
     postStyle,
     primaryGoal,
@@ -85,10 +83,48 @@ export async function saveFacebookContentSettingsAction(formData: FormData) {
     brandNotes: typeof brandNotes === "string" ? brandNotes : null,
     founderStoryAngle:
       typeof founderStoryAngle === "string" ? founderStoryAngle : null,
+  };
+}
+
+export async function saveFacebookContentSettingsAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const tab = getFacebookWorkspaceTab(formData, "settings");
+  const parsed = readFacebookContentSettingsFromFormData(formData);
+
+  if (!parsed) {
+    return;
+  }
+
+  await saveFacebookContentSettings({
+    ownerEmail,
+    ...parsed,
   });
 
   revalidatePath("/cabinet/facebook");
   redirectToFacebookState("saved", tab);
+}
+
+export async function autofillFacebookContextAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const tab = getFacebookWorkspaceTab(formData, "settings");
+  const parsed = readFacebookContentSettingsFromFormData(formData);
+
+  if (!parsed) {
+    return;
+  }
+
+  const generatedContext = await generateFacebookSettingsContext(parsed);
+
+  await saveFacebookContentSettings({
+    ownerEmail,
+    ...parsed,
+    audienceFocus: generatedContext.audienceFocus,
+    brandNotes: generatedContext.brandNotes,
+    founderStoryAngle: generatedContext.founderStoryAngle,
+  });
+
+  revalidatePath("/cabinet/facebook");
+  redirectToFacebookState("ai-context-filled", tab);
 }
 
 export async function generateFacebookDraftsAction(formData: FormData) {

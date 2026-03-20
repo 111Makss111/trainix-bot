@@ -18,6 +18,7 @@ export {
 } from "./drafts";
 
 export { generateFacebookDrafts } from "./generator";
+export { generateFacebookSettingsContext } from "./context";
 export {
   FACEBOOK_WORKSPACE_TABS,
   normalizeFacebookWorkspaceTab,

@@ -1,4 +1,7 @@
-import { saveFacebookContentSettingsAction } from "@/app/cabinet/facebook/actions";
+import {
+  autofillFacebookContextAction,
+  saveFacebookContentSettingsAction,
+} from "@/app/cabinet/facebook/actions";
 import type {
   FacebookContentSettings,
   FacebookWorkspaceTab,
@@ -12,9 +15,18 @@ type FacebookContentSettingsCardProps = {
   notice?: string;
 };
 
-const noticeMessages: Record<string, string> = {
-  saved:
-    "Facebook-настройки збережені. Далі генератор контенту вже зможе спиратись саме на цей профіль.",
+const noticeMessages: Record<
+  string,
+  { tone: "success"; text: string }
+> = {
+  saved: {
+    tone: "success",
+    text: "Facebook-настройки збережені. Далі генератор контенту вже зможе спиратись саме на цей профіль.",
+  },
+  "ai-context-filled": {
+    tone: "success",
+    text: "AI сам заповнив audience, brand і founder context. Тепер можна одразу тестувати генерацію постів без ручного тексту.",
+  },
 };
 
 const toneOptions = [
@@ -108,6 +120,9 @@ export function FacebookContentSettingsCard({
   notice,
 }: FacebookContentSettingsCardProps) {
   const message = notice ? noticeMessages[notice] : null;
+  const hasAdvancedContext = Boolean(
+    settings.audienceFocus || settings.brandNotes || settings.founderStoryAngle,
+  );
 
   return (
     <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
@@ -128,7 +143,7 @@ export function FacebookContentSettingsCard({
 
       {message ? (
         <div className="mt-5 rounded-[1.3rem] border border-emerald-300/14 bg-emerald-300/[0.08] px-4 py-3 text-sm leading-6 text-emerald-50">
-          {message}
+          {message.text}
         </div>
       ) : null}
 
@@ -186,52 +201,81 @@ export function FacebookContentSettingsCard({
           />
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-2">
-          <label className="grid gap-2">
+        <details
+          open={hasAdvancedContext || notice === "ai-context-filled"}
+          className="rounded-[1.6rem] border border-white/8 bg-[#091122]/44 px-4 py-4"
+        >
+          <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-white">Advanced AI context</p>
+              <p className="mt-2 max-w-2xl text-sm leading-7 text-white/48">
+                Ці поля необов&apos;язкові для ручного заповнення. Натисни
+                `Заповнити AI`, і Trainix сам збере audience, brand rules та
+                founder angle під поточні dropdown-настройки.
+              </p>
+            </div>
+
+            <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] uppercase tracking-[0.24em] text-white/56">
+              Optional
+            </span>
+          </summary>
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-2">
+            <label className="grid gap-2">
+              <span className="text-xs uppercase tracking-[0.24em] text-white/36">
+                Audience focus
+              </span>
+              <textarea
+                name="audienceFocus"
+                rows={6}
+                defaultValue={settings.audienceFocus ?? ""}
+                placeholder="AI заповнить це поле сам на базі product profile і поточних Facebook settings."
+                className="min-h-[10rem] rounded-[1.5rem] border border-white/10 bg-[#091122] px-4 py-4 text-sm leading-7 text-white outline-none transition placeholder:text-white/26 focus:border-white/18"
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-xs uppercase tracking-[0.24em] text-white/36">
+                Brand notes
+              </span>
+              <textarea
+                name="brandNotes"
+                rows={6}
+                defaultValue={settings.brandNotes ?? ""}
+                placeholder="AI заповнить правила тону, заборони і бренд-рамки без твого ручного тексту."
+                className="min-h-[10rem] rounded-[1.5rem] border border-white/10 bg-[#091122] px-4 py-4 text-sm leading-7 text-white outline-none transition placeholder:text-white/26 focus:border-white/18"
+              />
+            </label>
+          </div>
+
+          <label className="mt-4 grid gap-2">
             <span className="text-xs uppercase tracking-[0.24em] text-white/36">
-              Audience focus
+              Founder story angle
             </span>
             <textarea
-              name="audienceFocus"
-              rows={6}
-              defaultValue={settings.audienceFocus ?? ""}
-              placeholder="Для кого Facebook-контент? Наприклад: новачки, люди без дисципліни, ті хто хоче повернутись до тренувань."
-              className="min-h-[10rem] rounded-[1.5rem] border border-white/10 bg-[#091122] px-4 py-4 text-sm leading-7 text-white outline-none transition placeholder:text-white/26 focus:border-white/18"
+              name="founderStoryAngle"
+              rows={5}
+              defaultValue={settings.founderStoryAngle ?? ""}
+              placeholder="AI сам сформує founder/build-in-public angle під Trainix."
+              className="min-h-[9rem] rounded-[1.5rem] border border-white/10 bg-[#091122] px-4 py-4 text-sm leading-7 text-white outline-none transition placeholder:text-white/26 focus:border-white/18"
             />
           </label>
 
-          <label className="grid gap-2">
-            <span className="text-xs uppercase tracking-[0.24em] text-white/36">
-              Brand notes
-            </span>
-            <textarea
-              name="brandNotes"
-              rows={6}
-              defaultValue={settings.brandNotes ?? ""}
-              placeholder="Які правила мають бути у Facebook-постів? Що не можна вигадувати? Як має звучати Trainix у цій соцмережі?"
-              className="min-h-[10rem] rounded-[1.5rem] border border-white/10 bg-[#091122] px-4 py-4 text-sm leading-7 text-white outline-none transition placeholder:text-white/26 focus:border-white/18"
+          <div className="mt-4 flex flex-wrap gap-3">
+            <SocialSubmitButton
+              formAction={autofillFacebookContextAction}
+              idleLabel="Заповнити AI"
+              pendingLabel="AI заповнює..."
+              className="rounded-full border border-sky-300/18 bg-sky-300/10 px-4 py-2.5 text-sm font-medium text-sky-100 transition hover:bg-sky-300/16"
             />
-          </label>
-        </div>
-
-        <label className="grid gap-2">
-          <span className="text-xs uppercase tracking-[0.24em] text-white/36">
-            Founder story angle
-          </span>
-          <textarea
-            name="founderStoryAngle"
-            rows={5}
-            defaultValue={settings.founderStoryAngle ?? ""}
-            placeholder="Що саме має підсвічуватися в founder/build-in-public постах: мотивація створення, шлях розробки, філософія продукту, особисті причини?"
-            className="min-h-[9rem] rounded-[1.5rem] border border-white/10 bg-[#091122] px-4 py-4 text-sm leading-7 text-white outline-none transition placeholder:text-white/26 focus:border-white/18"
-          />
-        </label>
+          </div>
+        </details>
 
         <div className="rounded-[1.5rem] border border-white/8 bg-[#091122]/60 px-4 py-4 text-sm leading-7 text-white/52">
-          Тут ми ще не генеруємо самі пости. Це саме profile layer для
-          майбутнього Facebook-generator: стиль, ціль, інтенсивність продукту,
-          візуальний напрям і базові рамки, з яких потім народжуватимуться
-          драфти.
+          Тут формується profile layer для Facebook-generator: стиль, ціль,
+          інтенсивність продукту, візуальний напрям і додатковий AI context.
+          Тобто навіть без ручного копірайту система зможе сама зібрати базу
+          для сильніших драфтів.
         </div>
 
         <div className="flex flex-wrap gap-3">
@@ -242,7 +286,7 @@ export function FacebookContentSettingsCard({
           />
         </div>
 
-        <SocialPendingState label="Оновлюю Facebook content settings." />
+        <SocialPendingState label="Оновлюю Facebook profile і AI context." />
       </form>
     </section>
   );
