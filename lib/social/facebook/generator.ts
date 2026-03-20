@@ -10,6 +10,7 @@ type DraftSeed = {
   body: string;
   cta: string;
   image_direction: string;
+  image_prompt: string;
 };
 
 type FacebookDraftSeed = {
@@ -18,6 +19,7 @@ type FacebookDraftSeed = {
   body: string;
   cta: string;
   imageDirection: string | null;
+  imagePrompt: string | null;
 };
 
 type GeminiFacebookDraftResponse = {
@@ -29,10 +31,6 @@ type GeminiGenerateContentResponse = {
     content?: {
       parts?: Array<{
         text?: string;
-        inline_data?: {
-          mime_type?: string;
-          data?: string;
-        };
       }>;
     };
   }>;
@@ -131,6 +129,7 @@ function normalizeDraft(draft: DraftSeed) {
     body: cleanText(draft.body).slice(0, 1400),
     cta: cleanText(draft.cta).slice(0, 160),
     imageDirection: cleanText(draft.image_direction).slice(0, 280) || null,
+    imagePrompt: cleanText(draft.image_prompt).slice(0, 2400) || null,
   } satisfies FacebookDraftSeed;
 }
 
@@ -160,6 +159,7 @@ function parseDrafts(text: string) {
         body: string;
         cta: string;
         imageDirection: string | null;
+        imagePrompt: string | null;
       } => Boolean(draft),
     )
     .slice(0, 3) as FacebookDraftSeed[];
@@ -170,147 +170,17 @@ function parseDrafts(text: string) {
 
   return drafts;
 }
-
-function getGeminiImageModel() {
-  return process.env.GEMINI_IMAGE_MODEL?.trim() || "gemini-2.5-flash-image";
-}
-
 function getVisualStyleGuidance(visualStyle: string) {
   switch (visualStyle) {
     case "photo":
-      return "Create a photorealistic fitness lifestyle scene, premium but believable, like a polished campaign photo for a modern training product.";
+      return "Photorealistic lifestyle image, premium but believable, like a polished campaign photo for a modern training product.";
     case "ai-visual":
-      return "Create a premium stylized AI visual with cinematic lighting and a modern fitness-tech atmosphere.";
+      return "Premium stylized AI visual with cinematic lighting and a modern fitness-tech atmosphere.";
     case "branded-minimal":
-      return "Create a branded minimal visual with clean composition, subtle motion energy, abstract fitness cues, and premium restraint.";
+      return "Branded minimal visual with clean composition, subtle motion energy, abstract fitness cues, and premium restraint.";
     default:
-      return "Blend realistic fitness lifestyle photography with a subtle branded atmosphere, keeping the result polished and feed-friendly.";
+      return "Mix realistic fitness lifestyle photography with a subtle branded atmosphere, keeping the result polished and feed-friendly.";
   }
-}
-
-function buildFacebookImagePrompt(input: {
-  settings: FacebookContentSettings;
-  draft: FacebookDraftSeed;
-  knowledgeContext: string;
-}) {
-  return [
-    "You create premium Facebook visuals for the Trainix brand.",
-    "Trainix is a fitness product focused on workouts, discipline, routine, and progress.",
-    "",
-    `Draft title: ${input.draft.title}`,
-    `Draft hook: ${input.draft.hook}`,
-    input.draft.imageDirection
-      ? `Preferred image direction: ${input.draft.imageDirection}`
-      : null,
-    `Tone profile: ${readableSetting("tone", input.settings.toneProfile)}`,
-    `Emotional level: ${readableSetting("emotion", input.settings.emotionalLevel)}`,
-    `Visual style: ${readableSetting("visual", input.settings.visualStyle)}`,
-    input.settings.brandNotes
-      ? `Brand notes: ${input.settings.brandNotes}`
-      : null,
-    "",
-    "Product context:",
-    input.knowledgeContext.slice(0, 2200),
-    "",
-    getVisualStyleGuidance(input.settings.visualStyle),
-    "Rules:",
-    "- No text overlays, captions, UI, logos, or watermarks.",
-    "- Facebook feed friendly, premium quality, polished, visually clear.",
-    "- Do not make it look like a random generic stock duplicate.",
-    "- The visual must fit the draft and reinforce the product tone.",
-    "- Prefer square or gentle portrait composition that works well in a feed preview.",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-async function generateFacebookDraftImage(input: {
-  settings: FacebookContentSettings;
-  draft: FacebookDraftSeed;
-  knowledgeContext: string;
-}) {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-
-  if (!apiKey) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-        getGeminiImageModel(),
-      )}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: buildFacebookImagePrompt(input),
-                },
-              ],
-            },
-          ],
-        }),
-        cache: "no-store",
-      },
-    );
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = (await response.json()) as GeminiGenerateContentResponse;
-    const imagePart = data.candidates?.[0]?.content?.parts?.find(
-      (part) => part.inline_data?.mime_type && part.inline_data?.data,
-    );
-    const mimeType = imagePart?.inline_data?.mime_type;
-    const base64 = imagePart?.inline_data?.data;
-
-    if (!mimeType || !base64) {
-      return null;
-    }
-
-    return {
-      imageUrl: `data:${mimeType};base64,${base64}`,
-      imageAlt: `Facebook visual for ${input.draft.title}`,
-      imageSource: "Gemini Image",
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function attachGeneratedImages(input: {
-  settings: FacebookContentSettings;
-  drafts: FacebookDraftSeed[];
-  knowledgeContext: string;
-}) {
-  const generatedImages = await Promise.all(
-    input.drafts.map((draft) =>
-      generateFacebookDraftImage({
-        settings: input.settings,
-        draft,
-        knowledgeContext: input.knowledgeContext,
-      }),
-    ),
-  );
-
-  return input.drafts.map((draft, index) => {
-    const generated = generatedImages[index];
-
-    return {
-      ...draft,
-      imageUrl: generated?.imageUrl || null,
-      imageAlt: generated?.imageAlt || null,
-      imageSource: generated?.imageSource || null,
-    };
-  });
 }
 
 async function buildKnowledgeContext() {
@@ -365,7 +235,7 @@ function buildFacebookPrompt(input: {
     "- They should sound like they belong to one brand, but still differ from each other.",
     "",
     "Return JSON only in this exact structure:",
-    '{ "drafts": [ { "title": "...", "hook": "...", "body": "...", "cta": "...", "image_direction": "..." } ] }',
+    '{ "drafts": [ { "title": "...", "hook": "...", "body": "...", "cta": "...", "image_direction": "...", "image_prompt": "..." } ] }',
     "",
     "Rules:",
     "- Write in Ukrainian.",
@@ -376,6 +246,11 @@ function buildFacebookPrompt(input: {
     "- Body can be 2-4 short paragraphs with line breaks.",
     "- CTA must match the chosen CTA style.",
     "- image_direction should describe what kind of visual would fit this post.",
+    "- image_prompt must be a production-ready prompt for an external image generator.",
+    "- image_prompt should be detailed and visually specific: scene, mood, lighting, composition, subject, style, and constraints.",
+    `- image_prompt should respect this visual guidance: ${getVisualStyleGuidance(input.settings.visualStyle)}`,
+    "- image_prompt must explicitly avoid text overlays, logos, watermarks, UI, and messy compositions.",
+    "- image_prompt should be usable in Midjourney, Flux, GPT Image, Gemini image tools, Leonardo, or similar services.",
     "- Make each draft strategically different: e.g. one more direct, one more story-like, one more educational, while still staying inside the saved settings.",
   ]
     .filter(Boolean)
@@ -442,11 +317,13 @@ export async function generateFacebookDrafts(input: {
     throw new Error("Gemini returned an empty response");
   }
 
-  const drafts = parseDrafts(text);
-
-  return attachGeneratedImages({
-    settings: input.settings,
-    drafts,
-    knowledgeContext,
-  });
+  return {
+    imageStatus: "manual-prompt",
+    drafts: parseDrafts(text).map((draft) => ({
+      ...draft,
+      imageUrl: null,
+      imageAlt: null,
+      imageSource: null,
+    })),
+  };
 }

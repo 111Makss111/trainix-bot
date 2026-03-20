@@ -11,6 +11,8 @@ export {
 
 export {
   archiveFacebookDrafts,
+  attachFacebookDraftImage,
+  clearFacebookDraftImage,
   createFacebookDrafts,
   deleteFacebookDraft,
   listFacebookDrafts,

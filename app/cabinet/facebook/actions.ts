@@ -6,6 +6,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import {
   archiveFacebookDrafts,
+  attachFacebookDraftImage,
+  clearFacebookDraftImage,
   createFacebookDrafts,
   deleteFacebookDraft,
   generateFacebookDrafts,
@@ -42,6 +44,45 @@ function redirectToFacebookState(
   tab: FacebookWorkspaceTab,
 ): never {
   redirect(`/cabinet/facebook?tab=${tab}&state=${state}`);
+}
+
+function normalizeImageUrl(value: FormDataEntryValue | null) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (
+    /^https?:\/\//i.test(normalized) ||
+    /^data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(normalized)
+  ) {
+    return normalized;
+  }
+
+  return null;
+}
+
+async function fileToDataUrl(file: File) {
+  if (!file || file.size <= 0) {
+    return null;
+  }
+
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Only image files are allowed");
+  }
+
+  if (file.size > 4 * 1024 * 1024) {
+    throw new Error("Image file is too large");
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  return `data:${file.type};base64,${buffer.toString("base64")}`;
 }
 
 function readFacebookContentSettingsFromFormData(formData: FormData) {
@@ -134,7 +175,7 @@ export async function generateFacebookDraftsAction(formData: FormData) {
   const settings = await getFacebookContentSettings(ownerEmail);
 
   try {
-    const drafts = await generateFacebookDrafts({
+    const result = await generateFacebookDrafts({
       settings,
       topicHint: typeof topicHint === "string" ? topicHint : null,
     });
@@ -144,7 +185,7 @@ export async function generateFacebookDraftsAction(formData: FormData) {
       ownerEmail,
       topicHint: typeof topicHint === "string" ? topicHint.trim() || null : null,
       settings,
-      drafts,
+      drafts: result.drafts,
     });
 
     revalidatePath("/cabinet/facebook");
@@ -171,4 +212,59 @@ export async function deleteFacebookDraftAction(formData: FormData) {
 
   revalidatePath("/cabinet/facebook");
   redirectToFacebookState("draft-deleted", tab);
+}
+
+export async function attachFacebookDraftImageAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const tab = getFacebookWorkspaceTab(formData, "drafts");
+  const draftId = formData.get("draftId");
+  const imageAlt = formData.get("imageAlt");
+  const imageFile = formData.get("imageFile");
+
+  if (typeof draftId !== "string") {
+    return;
+  }
+
+  try {
+    const uploadedImageUrl =
+      imageFile instanceof File ? await fileToDataUrl(imageFile) : null;
+    const manualImageUrl = normalizeImageUrl(formData.get("imageUrl"));
+    const finalImageUrl = uploadedImageUrl || manualImageUrl;
+
+    if (!finalImageUrl) {
+      redirectToFacebookState("image-invalid", tab);
+    }
+
+    await attachFacebookDraftImage({
+      ownerEmail,
+      draftId,
+      imageUrl: finalImageUrl,
+      imageAlt: typeof imageAlt === "string" ? imageAlt.trim() || null : null,
+      imageSource: uploadedImageUrl ? "Manual upload" : "Manual URL",
+    });
+
+    revalidatePath("/cabinet/facebook");
+    redirectToFacebookState("image-attached", tab);
+  } catch (error) {
+    console.error("Failed to attach Facebook draft image", error);
+    redirectToFacebookState("image-invalid", tab);
+  }
+}
+
+export async function clearFacebookDraftImageAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const tab = getFacebookWorkspaceTab(formData, "drafts");
+  const draftId = formData.get("draftId");
+
+  if (typeof draftId !== "string") {
+    return;
+  }
+
+  await clearFacebookDraftImage({
+    ownerEmail,
+    draftId,
+  });
+
+  revalidatePath("/cabinet/facebook");
+  redirectToFacebookState("image-cleared", tab);
 }

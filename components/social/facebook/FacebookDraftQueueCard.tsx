@@ -4,9 +4,12 @@ import type {
   FacebookWorkspaceTab,
 } from "@/lib/social/facebook";
 import {
+  attachFacebookDraftImageAction,
+  clearFacebookDraftImageAction,
   deleteFacebookDraftAction,
   generateFacebookDraftsAction,
 } from "@/app/cabinet/facebook/actions";
+import { CopyTextButton } from "@/components/social/shared/CopyTextButton";
 import { SocialPendingState } from "@/components/social/shared/SocialPendingState";
 import { SocialSubmitButton } from "@/components/social/shared/SocialSubmitButton";
 
@@ -19,11 +22,23 @@ type FacebookDraftQueueCardProps = {
 
 const noticeMessages: Record<
   string,
-  { tone: "success" | "error"; text: string }
+  { tone: "success" | "warning" | "error"; text: string }
 > = {
   "drafts-generated": {
     tone: "success",
-    text: "Facebook generator створив 3 нові драфти на базі твого content profile.",
+    text: "Facebook generator створив 3 нові драфти й одразу підготував image prompt для кожного з них.",
+  },
+  "image-attached": {
+    tone: "success",
+    text: "Картинку прикріплено до Facebook draft.",
+  },
+  "image-cleared": {
+    tone: "success",
+    text: "Картинку з драфта прибрано.",
+  },
+  "image-invalid": {
+    tone: "error",
+    text: "Не вдалося додати картинку. Використай валідний image URL або завантаж файл до 4 MB.",
   },
   "drafts-failed": {
     tone: "error",
@@ -99,6 +114,8 @@ export function FacebookDraftQueueCard({
             "mt-5 rounded-[1.3rem] border px-4 py-3 text-sm leading-6",
             message.tone === "success"
               ? "border-emerald-300/14 bg-emerald-300/[0.08] text-emerald-50"
+              : message.tone === "warning"
+                ? "border-amber-300/16 bg-amber-300/[0.09] text-amber-50"
               : "border-red-300/14 bg-red-300/[0.08] text-red-50",
           ].join(" ")}
         >
@@ -176,7 +193,13 @@ export function FacebookDraftQueueCard({
                       </span>
                     </div>
                   </div>
-                ) : null}
+                ) : (
+                  <div className="rounded-[1.35rem] border border-dashed border-white/10 bg-black/10 px-4 py-6 text-sm leading-7 text-white/42">
+                    Тут поки немає прикріпленої картинки. Нижче вже є готовий
+                    `image prompt`, який можна скопіювати, згенерувати visual у
+                    зовнішньому сервісі й прикріпити назад до цього драфта.
+                  </div>
+                )}
 
                 <div className="flex flex-wrap gap-2">
                   <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] uppercase tracking-[0.24em] text-white/60">
@@ -226,6 +249,113 @@ export function FacebookDraftQueueCard({
                     </span>
                   </div>
                 </div>
+
+                <div className="mt-4 rounded-[1.2rem] border border-white/8 bg-[#0a1328]/74 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[0.72rem] uppercase tracking-[0.22em] text-white/40">
+                        Image Prompt
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-white/48">
+                        Скопіюй prompt, згенеруй картинку в будь-якому сервісі
+                        і поверни її в цей драфт.
+                      </p>
+                    </div>
+
+                    {draft.imagePrompt ? (
+                      <CopyTextButton
+                        text={draft.imagePrompt}
+                        idleLabel="Скопіювати prompt"
+                        copiedLabel="Prompt скопійовано"
+                      />
+                    ) : null}
+                  </div>
+
+                  <textarea
+                    readOnly
+                    value={draft.imagePrompt || "Для цього драфта prompt ще не згенерований."}
+                    className="mt-4 min-h-[11rem] w-full rounded-[1.2rem] border border-white/10 bg-[#091122] px-4 py-4 text-sm leading-7 text-white/72 outline-none"
+                  />
+                </div>
+
+                <form
+                  action={attachFacebookDraftImageAction}
+                  className="mt-4 space-y-3 rounded-[1.2rem] border border-white/8 bg-black/10 p-4"
+                >
+                  <input type="hidden" name="draftId" value={draft.id} />
+                  <input type="hidden" name="tab" value={activeTab} />
+
+                  <div>
+                    <p className="text-[0.72rem] uppercase tracking-[0.22em] text-white/40">
+                      Attach Image
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-white/48">
+                      Можеш вставити URL картинки або завантажити готовий файл.
+                    </p>
+                  </div>
+
+                  <label className="grid gap-2">
+                    <span className="text-xs uppercase tracking-[0.22em] text-white/34">
+                      Image URL
+                    </span>
+                    <input
+                      type="url"
+                      name="imageUrl"
+                      placeholder="https://... або data:image/..."
+                      className="h-11 rounded-[1rem] border border-white/10 bg-[#091122] px-4 text-sm text-white outline-none transition placeholder:text-white/26 focus:border-white/18"
+                    />
+                  </label>
+
+                  <label className="grid gap-2">
+                    <span className="text-xs uppercase tracking-[0.22em] text-white/34">
+                      Upload image
+                    </span>
+                    <input
+                      type="file"
+                      name="imageFile"
+                      accept="image/*"
+                      className="block w-full rounded-[1rem] border border-white/10 bg-[#091122] px-4 py-3 text-sm text-white file:mr-4 file:rounded-full file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-xs file:font-medium file:uppercase file:tracking-[0.2em] file:text-white/78"
+                    />
+                  </label>
+
+                  <label className="grid gap-2">
+                    <span className="text-xs uppercase tracking-[0.22em] text-white/34">
+                      Alt text (optional)
+                    </span>
+                    <input
+                      type="text"
+                      name="imageAlt"
+                      defaultValue={draft.imageAlt || draft.title}
+                      className="h-11 rounded-[1rem] border border-white/10 bg-[#091122] px-4 text-sm text-white outline-none transition placeholder:text-white/26 focus:border-white/18"
+                    />
+                  </label>
+
+                  <div className="flex flex-wrap gap-3">
+                    <SocialSubmitButton
+                      idleLabel="Додати картинку"
+                      pendingLabel="Додаю..."
+                      className="rounded-full border border-white/14 bg-white/[0.06] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/[0.1]"
+                    />
+                  </div>
+
+                  <SocialPendingState label="Прикріплюю картинку до Facebook draft." />
+                </form>
+
+                {draft.imageUrl ? (
+                  <form
+                    action={clearFacebookDraftImageAction}
+                    className="mt-4 space-y-3"
+                  >
+                    <input type="hidden" name="draftId" value={draft.id} />
+                    <input type="hidden" name="tab" value={activeTab} />
+                    <SocialSubmitButton
+                      idleLabel="Прибрати картинку"
+                      pendingLabel="Прибираю..."
+                      className="w-full rounded-full border border-amber-300/18 bg-amber-300/10 px-4 py-2.5 text-sm font-medium text-amber-50 transition hover:bg-amber-300/16"
+                    />
+                    <SocialPendingState label="Прибираю прикріплену картинку." />
+                  </form>
+                ) : null}
 
                 <form action={deleteFacebookDraftAction} className="mt-4 space-y-3">
                   <input type="hidden" name="draftId" value={draft.id} />

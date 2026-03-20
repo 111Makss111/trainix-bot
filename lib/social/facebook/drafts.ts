@@ -17,6 +17,7 @@ export type FacebookPostDraft = {
   body: string;
   cta: string;
   imageDirection: string | null;
+  imagePrompt: string | null;
   imageUrl: string | null;
   imageAlt: string | null;
   imageSource: string | null;
@@ -40,6 +41,7 @@ type DraftRow = {
   body: string;
   cta: string;
   image_direction: string | null;
+  image_prompt: string | null;
   image_url: string | null;
   image_alt: string | null;
   image_source: string | null;
@@ -71,6 +73,7 @@ async function ensureFacebookDraftsTable() {
       body TEXT NOT NULL,
       cta TEXT NOT NULL,
       image_direction TEXT,
+      image_prompt TEXT,
       image_url TEXT,
       image_alt TEXT,
       image_source TEXT,
@@ -83,6 +86,11 @@ async function ensureFacebookDraftsTable() {
   await sql`
     CREATE INDEX IF NOT EXISTS idx_facebook_post_drafts_owner_status
     ON facebook_post_drafts (owner_email, status, created_at DESC)
+  `;
+
+  await sql`
+    ALTER TABLE facebook_post_drafts
+    ADD COLUMN IF NOT EXISTS image_prompt TEXT
   `;
 
   await sql`
@@ -119,6 +127,7 @@ function mapDraft(row: DraftRow) {
     body: row.body,
     cta: row.cta,
     imageDirection: row.image_direction,
+    imagePrompt: row.image_prompt,
     imageUrl: row.image_url,
     imageAlt: row.image_alt,
     imageSource: row.image_source,
@@ -163,6 +172,7 @@ export async function createFacebookDrafts(input: {
     body: string;
     cta: string;
     imageDirection: string | null;
+    imagePrompt: string | null;
     imageUrl: string | null;
     imageAlt: string | null;
     imageSource: string | null;
@@ -191,6 +201,7 @@ export async function createFacebookDrafts(input: {
         body,
         cta,
         image_direction,
+        image_prompt,
         image_url,
         image_alt,
         image_source
@@ -210,6 +221,7 @@ export async function createFacebookDrafts(input: {
         ${draft.body},
         ${draft.cta},
         ${draft.imageDirection},
+        ${draft.imagePrompt},
         ${draft.imageUrl},
         ${draft.imageAlt},
         ${draft.imageSource}
@@ -241,6 +253,7 @@ export async function listFacebookDrafts(ownerEmail: string, limit = 6) {
       body,
       cta,
       image_direction,
+      image_prompt,
       image_url,
       image_alt,
       image_source,
@@ -269,6 +282,53 @@ export async function deleteFacebookDraft(input: {
 
   await sql`
     DELETE FROM facebook_post_drafts
+    WHERE id = ${input.draftId}
+      AND owner_email = ${input.ownerEmail}
+  `;
+}
+
+export async function attachFacebookDraftImage(input: {
+  ownerEmail: string;
+  draftId: string;
+  imageUrl: string;
+  imageAlt: string | null;
+  imageSource: string;
+}) {
+  const sql = await ensureFacebookDraftsTable();
+
+  if (!sql) {
+    return;
+  }
+
+  await sql`
+    UPDATE facebook_post_drafts
+    SET
+      image_url = ${input.imageUrl},
+      image_alt = ${input.imageAlt},
+      image_source = ${input.imageSource},
+      updated_at = NOW()
+    WHERE id = ${input.draftId}
+      AND owner_email = ${input.ownerEmail}
+  `;
+}
+
+export async function clearFacebookDraftImage(input: {
+  ownerEmail: string;
+  draftId: string;
+}) {
+  const sql = await ensureFacebookDraftsTable();
+
+  if (!sql) {
+    return;
+  }
+
+  await sql`
+    UPDATE facebook_post_drafts
+    SET
+      image_url = NULL,
+      image_alt = NULL,
+      image_source = NULL,
+      updated_at = NOW()
     WHERE id = ${input.draftId}
       AND owner_email = ${input.ownerEmail}
   `;
