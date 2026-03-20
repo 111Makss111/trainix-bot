@@ -56,20 +56,6 @@ function OverviewIcon() {
   );
 }
 
-function RoutineIcon() {
-  return (
-    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M12 6.5v5.5l3.5 2.1"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
 function NotesIcon() {
   return (
     <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
@@ -109,16 +95,64 @@ function WebIcon() {
   );
 }
 
-function SettingsIcon() {
+function FacebookIcon() {
   return (
     <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
       <path
-        d="M10.2 4.4h3.6l.5 2.2c.4.1.9.3 1.3.5l1.9-1.2 2.5 2.5-1.2 1.9c.2.4.4.9.5 1.3l2.2.5v3.6l-2.2.5c-.1.4-.3.9-.5 1.3l1.2 1.9-2.5 2.5-1.9-1.2c-.4.2-.9.4-1.3.5l-.5 2.2h-3.6l-.5-2.2a6 6 0 0 1-1.3-.5L6.4 20l-2.5-2.5 1.2-1.9a6 6 0 0 1-.5-1.3l-2.2-.5v-3.6l2.2-.5c.1-.4.3-.9.5-1.3L3.9 8.4l2.5-2.5 1.9 1.2c.4-.2.9-.4 1.3-.5l.6-2.2Z"
+        d="M13.2 7H15V4.5h-2c-2.4 0-4 1.6-4 4v2H7v2.6h2V19h2.9v-5.9h2.6l.4-2.6h-3V8.9c0-1.1.4-1.9 1.3-1.9Z"
         stroke="currentColor"
-        strokeWidth="1.3"
+        strokeWidth="1.5"
         strokeLinejoin="round"
       />
-      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function InstagramIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+      <rect
+        x="4.5"
+        y="4.5"
+        width="15"
+        height="15"
+        rx="4.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <circle cx="12" cy="12" r="3.5" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="17" cy="7.2" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function YouTubeIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M20 8.5c-.2-1.5-1.3-2.6-2.8-2.8C15.9 5.5 14 5.5 12 5.5s-3.9 0-5.2.2A3.2 3.2 0 0 0 4 8.5c-.2 1.3-.2 2.4-.2 3.5s0 2.2.2 3.5c.2 1.5 1.3 2.6 2.8 2.8 1.3.2 3.2.2 5.2.2s3.9 0 5.2-.2a3.2 3.2 0 0 0 2.8-2.8c.2-1.3.2-2.4.2-3.5s0-2.2-.2-3.5Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <path
+        d="m10 9.5 4.5 2.5L10 14.5v-5Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function TikTokIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M14.5 5.5c.4 1.5 1.5 2.7 3 3.3v2.5a6.2 6.2 0 0 1-3-.9v4.9a4.6 4.6 0 1 1-4.6-4.6c.2 0 .4 0 .6.1v2.6a2 2 0 1 0 1.4 1.9V5.5h2.6Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -142,6 +176,30 @@ const navItems: NavItem[] = [
     label: "Web",
     description: "Сайти та боти",
     icon: <WebIcon />,
+  },
+  {
+    href: "/cabinet/facebook",
+    label: "Facebook",
+    description: "Окремий модуль",
+    icon: <FacebookIcon />,
+  },
+  {
+    href: "/cabinet/instagram",
+    label: "Instagram",
+    description: "Окремий модуль",
+    icon: <InstagramIcon />,
+  },
+  {
+    href: "/cabinet/youtube",
+    label: "YouTube",
+    description: "Відеомодуль",
+    icon: <YouTubeIcon />,
+  },
+  {
+    href: "/cabinet/tiktok",
+    label: "TikTok",
+    description: "Short video модуль",
+    icon: <TikTokIcon />,
   },
 ];
 
