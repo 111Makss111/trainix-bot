@@ -16,10 +16,42 @@ type NavItem = {
 function OverviewIcon() {
   return (
     <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
-      <rect x="3.5" y="3.5" width="7" height="7" rx="2" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="13.5" y="3.5" width="7" height="4.5" rx="2" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="13.5" y="11" width="7" height="9.5" rx="2" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="3.5" y="13.5" width="7" height="7" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <rect
+        x="3.5"
+        y="3.5"
+        width="7"
+        height="7"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <rect
+        x="13.5"
+        y="3.5"
+        width="7"
+        height="4.5"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <rect
+        x="13.5"
+        y="11"
+        width="7"
+        height="9.5"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <rect
+        x="3.5"
+        y="13.5"
+        width="7"
+        height="7"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
     </svg>
   );
 }
@@ -27,7 +59,12 @@ function OverviewIcon() {
 function RoutineIcon() {
   return (
     <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
-      <path d="M12 6.5v5.5l3.5 2.1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path
+        d="M12 6.5v5.5l3.5 2.1"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
       <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
@@ -42,8 +79,18 @@ function NotesIcon() {
         strokeWidth="1.5"
         strokeLinejoin="round"
       />
-      <path d="M14.5 4.5V8H18" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-      <path d="M9 12h6M9 15.5h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path
+        d="M14.5 4.5V8H18"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9 12h6M9 15.5h6"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -83,12 +130,7 @@ const navItems: NavItem[] = [
     description: "Головна сторінка",
     icon: <OverviewIcon />,
   },
-  {
-    href: "/cabinet/routine",
-    label: "Рутина",
-    description: "Ритм і фокус",
-    icon: <RoutineIcon />,
-  },
+
   {
     href: "/cabinet/notes",
     label: "Нотатки",
@@ -100,12 +142,6 @@ const navItems: NavItem[] = [
     label: "Web",
     description: "Сайти та боти",
     icon: <WebIcon />,
-  },
-  {
-    href: "/cabinet/settings",
-    label: "Налаштування",
-    description: "Параметри простору",
-    icon: <SettingsIcon />,
   },
 ];
 
