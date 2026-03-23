@@ -24,6 +24,7 @@ import {
   deleteWebPostDraftForOwner,
   getWebProjectForOwner,
   getDraftWebPostForOwner,
+  getWebPostDraftStoredImage,
   listDraftWebPostsForProject,
   markWebPostDraftPublished,
   markWebProjectPostGenerationRun,
@@ -543,6 +544,19 @@ function parseMessageThreadId(value: string | null | undefined) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+async function resolveWebDraftPhotoSource(input: {
+  ownerEmail: string;
+  draftId: string;
+  fallbackUrl: string | null;
+}) {
+  const storedAsset = await getWebPostDraftStoredImage({
+    ownerEmail: input.ownerEmail,
+    draftId: input.draftId,
+  });
+
+  return storedAsset?.image_url || input.fallbackUrl;
+}
+
 export async function generatePostDraftsAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
   const projectId = formData.get("projectId");
@@ -918,13 +932,18 @@ export async function publishWebPostDraftAction(formData: FormData) {
 
   try {
     let publishedMessageId: number | null = null;
+    const photoSource = await resolveWebDraftPhotoSource({
+      ownerEmail,
+      draftId,
+      fallbackUrl: draft.imageUrl,
+    });
 
-    if (draft.imageUrl) {
+    if (photoSource) {
       try {
         const sentPhoto = await sendTelegramPhotoMessage({
           botToken: project.telegramBotToken,
           chatId: project.telegramChatId,
-          photoUrl: draft.imageUrl,
+          photoUrl: photoSource,
           caption: messageText,
           messageThreadId,
         });
@@ -1009,13 +1028,18 @@ export async function publishWebPostDraftClientAction(input: {
 
   try {
     let publishedMessageId: number | null = null;
+    const photoSource = await resolveWebDraftPhotoSource({
+      ownerEmail,
+      draftId: input.draftId,
+      fallbackUrl: draft.imageUrl,
+    });
 
-    if (draft.imageUrl) {
+    if (photoSource) {
       try {
         const sentPhoto = await sendTelegramPhotoMessage({
           botToken: project.telegramBotToken,
           chatId: project.telegramChatId,
-          photoUrl: draft.imageUrl,
+          photoUrl: photoSource,
           caption: messageText,
           messageThreadId,
         });
