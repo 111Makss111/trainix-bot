@@ -1,11 +1,13 @@
-import type { WebProject } from "@/lib/web-projects";
+"use client";
+
+import { useState } from "react";
+import type { TelegramMessageLog, WebPostDraft, WebProject } from "@/lib/web-projects";
 import { deleteWebProjectAction } from "@/app/cabinet/web/actions";
+import { FormSubmitButton } from "./FormSubmitButton";
 import { WebAiCard } from "./WebAiCard";
 import { WebPostsStudio } from "./WebPostsStudio";
 import { WebTelegramMessages } from "./WebTelegramMessages";
 import { WebTelegramCard } from "./WebTelegramCard";
-import type { TelegramMessageLog, WebPostDraft } from "@/lib/web-projects";
-import { FormSubmitButton } from "./FormSubmitButton";
 
 type WebProjectOverviewProps = {
   project: WebProject | null;
@@ -22,7 +24,57 @@ type WebProjectOverviewProps = {
     knowledgeFilePath: string | null;
     knowledgeLoaded: boolean;
   };
+  imageModeLabel: string;
 };
+
+type WebWorkspaceTab = "telegram" | "ai" | "posts" | "inbox";
+
+const workspaceTabs: Array<{
+  id: WebWorkspaceTab;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: "telegram",
+    label: "Telegram",
+    description: "Бот, група і webhook",
+  },
+  {
+    id: "ai",
+    label: "AI",
+    description: "Контекст і knowledge",
+  },
+  {
+    id: "posts",
+    label: "Posts",
+    description: "Черга, драфти й history",
+  },
+  {
+    id: "inbox",
+    label: "Inbox",
+    description: "Живі повідомлення",
+  },
+];
+
+function resolveInitialTab(input: {
+  telegramNotice?: string;
+  aiNotice?: string;
+  postNotice?: string;
+}): WebWorkspaceTab {
+  if (input.telegramNotice) {
+    return "telegram";
+  }
+
+  if (input.aiNotice) {
+    return "ai";
+  }
+
+  if (input.postNotice) {
+    return "posts";
+  }
+
+  return "posts";
+}
 
 export function WebProjectOverview({
   project,
@@ -33,12 +85,15 @@ export function WebProjectOverview({
   postDrafts,
   publishedPosts,
   aiRuntime,
+  imageModeLabel,
 }: WebProjectOverviewProps) {
-  const imageModeLabel = process.env.GEMINI_API_KEY?.trim()
-    ? "Gemini image + fallback"
-    : process.env.PEXELS_API_KEY?.trim()
-      ? "Pexels enabled"
-      : "Fallback only";
+  const [activeTab, setActiveTab] = useState<WebWorkspaceTab>(() =>
+    resolveInitialTab({
+      telegramNotice,
+      aiNotice,
+      postNotice,
+    }),
+  );
 
   if (!project) {
     return (
@@ -88,25 +143,72 @@ export function WebProjectOverview({
         </div>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-3 backdrop-blur-md">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {workspaceTabs.map((tab) => {
+            const isActive = tab.id === activeTab;
+
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setActiveTab(tab.id);
+                }}
+                className={[
+                  "rounded-[1.4rem] border px-4 py-4 text-left transition",
+                  isActive
+                    ? "border-sky-300/20 bg-sky-300/[0.12] shadow-[0_0_0_1px_rgba(125,211,252,0.08)]"
+                    : "border-white/8 bg-[#091122]/58 hover:border-white/14 hover:bg-[#0d1730]/72",
+                ].join(" ")}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-white">
+                    {tab.label}
+                  </span>
+                  <span className="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[0.68rem] uppercase tracking-[0.2em] text-white/58">
+                    {tab.id === "posts"
+                      ? postDrafts.length
+                      : tab.id === "inbox"
+                        ? telegramMessages.length
+                        : "Go"}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-white/48">
+                  {tab.description}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {activeTab === "telegram" ? (
         <WebTelegramCard project={project} notice={telegramNotice} />
+      ) : null}
 
+      {activeTab === "ai" ? (
         <WebAiCard project={project} notice={aiNotice} aiRuntime={aiRuntime} />
-      </div>
+      ) : null}
 
-      <WebPostsStudio
-        project={project}
-        notice={postNotice}
-        drafts={postDrafts}
-        publishedPosts={publishedPosts}
-        imageModeLabel={imageModeLabel}
-      />
+      {activeTab === "posts" ? (
+        <WebPostsStudio
+          key={`${project.id}:${postNotice || "base"}`}
+          project={project}
+          notice={postNotice}
+          drafts={postDrafts}
+          publishedPosts={publishedPosts}
+          imageModeLabel={imageModeLabel}
+        />
+      ) : null}
 
-      <WebTelegramMessages
-        initialMessages={telegramMessages}
-        projectId={project.id}
-        webhookEnabled={project.telegramWebhookEnabled}
-      />
+      {activeTab === "inbox" ? (
+        <WebTelegramMessages
+          initialMessages={telegramMessages}
+          projectId={project.id}
+          webhookEnabled={project.telegramWebhookEnabled}
+        />
+      ) : null}
     </div>
   );
 }

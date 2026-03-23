@@ -63,6 +63,11 @@ export default async function WebPage({ searchParams }: WebPageProps) {
     knowledgeFilePath: projectKnowledge.relativePath,
     knowledgeLoaded: Boolean(projectKnowledge.data),
   };
+  const imageModeLabel = process.env.GEMINI_API_KEY?.trim()
+    ? "Gemini image + fallback"
+    : process.env.PEXELS_API_KEY?.trim()
+      ? "Pexels enabled"
+      : "Fallback only";
 
   return (
     <>
@@ -81,6 +86,7 @@ export default async function WebPage({ searchParams }: WebPageProps) {
       </div>
 
       <WebProjectOverview
+        key={`${activeProject?.id || "empty"}:${typeof params.telegram === "string" ? params.telegram : "base"}:${typeof params.ai === "string" ? params.ai : "base"}:${typeof params.post === "string" ? params.post : "base"}`}
         project={activeProject}
         telegramNotice={
           typeof params.telegram === "string" ? params.telegram : undefined
@@ -91,6 +97,7 @@ export default async function WebPage({ searchParams }: WebPageProps) {
         postDrafts={postDrafts}
         publishedPosts={publishedPosts}
         aiRuntime={aiRuntime}
+        imageModeLabel={imageModeLabel}
       />
     </>
   );

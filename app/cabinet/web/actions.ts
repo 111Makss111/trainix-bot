@@ -16,7 +16,9 @@ import {
   verifyTelegramConnection,
 } from "@/lib/telegram";
 import {
+  attachWebPostDraftImageForOwner,
   clearWebProjectTelegramWebhook,
+  clearWebPostDraftImageForOwner,
   createWebProject,
   deleteWebProject,
   deleteWebPostDraftForOwner,
@@ -157,6 +159,55 @@ function normalizePostSettingsInput(input: {
     | "postGenerationContentType"
     | "postGenerationThreadId"
   >;
+}
+
+function normalizeImageUrl(value: FormDataEntryValue | null) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (
+    /^https?:\/\//i.test(normalized) ||
+    /^data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(normalized)
+  ) {
+    return normalized;
+  }
+
+  return null;
+}
+
+function normalizeTextInput(value: FormDataEntryValue | null) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+
+  return normalized || null;
+}
+
+async function fileToDataUrl(file: File) {
+  if (!file || file.size <= 0) {
+    return null;
+  }
+
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Only image files are allowed");
+  }
+
+  if (file.size > 4 * 1024 * 1024) {
+    throw new Error("Image file is too large");
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  return `data:${file.type};base64,${buffer.toString("base64")}`;
 }
 
 function getTelegramWebhookBaseUrl() {
@@ -732,6 +783,100 @@ export async function deleteWebPostDraftClientAction(input: {
     ok: true,
     notice: "draft-deleted",
     draftId: input.draftId,
+  });
+}
+
+export async function attachWebPostDraftImageClientAction(
+  formData: FormData,
+): Promise<PostStudioMutationResult> {
+  const ownerEmail = await requireOwnerEmail();
+  const projectId = normalizeTextInput(formData.get("projectId"));
+  const draftId = normalizeTextInput(formData.get("draftId"));
+  const imageAlt = normalizeTextInput(formData.get("imageAlt"));
+  const imageFile = formData.get("imageFile");
+
+  if (!projectId || !draftId) {
+    return errorPostStudioResult("Не вдалося прикріпити картинку до драфта.");
+  }
+
+  try {
+    const uploadedImageUrl =
+      imageFile instanceof File ? await fileToDataUrl(imageFile) : null;
+    const manualImageUrl = normalizeImageUrl(formData.get("imageUrl"));
+    const finalImageUrl = uploadedImageUrl || manualImageUrl;
+
+    if (!finalImageUrl) {
+      return errorPostStudioResult(
+        "Не вдалося додати картинку. Використай валідний image URL або завантаж файл до 4 MB.",
+      );
+    }
+
+    await attachWebPostDraftImageForOwner({
+      ownerEmail,
+      projectId,
+      draftId,
+      imageUrl: finalImageUrl,
+      imageAlt,
+      imageSource: uploadedImageUrl ? "Manual upload" : "Manual URL",
+    });
+
+    const draft = await getDraftWebPostForOwner({
+      ownerEmail,
+      projectId,
+      draftId,
+    });
+
+    if (!draft) {
+      return errorPostStudioResult("Не вдалося знайти оновлений драфт.");
+    }
+
+    revalidatePath("/cabinet/web");
+
+    return okPostStudioResult({
+      ok: true,
+      notice: "image-attached",
+      drafts: [draft],
+    });
+  } catch (error) {
+    console.error("Failed to attach Web draft image", error);
+    return errorPostStudioResult(
+      "Не вдалося додати картинку. Використай валідний image URL або завантаж файл до 4 MB.",
+    );
+  }
+}
+
+export async function clearWebPostDraftImageClientAction(input: {
+  projectId: string;
+  draftId: string;
+}): Promise<PostStudioMutationResult> {
+  const ownerEmail = await requireOwnerEmail();
+
+  if (!input.projectId || !input.draftId) {
+    return errorPostStudioResult("Не вдалося прибрати картинку з драфта.");
+  }
+
+  await clearWebPostDraftImageForOwner({
+    ownerEmail,
+    projectId: input.projectId,
+    draftId: input.draftId,
+  });
+
+  const draft = await getDraftWebPostForOwner({
+    ownerEmail,
+    projectId: input.projectId,
+    draftId: input.draftId,
+  });
+
+  if (!draft) {
+    return errorPostStudioResult("Не вдалося знайти оновлений драфт.");
+  }
+
+  revalidatePath("/cabinet/web");
+
+  return okPostStudioResult({
+    ok: true,
+    notice: "image-cleared",
+    drafts: [draft],
   });
 }
 

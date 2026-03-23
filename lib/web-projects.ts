@@ -70,6 +70,29 @@ export type WebPostDraft = {
   updatedAt: string;
 };
 
+type WebPostDraftRow = {
+  id: string;
+  project_id: string;
+  content_type: string;
+  topic_hint: string | null;
+  source_kind: string;
+  source_key: string;
+  source_title: string | null;
+  source_url: string | null;
+  title: string;
+  caption: string;
+  image_url: string | null;
+  image_alt: string | null;
+  image_credit_name: string | null;
+  image_credit_url: string | null;
+  image_source: string | null;
+  status: string;
+  published_message_id: number | null;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 let webProjectsTablePromise: Promise<Awaited<ReturnType<typeof ensureWebProjectsTableInner>>> | null =
   null;
 
@@ -1151,28 +1174,12 @@ export async function createWebPostDrafts(input: {
   }
 }
 
-function mapWebPostDraft(row: {
-  id: string;
-  project_id: string;
-  content_type: string;
-  topic_hint: string | null;
-  source_kind: string;
-  source_key: string;
-  source_title: string | null;
-  source_url: string | null;
-  title: string;
-  caption: string;
-  image_url: string | null;
-  image_alt: string | null;
-  image_credit_name: string | null;
-  image_credit_url: string | null;
-  image_source: string | null;
-  status: string;
-  published_message_id: number | null;
-  published_at: string | null;
-  created_at: string;
-  updated_at: string;
-}) {
+function mapWebPostDraft(row: WebPostDraftRow) {
+  const imageUrl =
+    typeof row.image_url === "string" && row.image_url.startsWith("data:image/")
+      ? `/api/cabinet/web/drafts/${row.id}/image`
+      : row.image_url;
+
   return {
     id: row.id,
     projectId: row.project_id,
@@ -1184,7 +1191,7 @@ function mapWebPostDraft(row: {
     sourceUrl: row.source_url,
     title: row.title,
     caption: row.caption,
-    imageUrl: row.image_url,
+    imageUrl,
     imageAlt: row.image_alt,
     imageCreditName: row.image_credit_name,
     imageCreditUrl: row.image_credit_url,
@@ -1239,28 +1246,7 @@ export async function listDraftWebPostsForProject(input: {
       AND wpd.status = 'draft'
     ORDER BY wpd.created_at DESC
     LIMIT ${limit}
-  `) as Array<{
-    id: string;
-    project_id: string;
-    content_type: string;
-    topic_hint: string | null;
-    source_kind: string;
-    source_key: string;
-    source_title: string | null;
-    source_url: string | null;
-    title: string;
-    caption: string;
-    image_url: string | null;
-    image_alt: string | null;
-    image_credit_name: string | null;
-    image_credit_url: string | null;
-    image_source: string | null;
-    status: string;
-    published_message_id: number | null;
-    published_at: string | null;
-    created_at: string;
-    updated_at: string;
-  }>;
+  `) as WebPostDraftRow[];
 
   return rows.map(mapWebPostDraft);
 }
@@ -1307,28 +1293,7 @@ export async function listPublishedWebPostsForProject(input: {
       AND wpd.status = 'published'
     ORDER BY COALESCE(wpd.published_at, wpd.created_at) DESC
     LIMIT ${limit}
-  `) as Array<{
-    id: string;
-    project_id: string;
-    content_type: string;
-    topic_hint: string | null;
-    source_kind: string;
-    source_key: string;
-    source_title: string | null;
-    source_url: string | null;
-    title: string;
-    caption: string;
-    image_url: string | null;
-    image_alt: string | null;
-    image_credit_name: string | null;
-    image_credit_url: string | null;
-    image_source: string | null;
-    status: string;
-    published_message_id: number | null;
-    published_at: string | null;
-    created_at: string;
-    updated_at: string;
-  }>;
+  `) as WebPostDraftRow[];
 
   return rows.map(mapWebPostDraft);
 }
@@ -1397,28 +1362,7 @@ export async function getDraftWebPostForOwner(input: {
       AND wpd.project_id = ${input.projectId}
       AND wp.owner_email = ${input.ownerEmail}
     LIMIT 1
-  `) as Array<{
-    id: string;
-    project_id: string;
-    content_type: string;
-    topic_hint: string | null;
-    source_kind: string;
-    source_key: string;
-    source_title: string | null;
-    source_url: string | null;
-    title: string;
-    caption: string;
-    image_url: string | null;
-    image_alt: string | null;
-    image_credit_name: string | null;
-    image_credit_url: string | null;
-    image_source: string | null;
-    status: string;
-    published_message_id: number | null;
-    published_at: string | null;
-    created_at: string;
-    updated_at: string;
-  }>;
+  `) as WebPostDraftRow[];
 
   return rows[0] ? mapWebPostDraft(rows[0]) : null;
 }
@@ -1475,4 +1419,94 @@ export async function deleteWebPostDraftForOwner(input: {
           AND owner_email = ${input.ownerEmail}
       )
   `;
+}
+
+export async function attachWebPostDraftImageForOwner(input: {
+  ownerEmail: string;
+  projectId: string;
+  draftId: string;
+  imageUrl: string;
+  imageAlt: string | null;
+  imageSource: string;
+}) {
+  const sql = await ensureWebProjectsTable();
+
+  if (!sql) {
+    return;
+  }
+
+  await sql`
+    UPDATE web_post_drafts
+    SET
+      image_url = ${input.imageUrl},
+      image_alt = ${input.imageAlt},
+      image_source = ${input.imageSource},
+      updated_at = NOW()
+    WHERE id = ${input.draftId}
+      AND project_id = ${input.projectId}
+      AND EXISTS (
+        SELECT 1
+        FROM web_projects
+        WHERE id = ${input.projectId}
+          AND owner_email = ${input.ownerEmail}
+      )
+  `;
+}
+
+export async function clearWebPostDraftImageForOwner(input: {
+  ownerEmail: string;
+  projectId: string;
+  draftId: string;
+}) {
+  const sql = await ensureWebProjectsTable();
+
+  if (!sql) {
+    return;
+  }
+
+  await sql`
+    UPDATE web_post_drafts
+    SET
+      image_url = NULL,
+      image_alt = NULL,
+      image_source = NULL,
+      updated_at = NOW()
+    WHERE id = ${input.draftId}
+      AND project_id = ${input.projectId}
+      AND EXISTS (
+        SELECT 1
+        FROM web_projects
+        WHERE id = ${input.projectId}
+          AND owner_email = ${input.ownerEmail}
+      )
+  `;
+}
+
+export async function getWebPostDraftStoredImage(input: {
+  ownerEmail: string;
+  draftId: string;
+}) {
+  const sql = await ensureWebProjectsTable();
+
+  if (!sql) {
+    return null;
+  }
+
+  const rows = (await sql`
+    SELECT
+      wpd.image_url,
+      wpd.image_alt,
+      wpd.image_source
+    FROM web_post_drafts wpd
+    INNER JOIN web_projects wp ON wp.id = wpd.project_id
+    WHERE wpd.id = ${input.draftId}
+      AND wp.owner_email = ${input.ownerEmail}
+    LIMIT 1
+  `) as Array<{
+    image_url: string | null;
+    image_alt: string | null;
+    image_source: string | null;
+  }>;
+
+  return rows[0] || null;
 }
