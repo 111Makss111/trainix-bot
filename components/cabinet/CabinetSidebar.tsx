@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { HeaderLogo } from "@/components/header/HeaderLogo";
 import { SignOutButton } from "@/components/auth";
@@ -213,6 +214,13 @@ function isActivePath(pathname: string, href: string) {
 
 export function CabinetSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  useEffect(() => {
+    for (const item of navItems) {
+      router.prefetch(item.href);
+    }
+  }, [router]);
 
   return (
     <aside className="flex h-full flex-col rounded-[2rem] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-xl">
@@ -228,6 +236,13 @@ export function CabinetSidebar() {
             <Link
               key={item.href}
               href={item.href}
+              prefetch
+              onMouseEnter={() => {
+                router.prefetch(item.href);
+              }}
+              onFocus={() => {
+                router.prefetch(item.href);
+              }}
               className={[
                 "group flex items-center gap-3 rounded-[1.4rem] border px-3 py-3 transition",
                 active
