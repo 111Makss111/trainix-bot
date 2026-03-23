@@ -3,11 +3,7 @@ import { getServerSession } from "next-auth";
 import { CabinetTopbar } from "@/components/cabinet";
 import { PlansBoard } from "@/components/notes";
 import { authOptions } from "@/lib/auth";
-import {
-  isPlanPeriod,
-  listPlansForOwner,
-  type PlanPeriod,
-} from "@/lib/plans";
+import { isPlanPeriod, listPlansForOwner, type PlanPeriod } from "@/lib/plans";
 
 type NotesPageProps = {
   searchParams?: Promise<{
@@ -37,12 +33,6 @@ export default async function NotesPage({ searchParams }: NotesPageProps) {
 
   return (
     <>
-      <CabinetTopbar
-        eyebrow="Notes"
-        title="Плани та нотатки"
-        description="Тепер це note-planner без зайвого скролу: зверху горизонти часу, нижче тільки один активний список з нотатками, чекбоксами і швидким редагуванням."
-      />
-
       <PlansBoard groupedPlans={groupedPlans} activePeriod={activePeriod} />
     </>
   );
