@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS plans (
   title TEXT,
   description TEXT,
   content TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'todo',
   completed BOOLEAN NOT NULL DEFAULT FALSE,
+  started_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -24,9 +26,11 @@ CREATE TABLE IF NOT EXISTS plans (
 
 ALTER TABLE plans DROP CONSTRAINT IF EXISTS plans_period_check;
 ALTER TABLE plans ADD CONSTRAINT plans_period_check CHECK (period IN ('today', 'week', 'month', 'year'));
+ALTER TABLE plans DROP CONSTRAINT IF EXISTS plans_status_check;
+ALTER TABLE plans ADD CONSTRAINT plans_status_check CHECK (status IN ('todo', 'in_progress', 'done'));
 
 CREATE INDEX IF NOT EXISTS idx_plans_owner_period_status
-ON plans (owner_email, period, completed, updated_at DESC);
+ON plans (owner_email, period, status, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS web_projects (
   id TEXT PRIMARY KEY,

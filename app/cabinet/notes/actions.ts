@@ -7,8 +7,9 @@ import { authOptions } from "@/lib/auth";
 import {
   createPlan,
   deletePlan,
+  finishPlan,
   isPlanPeriod,
-  togglePlanCompleted,
+  togglePlanInProgress,
   updatePlan,
 } from "@/lib/plans";
 
@@ -96,7 +97,7 @@ export async function updatePlanAction(formData: FormData) {
   redirect(`/cabinet/notes?period=${viewPeriod}&mode=${viewMode}`);
 }
 
-export async function togglePlanCompletedAction(formData: FormData) {
+export async function togglePlanInProgressAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
   const viewPeriod = getViewPeriod(formData);
   const viewMode = getViewMode(formData);
@@ -106,13 +107,31 @@ export async function togglePlanCompletedAction(formData: FormData) {
     return;
   }
 
-  await togglePlanCompleted({
+  await togglePlanInProgress({
     ownerEmail,
     planId,
   });
 
   revalidatePath("/cabinet/notes");
   redirect(`/cabinet/notes?period=${viewPeriod}&mode=${viewMode}`);
+}
+
+export async function finishPlanAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const viewPeriod = getViewPeriod(formData);
+  const planId = formData.get("planId");
+
+  if (typeof planId !== "string") {
+    return;
+  }
+
+  await finishPlan({
+    ownerEmail,
+    planId,
+  });
+
+  revalidatePath("/cabinet/notes");
+  redirect(`/cabinet/notes?period=${viewPeriod}&mode=history`);
 }
 
 export async function deletePlanAction(formData: FormData) {

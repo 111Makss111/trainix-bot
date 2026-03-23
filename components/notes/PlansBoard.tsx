@@ -2,7 +2,8 @@ import Link from "next/link";
 import {
   createPlanAction,
   deletePlanAction,
-  togglePlanCompletedAction,
+  finishPlanAction,
+  togglePlanInProgressAction,
   updatePlanAction,
 } from "@/app/cabinet/notes/actions";
 import type { PlanItem, PlanPeriod } from "@/lib/plans";
@@ -65,20 +66,12 @@ const sectionConfig: Record<
 };
 
 const orderedPeriods = ["today", "week", "month", "year"] as const;
-const modeConfig: Record<
-  NotesViewMode,
-  {
-    label: string;
-    badgeLabel: string;
-  }
-> = {
+const modeConfig: Record<NotesViewMode, { label: string }> = {
   active: {
     label: "Активні",
-    badgeLabel: "Active",
   },
   history: {
     label: "Історія",
-    badgeLabel: "History",
   },
 };
 
@@ -90,6 +83,24 @@ function formatDate(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatElapsedTime(value: string) {
+  const diffMs = Date.now() - new Date(value).getTime();
+  const totalMinutes = Math.max(1, Math.floor(diffMs / 60000));
+
+  if (totalMinutes < 60) {
+    return `${totalMinutes} хв`;
+  }
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (!minutes) {
+    return `${hours} год`;
+  }
+
+  return `${hours} год ${minutes} хв`;
 }
 
 function AddPlanForm({
@@ -126,45 +137,43 @@ function AddPlanForm({
   );
 }
 
-function PlanRow({
+function ActivePlanRow({
   plan,
   activePeriod,
-  activeMode,
 }: {
   plan: PlanItem;
   activePeriod: PlanPeriod;
-  activeMode: NotesViewMode;
 }) {
-  const toggleLabel = plan.completed
-    ? "Повернути в активні"
-    : "Перемістити в історію";
+  const isPending = plan.status === "in_progress";
 
   return (
     <article
       className={[
         "rounded-[1.5rem] border px-4 py-4 transition",
-        plan.completed
-          ? "border-emerald-300/12 bg-emerald-300/[0.06]"
+        isPending
+          ? "border-sky-300/22 bg-sky-300/[0.08] shadow-[0_0_0_1px_rgba(125,211,252,0.08)]"
           : "border-white/10 bg-[#0a1122]/92",
       ].join(" ")}
     >
       <div className="flex items-start gap-3">
-        <form action={togglePlanCompletedAction} className="shrink-0">
+        <form action={togglePlanInProgressAction} className="shrink-0">
           <input type="hidden" name="planId" value={plan.id} />
           <input type="hidden" name="viewPeriod" value={activePeriod} />
-          <input type="hidden" name="viewMode" value={activeMode} />
+          <input type="hidden" name="viewMode" value="active" />
           <button
             type="submit"
-            title={toggleLabel}
-            aria-label={toggleLabel}
+            title={isPending ? "Зняти зі статусу в роботі" : "Поставити в роботу"}
+            aria-label={
+              isPending ? "Зняти зі статусу в роботі" : "Поставити в роботу"
+            }
             className={[
               "mt-0.5 flex h-10 w-10 items-center justify-center rounded-full border text-sm font-medium transition",
-              plan.completed
-                ? "border-emerald-300/30 bg-emerald-300/18 text-emerald-50"
+              isPending
+                ? "border-sky-300/28 bg-sky-300/18 text-sky-50"
                 : "border-white/12 bg-white/[0.03] text-white/58 hover:border-white/18 hover:text-white/88",
             ].join(" ")}
           >
-            {plan.completed ? "✓" : "○"}
+            {isPending ? "●" : "○"}
           </button>
         </form>
 
@@ -172,14 +181,7 @@ function PlanRow({
           <summary className="list-none cursor-pointer">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p
-                  className={[
-                    "truncate text-sm font-medium transition",
-                    plan.completed
-                      ? "text-white/42 line-through"
-                      : "text-white/88",
-                  ].join(" ")}
-                >
+                <p className="truncate text-sm font-medium text-white/88">
                   {plan.title}
                 </p>
                 <p className="mt-1 truncate text-xs uppercase tracking-[0.2em] text-white/34">
@@ -187,8 +189,15 @@ function PlanRow({
                 </p>
               </div>
 
-              <div className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] uppercase tracking-[0.22em] text-white/58 transition group-open:border-white/18 group-open:text-white/82">
-                {plan.completed ? "Done" : "Open"}
+              <div
+                className={[
+                  "shrink-0 rounded-full border px-3 py-1 text-[0.68rem] uppercase tracking-[0.22em] transition",
+                  isPending
+                    ? "border-sky-300/24 bg-sky-300/14 text-sky-50"
+                    : "border-white/10 bg-white/[0.04] text-white/58 group-open:border-white/18 group-open:text-white/82",
+                ].join(" ")}
+              >
+                {isPending ? "Pending" : "Open"}
               </div>
             </div>
           </summary>
@@ -196,9 +205,7 @@ function PlanRow({
           <div className="mt-4 space-y-4 rounded-[1.3rem] border border-white/8 bg-black/10 px-4 py-4">
             <div className="text-sm leading-7 text-white/68">
               {plan.description ? (
-                <p className={plan.completed ? "text-white/42" : undefined}>
-                  {plan.description}
-                </p>
+                <p>{plan.description}</p>
               ) : (
                 <p className="text-white/36">
                   Опису поки немає. Можеш додати його через редагування.
@@ -208,8 +215,8 @@ function PlanRow({
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs uppercase tracking-[0.2em] text-white/32">
               <span>Оновлено {formatDate(plan.updatedAt)}</span>
-              {plan.completedAt ? (
-                <span>Виконано {formatDate(plan.completedAt)}</span>
+              {plan.startedAt ? (
+                <span>В роботі {formatElapsedTime(plan.startedAt)}</span>
               ) : null}
             </div>
 
@@ -221,7 +228,7 @@ function PlanRow({
               <form action={updatePlanAction} className="mt-3 space-y-3">
                 <input type="hidden" name="planId" value={plan.id} />
                 <input type="hidden" name="viewPeriod" value={activePeriod} />
-                <input type="hidden" name="viewMode" value={activeMode} />
+                <input type="hidden" name="viewMode" value="active" />
                 <input
                   type="text"
                   name="title"
@@ -245,10 +252,91 @@ function PlanRow({
           </div>
         </details>
 
+        <div className="flex shrink-0 flex-col gap-2">
+          {isPending ? (
+            <form action={finishPlanAction}>
+              <input type="hidden" name="planId" value={plan.id} />
+              <input type="hidden" name="viewPeriod" value={activePeriod} />
+              <button
+                type="submit"
+                className="rounded-full border border-emerald-300/20 bg-emerald-300/12 px-3 py-2 text-[0.68rem] uppercase tracking-[0.2em] text-emerald-50 transition hover:bg-emerald-300/18"
+              >
+                Закінчити
+              </button>
+            </form>
+          ) : null}
+
+          <form action={deletePlanAction}>
+            <input type="hidden" name="planId" value={plan.id} />
+            <input type="hidden" name="viewPeriod" value={activePeriod} />
+            <input type="hidden" name="viewMode" value="active" />
+            <button
+              type="submit"
+              className="rounded-full border border-white/10 px-3 py-2 text-[0.68rem] uppercase tracking-[0.2em] text-white/52 transition hover:border-red-300/24 hover:text-red-100"
+            >
+              Видалити
+            </button>
+          </form>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function HistoryPlanRow({
+  plan,
+  activePeriod,
+}: {
+  plan: PlanItem;
+  activePeriod: PlanPeriod;
+}) {
+  return (
+    <article className="rounded-[1.5rem] border border-emerald-300/12 bg-emerald-300/[0.06] px-4 py-4 transition">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-emerald-300/30 bg-emerald-300/18 text-sm font-medium text-emerald-50">
+          ✓
+        </div>
+
+        <details className="min-w-0 flex-1 group">
+          <summary className="list-none cursor-pointer">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-white/42 line-through">
+                  {plan.title}
+                </p>
+                <p className="mt-1 truncate text-xs uppercase tracking-[0.2em] text-white/34">
+                  {plan.description ? "Натисни, щоб побачити опис" : "Без опису"}
+                </p>
+              </div>
+
+              <div className="shrink-0 rounded-full border border-emerald-300/20 bg-emerald-300/12 px-3 py-1 text-[0.68rem] uppercase tracking-[0.22em] text-emerald-50">
+                Done
+              </div>
+            </div>
+          </summary>
+
+          <div className="mt-4 space-y-4 rounded-[1.3rem] border border-white/8 bg-black/10 px-4 py-4">
+            <div className="text-sm leading-7 text-white/52">
+              {plan.description ? (
+                <p>{plan.description}</p>
+              ) : (
+                <p className="text-white/36">Опису не було.</p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs uppercase tracking-[0.2em] text-white/32">
+              <span>Оновлено {formatDate(plan.updatedAt)}</span>
+              {plan.completedAt ? (
+                <span>Закінчено {formatDate(plan.completedAt)}</span>
+              ) : null}
+            </div>
+          </div>
+        </details>
+
         <form action={deletePlanAction} className="shrink-0">
           <input type="hidden" name="planId" value={plan.id} />
           <input type="hidden" name="viewPeriod" value={activePeriod} />
-          <input type="hidden" name="viewMode" value={activeMode} />
+          <input type="hidden" name="viewMode" value="history" />
           <button
             type="submit"
             className="rounded-full border border-white/10 px-3 py-2 text-[0.68rem] uppercase tracking-[0.2em] text-white/52 transition hover:border-red-300/24 hover:text-red-100"
@@ -268,7 +356,7 @@ export function PlansBoard({
 }: PlansBoardProps) {
   const config = sectionConfig[activePeriod];
   const visiblePlans = groupedPlans[activePeriod].filter((plan) =>
-    activeMode === "history" ? plan.completed : !plan.completed,
+    activeMode === "history" ? plan.status === "done" : plan.status !== "done",
   );
 
   return (
@@ -277,10 +365,10 @@ export function PlansBoard({
         {orderedPeriods.map((period) => {
           const isActive = period === activePeriod;
           const activeCount = groupedPlans[period].filter(
-            (plan) => !plan.completed,
+            (plan) => plan.status !== "done",
           ).length;
           const historyCount = groupedPlans[period].filter(
-            (plan) => plan.completed,
+            (plan) => plan.status === "done",
           ).length;
 
           return (
@@ -326,7 +414,7 @@ export function PlansBoard({
             {(Object.keys(modeConfig) as NotesViewMode[]).map((mode) => {
               const isActive = mode === activeMode;
               const count = groupedPlans[activePeriod].filter((plan) =>
-                mode === "history" ? plan.completed : !plan.completed,
+                mode === "history" ? plan.status === "done" : plan.status !== "done",
               ).length;
 
               return (
@@ -356,14 +444,21 @@ export function PlansBoard({
 
         <div className="mt-6 flex flex-1 flex-col gap-3">
           {visiblePlans.length ? (
-            visiblePlans.map((plan) => (
-              <PlanRow
-                key={plan.id}
-                plan={plan}
-                activePeriod={activePeriod}
-                activeMode={activeMode}
-              />
-            ))
+            visiblePlans.map((plan) =>
+              activeMode === "history" ? (
+                <HistoryPlanRow
+                  key={plan.id}
+                  plan={plan}
+                  activePeriod={activePeriod}
+                />
+              ) : (
+                <ActivePlanRow
+                  key={plan.id}
+                  plan={plan}
+                  activePeriod={activePeriod}
+                />
+              ),
+            )
           ) : (
             <div className="flex flex-1 items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-[#07101f]/45 px-5 py-10 text-center text-sm leading-7 text-white/38">
               {activeMode === "history"
