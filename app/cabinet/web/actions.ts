@@ -22,8 +22,12 @@ import {
   deleteWebPostDraftForOwner,
   getWebProjectForOwner,
   getDraftWebPostForOwner,
+  listDraftWebPostsForProject,
   markWebPostDraftPublished,
+  markWebProjectPostGenerationRun,
+  type WebPostDraft,
   updateWebProjectPostSettings,
+  type WebProject,
   saveWebProjectTelegramVerification,
   setWebProjectTelegramWebhook,
   updateWebProjectAiInstructions,
@@ -85,6 +89,74 @@ function redirectToAiState(projectId: string, state: string): never {
 
 function redirectToPostState(projectId: string, state: string): never {
   redirect(`/cabinet/web?project=${projectId}&post=${state}`);
+}
+
+type PostStudioMutationResult =
+  | {
+      ok: true;
+      notice: string;
+      drafts?: WebPostDraft[];
+      draftId?: string;
+      publishedPost?: WebPostDraft;
+      postSettings?: Partial<
+        Pick<
+          WebProject,
+          | "postGenerationEnabled"
+          | "postGenerationIntervalHours"
+          | "postGenerationContentType"
+          | "postGenerationThreadId"
+          | "postGenerationLastRunAt"
+        >
+      >;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
+function okPostStudioResult(
+  input: Exclude<PostStudioMutationResult, { ok: false; error: string }>,
+): PostStudioMutationResult {
+  return input;
+}
+
+function errorPostStudioResult(error: string): PostStudioMutationResult {
+  return {
+    ok: false,
+    error,
+  };
+}
+
+function normalizePostSettingsInput(input: {
+  postGenerationEnabled: boolean;
+  postGenerationIntervalHours: number;
+  postGenerationContentType: string;
+  postGenerationThreadId: string | null;
+}) {
+  const intervalHours = Math.min(
+    24,
+    Math.max(1, Math.floor(input.postGenerationIntervalHours || 2)),
+  );
+  const contentType =
+    input.postGenerationContentType === "workout" ||
+    input.postGenerationContentType === "recipe" ||
+    input.postGenerationContentType === "mixed"
+      ? input.postGenerationContentType
+      : "mixed";
+  const threadId = input.postGenerationThreadId?.trim() || null;
+
+  return {
+    postGenerationEnabled: input.postGenerationEnabled,
+    postGenerationIntervalHours: intervalHours,
+    postGenerationContentType: contentType,
+    postGenerationThreadId: threadId,
+  } satisfies Pick<
+    WebProject,
+    | "postGenerationEnabled"
+    | "postGenerationIntervalHours"
+    | "postGenerationContentType"
+    | "postGenerationThreadId"
+  >;
 }
 
 function getTelegramWebhookBaseUrl() {
@@ -361,6 +433,36 @@ export async function updateProjectPostSettingsAction(formData: FormData) {
   redirectToPostState(projectId, "settings-saved");
 }
 
+export async function updateProjectPostSettingsClientAction(input: {
+  projectId: string;
+  postGenerationEnabled: boolean;
+  postGenerationIntervalHours: number;
+  postGenerationContentType: string;
+  postGenerationThreadId: string | null;
+}): Promise<PostStudioMutationResult> {
+  const ownerEmail = await requireOwnerEmail();
+
+  if (typeof input.projectId !== "string") {
+    return errorPostStudioResult("Не вдалося зберегти queue settings.");
+  }
+
+  const normalizedSettings = normalizePostSettingsInput(input);
+
+  await updateWebProjectPostSettings({
+    ownerEmail,
+    projectId: input.projectId,
+    ...normalizedSettings,
+  });
+
+  revalidatePath("/cabinet/web");
+
+  return okPostStudioResult({
+    ok: true,
+    notice: "settings-saved",
+    postSettings: normalizedSettings,
+  });
+}
+
 function buildPublishedPostMessage(input: {
   title: string;
   caption: string;
@@ -438,6 +540,73 @@ export async function generatePostDraftsAction(formData: FormData) {
   }
 }
 
+export async function generatePostDraftsClientAction(input: {
+  projectId: string;
+  contentType: string;
+  topicHint?: string | null;
+}): Promise<PostStudioMutationResult> {
+  const ownerEmail = await requireOwnerEmail();
+
+  if (
+    typeof input.projectId !== "string" ||
+    typeof input.contentType !== "string" ||
+    !isPostContentType(input.contentType)
+  ) {
+    return errorPostStudioResult("Не вдалося згенерувати нові драфти.");
+  }
+
+  const project = await getWebProjectForOwner({
+    ownerEmail,
+    projectId: input.projectId,
+  });
+
+  if (!project) {
+    return errorPostStudioResult("Проєкт не знайдено.");
+  }
+
+  if (!process.env.GEMINI_API_KEY?.trim()) {
+    return errorPostStudioResult(
+      "Для генерації постів потрібен `GEMINI_API_KEY` у середовищі проєкту.",
+    );
+  }
+
+  try {
+    await createPostDraftBatchForProject({
+      project,
+      contentType: input.contentType,
+      topicHint:
+        typeof input.topicHint === "string" ? input.topicHint : null,
+    });
+
+    const drafts = await listDraftWebPostsForProject({
+      ownerEmail,
+      projectId: input.projectId,
+      limit: 24,
+    });
+
+    revalidatePath("/cabinet/web");
+
+    return okPostStudioResult({
+      ok: true,
+      notice: "generated",
+      drafts,
+    });
+  } catch (error) {
+    console.error("Failed to generate post drafts", error);
+    const message = error instanceof Error ? error.message.toLowerCase() : "";
+
+    if (message.includes("no suitable source")) {
+      return errorPostStudioResult(
+        "Зараз не вдалося взяти свіже джерело з API без повторів. Спробуй ще раз трохи пізніше або зміни тип поста.",
+      );
+    }
+
+    return errorPostStudioResult(
+      "Генерація драфтів не завершилась. Перевір API-ключі та спробуй ще раз.",
+    );
+  }
+}
+
 export async function runScheduledPostGenerationNowAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
   const projectId = formData.get("projectId");
@@ -468,6 +637,60 @@ export async function runScheduledPostGenerationNowAction(formData: FormData) {
   }
 }
 
+export async function runScheduledPostGenerationNowClientAction(input: {
+  projectId: string;
+}): Promise<PostStudioMutationResult> {
+  const ownerEmail = await requireOwnerEmail();
+
+  if (typeof input.projectId !== "string") {
+    return errorPostStudioResult("Не вдалося запустити queue.");
+  }
+
+  const project = await getWebProjectForOwner({
+    ownerEmail,
+    projectId: input.projectId,
+  });
+
+  if (!project) {
+    return errorPostStudioResult("Проєкт не знайдено.");
+  }
+
+  try {
+    await createScheduledPostDraftBatch({
+      project,
+    });
+
+    await markWebProjectPostGenerationRun(project.id);
+
+    const drafts = await listDraftWebPostsForProject({
+      ownerEmail,
+      projectId: input.projectId,
+      limit: 24,
+    });
+
+    revalidatePath("/cabinet/web");
+
+    return okPostStudioResult({
+      ok: true,
+      notice: "queue-generated",
+      drafts,
+      postSettings: {
+        postGenerationEnabled: project.postGenerationEnabled,
+        postGenerationIntervalHours: project.postGenerationIntervalHours,
+        postGenerationContentType: project.postGenerationContentType,
+        postGenerationThreadId: project.postGenerationThreadId,
+        postGenerationLastRunAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("Failed to generate scheduled post drafts", error);
+
+    return errorPostStudioResult(
+      "Не вдалося запустити генерацію backlog-постів. Спробуй ще раз.",
+    );
+  }
+}
+
 export async function deleteWebPostDraftAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
   const projectId = formData.get("projectId");
@@ -485,6 +708,31 @@ export async function deleteWebPostDraftAction(formData: FormData) {
 
   revalidatePath("/cabinet/web");
   redirectToPostState(projectId, "draft-deleted");
+}
+
+export async function deleteWebPostDraftClientAction(input: {
+  projectId: string;
+  draftId: string;
+}): Promise<PostStudioMutationResult> {
+  const ownerEmail = await requireOwnerEmail();
+
+  if (typeof input.projectId !== "string" || typeof input.draftId !== "string") {
+    return errorPostStudioResult("Не вдалося видалити драфт.");
+  }
+
+  await deleteWebPostDraftForOwner({
+    ownerEmail,
+    projectId: input.projectId,
+    draftId: input.draftId,
+  });
+
+  revalidatePath("/cabinet/web");
+
+  return okPostStudioResult({
+    ok: true,
+    notice: "draft-deleted",
+    draftId: input.draftId,
+  });
 }
 
 export async function publishWebPostDraftAction(formData: FormData) {
@@ -570,5 +818,110 @@ export async function publishWebPostDraftAction(formData: FormData) {
   } catch (error) {
     console.error("Failed to publish post draft", error);
     redirectToPostState(projectId, "publish-failed");
+  }
+}
+
+export async function publishWebPostDraftClientAction(input: {
+  projectId: string;
+  draftId: string;
+}): Promise<PostStudioMutationResult> {
+  const ownerEmail = await requireOwnerEmail();
+
+  if (typeof input.projectId !== "string" || typeof input.draftId !== "string") {
+    return errorPostStudioResult("Не вдалося опублікувати драфт.");
+  }
+
+  const project = await getWebProjectForOwner({
+    ownerEmail,
+    projectId: input.projectId,
+  });
+
+  if (!project?.telegramBotToken || !project.telegramChatId) {
+    return errorPostStudioResult(
+      "Спершу підключи Telegram-бота й групу для цього проєкту, щоб можна було публікувати драфти.",
+    );
+  }
+
+  const draft = await getDraftWebPostForOwner({
+    ownerEmail,
+    projectId: input.projectId,
+    draftId: input.draftId,
+  });
+
+  if (!draft) {
+    return errorPostStudioResult(
+      "Обраний драфт не знайдено. Спробуй згенерувати варіанти ще раз.",
+    );
+  }
+
+  const messageText = buildPublishedPostMessage({
+    title: draft.title,
+    caption: draft.caption,
+    imageSource: draft.imageSource,
+    imageCreditName: draft.imageCreditName,
+  });
+  const messageThreadId = parseMessageThreadId(project.postGenerationThreadId);
+
+  try {
+    let publishedMessageId: number | null = null;
+
+    if (draft.imageUrl) {
+      try {
+        const sentPhoto = await sendTelegramPhotoMessage({
+          botToken: project.telegramBotToken,
+          chatId: project.telegramChatId,
+          photoUrl: draft.imageUrl,
+          caption: messageText,
+          messageThreadId,
+        });
+
+        publishedMessageId = sentPhoto.message_id;
+      } catch {
+        const sentText = await sendTelegramTextMessage({
+          botToken: project.telegramBotToken,
+          chatId: project.telegramChatId,
+          text: messageText,
+          messageThreadId,
+        });
+
+        publishedMessageId = sentText.message_id;
+      }
+    } else {
+      const sentText = await sendTelegramTextMessage({
+        botToken: project.telegramBotToken,
+        chatId: project.telegramChatId,
+        text: messageText,
+        messageThreadId,
+      });
+
+      publishedMessageId = sentText.message_id;
+    }
+
+    await markWebPostDraftPublished({
+      ownerEmail,
+      projectId: input.projectId,
+      draftId: input.draftId,
+      publishedMessageId,
+    });
+
+    revalidatePath("/cabinet/web");
+
+    return okPostStudioResult({
+      ok: true,
+      notice: "published",
+      draftId: draft.id,
+      publishedPost: {
+        ...draft,
+        status: "published",
+        publishedMessageId,
+        publishedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("Failed to publish post draft", error);
+    return errorPostStudioResult(
+      "Не вдалося опублікувати драфт у Telegram. Перевір bot token, chat id і доступи бота.",
+    );
   }
 }

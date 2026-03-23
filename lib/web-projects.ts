@@ -70,6 +70,9 @@ export type WebPostDraft = {
   updatedAt: string;
 };
 
+let webProjectsTablePromise: Promise<Awaited<ReturnType<typeof ensureWebProjectsTableInner>>> | null =
+  null;
+
 function slugify(value: string) {
   return value
     .trim()
@@ -79,7 +82,7 @@ function slugify(value: string) {
     .slice(0, 48);
 }
 
-async function ensureWebProjectsTable() {
+async function ensureWebProjectsTableInner() {
   const sql = getSql();
 
   if (!sql) {
@@ -257,6 +260,17 @@ async function ensureWebProjectsTable() {
   return sql;
 }
 
+async function ensureWebProjectsTable() {
+  if (!webProjectsTablePromise) {
+    webProjectsTablePromise = ensureWebProjectsTableInner().catch((error) => {
+      webProjectsTablePromise = null;
+      throw error;
+    });
+  }
+
+  return webProjectsTablePromise;
+}
+
 export async function listWebProjectsForOwner(ownerEmail: string) {
   const sql = await ensureWebProjectsTable();
 
@@ -409,8 +423,13 @@ export async function getWebProjectForOwner(input: {
   ownerEmail: string;
   projectId: string;
 }) {
-  const projects = await listWebProjectsForOwner(input.ownerEmail);
-  return projects.find((project) => project.id === input.projectId) ?? null;
+  const project = await getWebProjectById(input.projectId);
+
+  if (!project || project.ownerEmail !== input.ownerEmail) {
+    return null;
+  }
+
+  return project;
 }
 
 export async function getWebProjectById(projectId: string) {

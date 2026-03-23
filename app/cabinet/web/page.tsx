@@ -35,30 +35,27 @@ export default async function WebPage({ searchParams }: WebPageProps) {
   const projects = await listWebProjectsForOwner(session.user.email);
   const activeProject =
     projects.find((project) => project.id === params.project) ?? projects[0] ?? null;
-  const telegramMessages = activeProject
-    ? await listRecentTelegramMessagesForProject({
-        ownerEmail: session.user.email,
-        projectId: activeProject.id,
-        limit: 20,
-      })
-    : [];
-  const postDrafts = activeProject
-    ? await listDraftWebPostsForProject({
-        ownerEmail: session.user.email,
-        projectId: activeProject.id,
-        limit: 24,
-      })
-    : [];
-  const publishedPosts = activeProject
-    ? await listPublishedWebPostsForProject({
-        ownerEmail: session.user.email,
-        projectId: activeProject.id,
-        limit: 8,
-      })
-    : [];
-  const projectKnowledge = activeProject
-    ? await loadProjectKnowledge(activeProject)
-    : { data: null, key: null, relativePath: null };
+  const [telegramMessages, postDrafts, publishedPosts, projectKnowledge] =
+    activeProject
+      ? await Promise.all([
+          listRecentTelegramMessagesForProject({
+            ownerEmail: session.user.email,
+            projectId: activeProject.id,
+            limit: 20,
+          }),
+          listDraftWebPostsForProject({
+            ownerEmail: session.user.email,
+            projectId: activeProject.id,
+            limit: 24,
+          }),
+          listPublishedWebPostsForProject({
+            ownerEmail: session.user.email,
+            projectId: activeProject.id,
+            limit: 8,
+          }),
+          loadProjectKnowledge(activeProject),
+        ])
+      : [[], [], [], { data: null, key: null, relativePath: null }];
   const aiRuntime = {
     provider: "Gemini (default)",
     model: process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",

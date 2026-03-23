@@ -34,6 +34,12 @@ export function WebProjectOverview({
   publishedPosts,
   aiRuntime,
 }: WebProjectOverviewProps) {
+  const imageModeLabel = process.env.GEMINI_API_KEY?.trim()
+    ? "Gemini image + fallback"
+    : process.env.PEXELS_API_KEY?.trim()
+      ? "Pexels enabled"
+      : "Fallback only";
+
   if (!project) {
     return (
       <section className="rounded-[2rem] border border-dashed border-white/10 bg-white/[0.03] px-6 py-10 text-sm leading-7 text-white/42 backdrop-blur-md">
@@ -93,6 +99,7 @@ export function WebProjectOverview({
         notice={postNotice}
         drafts={postDrafts}
         publishedPosts={publishedPosts}
+        imageModeLabel={imageModeLabel}
       />
 
       <WebTelegramMessages

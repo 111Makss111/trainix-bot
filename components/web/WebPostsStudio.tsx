@@ -1,19 +1,21 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import {
-  deleteWebPostDraftAction,
-  generatePostDraftsAction,
-  publishWebPostDraftAction,
-  runScheduledPostGenerationNowAction,
-  updateProjectPostSettingsAction,
+  deleteWebPostDraftClientAction,
+  generatePostDraftsClientAction,
+  publishWebPostDraftClientAction,
+  runScheduledPostGenerationNowClientAction,
+  updateProjectPostSettingsClientAction,
 } from "@/app/cabinet/web/actions";
 import type { WebPostDraft, WebProject } from "@/lib/web-projects";
-import { FormPendingState } from "./FormPendingState";
-import { FormSubmitButton } from "./FormSubmitButton";
 
 type WebPostsStudioProps = {
   project: WebProject;
   notice?: string;
   drafts: WebPostDraft[];
   publishedPosts: WebPostDraft[];
+  imageModeLabel: string;
 };
 
 const postNoticeMessages: Record<
@@ -88,14 +90,214 @@ function getTypeLabel(contentType: string) {
   return "Workout";
 }
 
+function getNoticeByKey(notice?: string | null) {
+  if (!notice) {
+    return null;
+  }
+
+  return postNoticeMessages[notice] ?? null;
+}
+
+function setBusyDraft(
+  current: string[],
+  draftId: string,
+  nextBusy: boolean,
+) {
+  if (nextBusy) {
+    return current.includes(draftId) ? current : [...current, draftId];
+  }
+
+  return current.filter((id) => id !== draftId);
+}
+
 export function WebPostsStudio({
   project,
   notice,
   drafts,
   publishedPosts,
+  imageModeLabel,
 }: WebPostsStudioProps) {
-  const message = notice ? postNoticeMessages[notice] : null;
-  const publishReady = Boolean(project.telegramBotToken && project.telegramChatId);
+  const [projectState, setProjectState] = useState(project);
+  const [draftsState, setDraftsState] = useState(drafts);
+  const [publishedPostsState, setPublishedPostsState] = useState(publishedPosts);
+  const [feedback, setFeedback] = useState(getNoticeByKey(notice));
+  const [contentType, setContentType] = useState("workout");
+  const [topicHint, setTopicHint] = useState("");
+  const [queueEnabled, setQueueEnabled] = useState(project.postGenerationEnabled);
+  const [queueInterval, setQueueInterval] = useState(
+    String(project.postGenerationIntervalHours || 2),
+  );
+  const [queueMode, setQueueMode] = useState(
+    project.postGenerationContentType || "mixed",
+  );
+  const [threadId, setThreadId] = useState(project.postGenerationThreadId ?? "");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isSavingQueue, setIsSavingQueue] = useState(false);
+  const [isRunningQueue, setIsRunningQueue] = useState(false);
+  const [busyDraftIds, setBusyDraftIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    setProjectState(project);
+    setDraftsState(drafts);
+    setPublishedPostsState(publishedPosts);
+    setFeedback(getNoticeByKey(notice));
+    setQueueEnabled(project.postGenerationEnabled);
+    setQueueInterval(String(project.postGenerationIntervalHours || 2));
+    setQueueMode(project.postGenerationContentType || "mixed");
+    setThreadId(project.postGenerationThreadId ?? "");
+    setContentType("workout");
+    setTopicHint("");
+    setBusyDraftIds([]);
+    setIsGenerating(false);
+    setIsSavingQueue(false);
+    setIsRunningQueue(false);
+  }, [drafts, notice, project, publishedPosts]);
+
+  const publishReady = Boolean(
+    projectState.telegramBotToken && projectState.telegramChatId,
+  );
+
+  async function handleGeneratePosts() {
+    setFeedback(null);
+    setIsGenerating(true);
+
+    try {
+      const result = await generatePostDraftsClientAction({
+        projectId: projectState.id,
+        contentType,
+        topicHint,
+      });
+
+      if (!result.ok) {
+        setFeedback({
+          tone: "error",
+          text: result.error,
+        });
+        return;
+      }
+
+      setDraftsState(result.drafts ?? draftsState);
+      setFeedback(getNoticeByKey(result.notice));
+      setTopicHint("");
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  async function handleSaveQueueSettings() {
+    setFeedback(null);
+    setIsSavingQueue(true);
+
+    try {
+      const result = await updateProjectPostSettingsClientAction({
+        projectId: projectState.id,
+        postGenerationEnabled: queueEnabled,
+        postGenerationIntervalHours: Number(queueInterval),
+        postGenerationContentType: queueMode,
+        postGenerationThreadId: threadId,
+      });
+
+      if (!result.ok) {
+        setFeedback({
+          tone: "error",
+          text: result.error,
+        });
+        return;
+      }
+
+      setProjectState((current) => ({
+        ...current,
+        ...result.postSettings,
+      }));
+      setFeedback(getNoticeByKey(result.notice));
+    } finally {
+      setIsSavingQueue(false);
+    }
+  }
+
+  async function handleRunQueueNow() {
+    setFeedback(null);
+    setIsRunningQueue(true);
+
+    try {
+      const result = await runScheduledPostGenerationNowClientAction({
+        projectId: projectState.id,
+      });
+
+      if (!result.ok) {
+        setFeedback({
+          tone: "error",
+          text: result.error,
+        });
+        return;
+      }
+
+      setDraftsState(result.drafts ?? draftsState);
+      setProjectState((current) => ({
+        ...current,
+        ...result.postSettings,
+      }));
+      setFeedback(getNoticeByKey(result.notice));
+    } finally {
+      setIsRunningQueue(false);
+    }
+  }
+
+  async function handleDeleteDraft(draft: WebPostDraft) {
+    setFeedback(null);
+    setBusyDraftIds((current) => setBusyDraft(current, draft.id, true));
+
+    try {
+      const result = await deleteWebPostDraftClientAction({
+        projectId: projectState.id,
+        draftId: draft.id,
+      });
+
+      if (!result.ok) {
+        setFeedback({
+          tone: "error",
+          text: result.error,
+        });
+        return;
+      }
+
+      setDraftsState((current) => current.filter((item) => item.id !== draft.id));
+      setFeedback(getNoticeByKey(result.notice));
+    } finally {
+      setBusyDraftIds((current) => setBusyDraft(current, draft.id, false));
+    }
+  }
+
+  async function handlePublishDraft(draft: WebPostDraft) {
+    setFeedback(null);
+    setBusyDraftIds((current) => setBusyDraft(current, draft.id, true));
+
+    try {
+      const result = await publishWebPostDraftClientAction({
+        projectId: projectState.id,
+        draftId: draft.id,
+      });
+
+      if (!result.ok) {
+        setFeedback({
+          tone: "error",
+          text: result.error,
+        });
+        return;
+      }
+
+      setDraftsState((current) => current.filter((item) => item.id !== draft.id));
+      if (result.publishedPost) {
+        setPublishedPostsState((current) => [
+          result.publishedPost!,
+          ...current.filter((item) => item.id !== result.publishedPost!.id),
+        ]);
+      }
+      setFeedback(getNoticeByKey(result.notice));
+    } finally {
+      setBusyDraftIds((current) => setBusyDraft(current, draft.id, false));
+    }
+  }
 
   return (
     <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
@@ -127,41 +329,37 @@ export function WebPostsStudio({
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm text-white/46">Image mode</span>
               <span className="text-sm font-medium text-white/84">
-                {process.env.GEMINI_API_KEY?.trim()
-                  ? "Gemini image + fallback"
-                  : process.env.PEXELS_API_KEY?.trim()
-                    ? "Pexels enabled"
-                    : "Fallback only"}
+                {imageModeLabel}
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      {message ? (
+      {feedback ? (
         <div
           className={[
             "mt-5 rounded-[1.3rem] border px-4 py-3 text-sm leading-6",
-            message.tone === "success"
+            feedback.tone === "success"
               ? "border-emerald-300/14 bg-emerald-300/[0.08] text-emerald-50"
               : "border-red-300/14 bg-red-300/[0.08] text-red-50",
           ].join(" ")}
         >
-          {message.text}
+          {feedback.text}
         </div>
       ) : null}
 
-      <form action={generatePostDraftsAction} className="mt-5 space-y-4">
-        <input type="hidden" name="projectId" value={project.id} />
-
+      <div className="mt-5 space-y-4">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)_auto] lg:items-end">
           <label className="grid gap-2">
             <span className="text-xs uppercase tracking-[0.24em] text-white/36">
               Content type
             </span>
             <select
-              name="contentType"
-              defaultValue="workout"
+              value={contentType}
+              onChange={(event) => {
+                setContentType(event.currentTarget.value);
+              }}
               className="h-12 rounded-[1.2rem] border border-white/10 bg-[#091122] px-4 text-sm text-white outline-none transition focus:border-white/18"
             >
               <option value="workout">Workout</option>
@@ -175,38 +373,44 @@ export function WebPostsStudio({
             </span>
             <input
               type="text"
-              name="topicHint"
+              value={topicHint}
+              onChange={(event) => {
+                setTopicHint(event.currentTarget.value);
+              }}
               placeholder="Наприклад: для дому, для новачка, білковий сніданок"
               className="h-12 rounded-[1.2rem] border border-white/10 bg-[#091122] px-4 text-sm text-white outline-none transition placeholder:text-white/26 focus:border-white/18"
             />
           </label>
 
           <div className="flex flex-wrap gap-3">
-            <FormSubmitButton
-              idleLabel="Generate 3 posts"
-              pendingLabel="Генерую..."
-              className="rounded-full border border-white/14 bg-[linear-gradient(135deg,rgba(124,150,255,0.22),rgba(255,255,255,0.08))] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[linear-gradient(135deg,rgba(124,150,255,0.3),rgba(255,255,255,0.12))]"
-            />
+            <button
+              type="button"
+              disabled={isGenerating}
+              onClick={() => {
+                void handleGeneratePosts();
+              }}
+              className="rounded-full border border-white/14 bg-[linear-gradient(135deg,rgba(124,150,255,0.22),rgba(255,255,255,0.08))] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[linear-gradient(135deg,rgba(124,150,255,0.3),rgba(255,255,255,0.12))] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isGenerating ? "Генерую..." : "Generate 3 posts"}
+            </button>
           </div>
         </div>
 
         <div className="rounded-[1.5rem] border border-white/8 bg-[#091122]/60 px-4 py-4 text-sm leading-7 text-white/52">
           Для `Workout` ми беремо свіжі вправи з `WGER`, для `Nutrition / Recipe`
-          використовуємо `TheMealDB`. Для зображень студія спершу пробує
-          згенерувати унікальний візуал через Gemini image model, а якщо це не
-          вдається, переходить на fallback із зовнішнього джерела.
+          використовуємо `TheMealDB`. Для зображень студія зараз працює через
+          image prompt / fallback-flow без повного перезавантаження сторінки.
         </div>
 
-        <FormPendingState label="Генерую 3 нові драфти для цього проєкту." />
-      </form>
+        {isGenerating ? (
+          <p className="text-sm text-white/46">
+            Генерую 3 нові драфти для цього проєкту.
+          </p>
+        ) : null}
+      </div>
 
       <div className="mt-8 grid gap-4 2xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)]">
-        <form
-          action={updateProjectPostSettingsAction}
-          className="min-w-0 space-y-4 rounded-[1.6rem] border border-white/8 bg-[#091122]/60 p-5"
-        >
-          <input type="hidden" name="projectId" value={project.id} />
-
+        <div className="min-w-0 space-y-4 rounded-[1.6rem] border border-white/8 bg-[#091122]/60 p-5">
           <div>
             <p className="text-[0.72rem] uppercase tracking-[0.24em] text-white/36">
               Queue settings
@@ -218,9 +422,11 @@ export function WebPostsStudio({
 
           <label className="flex items-center gap-3 rounded-[1.3rem] border border-white/10 bg-black/10 px-4 py-3">
             <input
-              name="postGenerationEnabled"
               type="checkbox"
-              defaultChecked={project.postGenerationEnabled}
+              checked={queueEnabled}
+              onChange={(event) => {
+                setQueueEnabled(event.currentTarget.checked);
+              }}
               className="h-4 w-4 rounded border-white/20 bg-transparent text-white"
             />
             <span>
@@ -240,8 +446,10 @@ export function WebPostsStudio({
                 Interval
               </span>
               <select
-                name="postGenerationIntervalHours"
-                defaultValue={String(project.postGenerationIntervalHours || 2)}
+                value={queueInterval}
+                onChange={(event) => {
+                  setQueueInterval(event.currentTarget.value);
+                }}
                 className="h-12 min-w-0 rounded-[1.2rem] border border-white/10 bg-[#091122] px-4 text-sm text-white outline-none transition focus:border-white/18"
               >
                 <option value="2">Кожні 2 години</option>
@@ -258,8 +466,10 @@ export function WebPostsStudio({
                 Queue mode
               </span>
               <select
-                name="postGenerationContentType"
-                defaultValue={project.postGenerationContentType || "mixed"}
+                value={queueMode}
+                onChange={(event) => {
+                  setQueueMode(event.currentTarget.value);
+                }}
                 className="h-12 min-w-0 rounded-[1.2rem] border border-white/10 bg-[#091122] px-4 text-sm text-white outline-none transition focus:border-white/18"
               >
                 <option value="mixed">Mixed</option>
@@ -274,8 +484,10 @@ export function WebPostsStudio({
               </span>
               <input
                 type="text"
-                name="postGenerationThreadId"
-                defaultValue={project.postGenerationThreadId ?? ""}
+                value={threadId}
+                onChange={(event) => {
+                  setThreadId(event.currentTarget.value);
+                }}
                 placeholder="Наприклад: 12"
                 className="h-12 min-w-0 rounded-[1.2rem] border border-white/10 bg-[#091122] px-4 text-sm text-white outline-none transition placeholder:text-white/26 focus:border-white/18"
               />
@@ -292,15 +504,24 @@ export function WebPostsStudio({
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <FormSubmitButton
-              idleLabel="Зберегти queue"
-              pendingLabel="Зберігаю..."
-              className="rounded-full border border-white/14 bg-white/8 px-4 py-2.5 text-sm font-medium text-white/88 transition hover:bg-white/12"
-            />
+            <button
+              type="button"
+              disabled={isSavingQueue}
+              onClick={() => {
+                void handleSaveQueueSettings();
+              }}
+              className="rounded-full border border-white/14 bg-white/8 px-4 py-2.5 text-sm font-medium text-white/88 transition hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSavingQueue ? "Зберігаю..." : "Зберегти queue"}
+            </button>
           </div>
 
-          <FormPendingState label="Зберігаю налаштування черги постів." />
-        </form>
+          {isSavingQueue ? (
+            <p className="text-sm text-white/46">
+              Зберігаю налаштування черги постів.
+            </p>
+          ) : null}
+        </div>
 
         <div className="min-w-0 space-y-4 rounded-[1.6rem] border border-white/8 bg-[#091122]/60 p-5">
           <div>
@@ -316,32 +537,39 @@ export function WebPostsStudio({
             <div className="flex items-center justify-between gap-3 rounded-[1.3rem] border border-white/8 bg-black/10 px-4 py-3">
               <span className="text-sm text-white/46">Status</span>
               <span className="text-sm font-medium text-white/84">
-                {project.postGenerationEnabled ? "Увімкнено" : "Вимкнено"}
+                {projectState.postGenerationEnabled ? "Увімкнено" : "Вимкнено"}
               </span>
             </div>
             <div className="flex items-center justify-between gap-3 rounded-[1.3rem] border border-white/8 bg-black/10 px-4 py-3">
               <span className="text-sm text-white/46">Last queue run</span>
               <span className="text-sm font-medium text-white/84">
-                {formatPostDate(project.postGenerationLastRunAt)}
+                {formatPostDate(projectState.postGenerationLastRunAt)}
               </span>
             </div>
             <div className="flex items-center justify-between gap-3 rounded-[1.3rem] border border-white/8 bg-black/10 px-4 py-3">
               <span className="text-sm text-white/46">Thread target</span>
               <span className="text-sm font-medium text-white/84">
-                {project.postGenerationThreadId || "У загальний чат"}
+                {projectState.postGenerationThreadId || "У загальний чат"}
               </span>
             </div>
           </div>
 
-          <form action={runScheduledPostGenerationNowAction} className="space-y-3">
-            <input type="hidden" name="projectId" value={project.id} />
-            <FormSubmitButton
-              idleLabel="Запустити queue зараз"
-              pendingLabel="Генерую..."
-              className="w-full rounded-full border border-sky-300/18 bg-sky-300/10 px-4 py-2.5 text-sm font-medium text-sky-50 transition hover:bg-sky-300/16"
-            />
-            <FormPendingState label="Запускаю ручний цикл генерації backlog-постів." />
-          </form>
+          <button
+            type="button"
+            disabled={isRunningQueue}
+            onClick={() => {
+              void handleRunQueueNow();
+            }}
+            className="w-full rounded-full border border-sky-300/18 bg-sky-300/10 px-4 py-2.5 text-sm font-medium text-sky-50 transition hover:bg-sky-300/16 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isRunningQueue ? "Генерую..." : "Запустити queue зараз"}
+          </button>
+
+          {isRunningQueue ? (
+            <p className="text-sm text-white/46">
+              Запускаю ручний цикл генерації backlog-постів.
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -357,118 +585,125 @@ export function WebPostsStudio({
           </div>
 
           <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs uppercase tracking-[0.24em] text-white/60">
-            {drafts.length ? `${drafts.length} ready` : "Waiting"}
+            {draftsState.length ? `${draftsState.length} ready` : "Waiting"}
           </span>
         </div>
 
-        {drafts.length ? (
+        {draftsState.length ? (
           <div className="mt-5 grid gap-4 xl:grid-cols-3">
-            {drafts.map((draft, index) => (
-              <article
-                key={draft.id}
-                className="overflow-hidden rounded-[1.6rem] border border-white/8 bg-[#091122]/72"
-              >
-                {draft.imageUrl ? (
-                  <div className="aspect-[16/10] overflow-hidden border-b border-white/8 bg-black/30">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={draft.imageUrl}
-                      alt={draft.imageAlt || draft.title}
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                    />
-                  </div>
-                ) : (
-                  <div className="flex aspect-[16/10] items-center justify-center border-b border-white/8 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),rgba(9,17,34,0.6))] text-sm text-white/34">
-                    Image not attached for this draft
-                  </div>
-                )}
+            {draftsState.map((draft, index) => {
+              const isBusy = busyDraftIds.includes(draft.id);
 
-                <div className="space-y-4 p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex flex-wrap gap-2">
-                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] uppercase tracking-[0.24em] text-white/60">
-                        Option {index + 1}
-                      </span>
-                      <span className="rounded-full border border-sky-300/14 bg-sky-300/10 px-3 py-1 text-[0.68rem] uppercase tracking-[0.24em] text-sky-100">
-                        {getTypeLabel(draft.contentType)}
-                      </span>
+              return (
+                <article
+                  key={draft.id}
+                  className={[
+                    "overflow-hidden rounded-[1.6rem] border border-white/8 bg-[#091122]/72 transition",
+                    isBusy ? "opacity-80" : "",
+                  ].join(" ")}
+                >
+                  {draft.imageUrl ? (
+                    <div className="aspect-[16/10] overflow-hidden border-b border-white/8 bg-black/30">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={draft.imageUrl}
+                        alt={draft.imageAlt || draft.title}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
                     </div>
-                  </div>
+                  ) : (
+                    <div className="flex aspect-[16/10] items-center justify-center border-b border-white/8 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),rgba(9,17,34,0.6))] text-sm text-white/34">
+                      Image not attached for this draft
+                    </div>
+                  )}
 
-                  <div>
-                    <h5 className="text-lg font-medium text-white">{draft.title}</h5>
-                    <p className="mt-3 whitespace-pre-line text-sm leading-7 text-white/62">
-                      {draft.caption}
-                    </p>
-                  </div>
-
-                  <div className="space-y-2 rounded-[1.2rem] border border-white/8 bg-black/10 px-4 py-3 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-white/42">Source</span>
-                      <span className="max-w-[14rem] truncate text-right text-white/78">
-                        {draft.sourceTitle || draft.sourceKind}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-white/42">Topic hint</span>
-                      <span className="max-w-[14rem] truncate text-right text-white/78">
-                        {draft.topicHint || "Без підказки"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-white/42">Image source</span>
-                      <span className="max-w-[14rem] truncate text-right text-white/78">
-                        {draft.imageSource || "Немає"}
-                      </span>
-                    </div>
-                    {draft.imageCreditName ? (
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-white/42">Photo credit</span>
-                        {draft.imageCreditUrl ? (
-                          <a
-                            href={draft.imageCreditUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="max-w-[14rem] truncate text-right text-white/78 underline decoration-white/20 underline-offset-4 transition hover:text-white"
-                          >
-                            {draft.imageCreditName}
-                          </a>
-                        ) : (
-                          <span className="max-w-[14rem] truncate text-right text-white/78">
-                            {draft.imageCreditName}
-                          </span>
-                        )}
+                  <div className="space-y-4 p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-wrap gap-2">
+                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] uppercase tracking-[0.24em] text-white/60">
+                          Option {index + 1}
+                        </span>
+                        <span className="rounded-full border border-sky-300/14 bg-sky-300/10 px-3 py-1 text-[0.68rem] uppercase tracking-[0.24em] text-sky-100">
+                          {getTypeLabel(draft.contentType)}
+                        </span>
                       </div>
-                    ) : null}
-                  </div>
+                    </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <form action={publishWebPostDraftAction} className="space-y-3">
-                      <input type="hidden" name="projectId" value={project.id} />
-                      <input type="hidden" name="draftId" value={draft.id} />
-                      <FormSubmitButton
-                        idleLabel="Publish to Telegram"
-                        pendingLabel="Публікую..."
-                        className="w-full rounded-full border border-emerald-300/18 bg-emerald-300/10 px-4 py-2.5 text-sm font-medium text-emerald-50 transition hover:bg-emerald-300/16"
-                      />
-                      <FormPendingState label="Відправляю цей пост у Telegram." />
-                    </form>
+                    <div>
+                      <h5 className="text-lg font-medium text-white">{draft.title}</h5>
+                      <p className="mt-3 whitespace-pre-line text-sm leading-7 text-white/62">
+                        {draft.caption}
+                      </p>
+                    </div>
 
-                    <form action={deleteWebPostDraftAction} className="space-y-3">
-                      <input type="hidden" name="projectId" value={project.id} />
-                      <input type="hidden" name="draftId" value={draft.id} />
-                      <FormSubmitButton
-                        idleLabel="Видалити драфт"
-                        pendingLabel="Видаляю..."
-                        className="w-full rounded-full border border-red-300/18 bg-red-300/10 px-4 py-2.5 text-sm font-medium text-red-50 transition hover:bg-red-300/16"
-                      />
-                      <FormPendingState label="Прибираю зайвий драфт зі списку." />
-                    </form>
+                    <div className="space-y-2 rounded-[1.2rem] border border-white/8 bg-black/10 px-4 py-3 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-white/42">Source</span>
+                        <span className="max-w-[14rem] truncate text-right text-white/78">
+                          {draft.sourceTitle || draft.sourceKind}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-white/42">Topic hint</span>
+                        <span className="max-w-[14rem] truncate text-right text-white/78">
+                          {draft.topicHint || "Без підказки"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-white/42">Image source</span>
+                        <span className="max-w-[14rem] truncate text-right text-white/78">
+                          {draft.imageSource || "Немає"}
+                        </span>
+                      </div>
+                      {draft.imageCreditName ? (
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-white/42">Photo credit</span>
+                          {draft.imageCreditUrl ? (
+                            <a
+                              href={draft.imageCreditUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="max-w-[14rem] truncate text-right text-white/78 underline decoration-white/20 underline-offset-4 transition hover:text-white"
+                            >
+                              {draft.imageCreditName}
+                            </a>
+                          ) : (
+                            <span className="max-w-[14rem] truncate text-right text-white/78">
+                              {draft.imageCreditName}
+                            </span>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => {
+                          void handlePublishDraft(draft);
+                        }}
+                        className="w-full rounded-full border border-emerald-300/18 bg-emerald-300/10 px-4 py-2.5 text-sm font-medium text-emerald-50 transition hover:bg-emerald-300/16 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isBusy ? "Обробляю..." : "Publish to Telegram"}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => {
+                          void handleDeleteDraft(draft);
+                        }}
+                        className="w-full rounded-full border border-red-300/18 bg-red-300/10 px-4 py-2.5 text-sm font-medium text-red-50 transition hover:bg-red-300/16 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isBusy ? "Обробляю..." : "Видалити драфт"}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         ) : (
           <div className="mt-5 rounded-[1.6rem] border border-dashed border-white/10 bg-[#091122]/54 px-5 py-8 text-sm leading-7 text-white/46">
@@ -488,9 +723,9 @@ export function WebPostsStudio({
           </h4>
         </div>
 
-        {publishedPosts.length ? (
+        {publishedPostsState.length ? (
           <div className="mt-5 grid gap-3">
-            {publishedPosts.map((post) => (
+            {publishedPostsState.map((post) => (
               <div
                 key={post.id}
                 className="rounded-[1.4rem] border border-white/8 bg-[#091122]/68 px-4 py-4"
