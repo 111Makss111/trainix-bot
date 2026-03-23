@@ -74,19 +74,7 @@ async function ensurePlansTable() {
 
   await sql`
     ALTER TABLE plans
-    ADD CONSTRAINT plans_period_check
-    CHECK (period IN ('today', 'week', 'month', 'year'))
-  `;
-
-  await sql`
-    ALTER TABLE plans
     DROP CONSTRAINT IF EXISTS plans_status_check
-  `;
-
-  await sql`
-    ALTER TABLE plans
-    ADD CONSTRAINT plans_status_check
-    CHECK (status IN ('todo', 'in_progress', 'done'))
   `;
 
   await sql`
