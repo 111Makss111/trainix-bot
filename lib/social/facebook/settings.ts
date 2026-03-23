@@ -37,6 +37,23 @@ function getDefaultFacebookContentSettings(ownerEmail: string) {
 }
 
 async function ensureFacebookContentSettingsTable() {
+  if (!facebookContentSettingsPromise) {
+    facebookContentSettingsPromise = ensureFacebookContentSettingsTableInner().catch(
+      (error) => {
+        facebookContentSettingsPromise = null;
+        throw error;
+      },
+    );
+  }
+
+  return facebookContentSettingsPromise;
+}
+
+let facebookContentSettingsPromise:
+  | Promise<Awaited<ReturnType<typeof ensureFacebookContentSettingsTableInner>>>
+  | null = null;
+
+async function ensureFacebookContentSettingsTableInner() {
   const sql = getSql();
 
   if (!sql) {

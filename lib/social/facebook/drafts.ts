@@ -59,6 +59,21 @@ type DraftRow = {
 };
 
 async function ensureFacebookDraftsTable() {
+  if (!facebookDraftsPromise) {
+    facebookDraftsPromise = ensureFacebookDraftsTableInner().catch((error) => {
+      facebookDraftsPromise = null;
+      throw error;
+    });
+  }
+
+  return facebookDraftsPromise;
+}
+
+let facebookDraftsPromise:
+  | Promise<Awaited<ReturnType<typeof ensureFacebookDraftsTableInner>>>
+  | null = null;
+
+async function ensureFacebookDraftsTableInner() {
   const sql = getSql();
 
   if (!sql) {

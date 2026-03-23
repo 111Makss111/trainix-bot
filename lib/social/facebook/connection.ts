@@ -32,6 +32,23 @@ type FacebookPageConnectionRecord = FacebookPageConnection & {
 };
 
 async function ensureFacebookPageConnectionsTable() {
+  if (!facebookPageConnectionsPromise) {
+    facebookPageConnectionsPromise = ensureFacebookPageConnectionsTableInner().catch(
+      (error) => {
+        facebookPageConnectionsPromise = null;
+        throw error;
+      },
+    );
+  }
+
+  return facebookPageConnectionsPromise;
+}
+
+let facebookPageConnectionsPromise:
+  | Promise<Awaited<ReturnType<typeof ensureFacebookPageConnectionsTableInner>>>
+  | null = null;
+
+async function ensureFacebookPageConnectionsTableInner() {
   const sql = getSql();
 
   if (!sql) {

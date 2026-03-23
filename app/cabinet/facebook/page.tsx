@@ -38,6 +38,7 @@ export default async function FacebookPage({
 
   return (
     <FacebookWorkspace
+      key={`${activeTab}:${typeof params.state === "string" ? params.state : "base"}`}
       settings={settings}
       drafts={drafts}
       connection={connection}

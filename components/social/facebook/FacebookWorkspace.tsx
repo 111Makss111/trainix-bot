@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { CabinetTopbar } from "@/components/cabinet";
 import type {
   FacebookContentSettings,
@@ -26,6 +29,8 @@ export function FacebookWorkspace({
   activeTab,
   notice,
 }: FacebookWorkspaceProps) {
+  const [localActiveTab, setLocalActiveTab] = useState(activeTab);
+
   return (
     <>
       <CabinetTopbar
@@ -34,35 +39,39 @@ export function FacebookWorkspace({
         description="Facebook живе окремо від інших платформ. Тепер модуль розкладений по вкладках, щоб налаштування, драфти й platform-layer не зливалися в одну довгу сторінку."
       />
 
-      <FacebookWorkspaceTabs activeTab={activeTab} draftsCount={drafts.length} />
+      <FacebookWorkspaceTabs
+        activeTab={localActiveTab}
+        draftsCount={drafts.length}
+        onChange={setLocalActiveTab}
+      />
 
-      {activeTab === "settings" ? (
+      {localActiveTab === "settings" ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(22rem,0.9fr)]">
           <FacebookContentSettingsCard
             settings={settings}
             notice={notice}
-            activeTab={activeTab}
+            activeTab={localActiveTab}
           />
           <FacebookSettingsSummaryCard settings={settings} />
         </div>
       ) : null}
 
-      {activeTab === "drafts" ? (
+      {localActiveTab === "drafts" ? (
         <FacebookDraftQueueCard
           settings={settings}
           drafts={drafts}
           connection={connection}
           notice={notice}
-          activeTab={activeTab}
+          activeTab={localActiveTab}
         />
       ) : null}
 
-      {activeTab === "facebook" ? (
+      {localActiveTab === "facebook" ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(22rem,1.08fr)]">
           <FacebookConnectionCard
             connection={connection}
             notice={notice}
-            activeTab={activeTab}
+            activeTab={localActiveTab}
           />
           <FacebookSettingsSummaryCard settings={settings} />
         </div>

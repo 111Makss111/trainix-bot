@@ -1,9 +1,11 @@
-import Link from "next/link";
+"use client";
+
 import type { FacebookWorkspaceTab } from "@/lib/social/facebook";
 
 type FacebookWorkspaceTabsProps = {
   activeTab: FacebookWorkspaceTab;
   draftsCount: number;
+  onChange: (tab: FacebookWorkspaceTab) => void;
 };
 
 const tabs: Array<{
@@ -31,6 +33,7 @@ const tabs: Array<{
 export function FacebookWorkspaceTabs({
   activeTab,
   draftsCount,
+  onChange,
 }: FacebookWorkspaceTabsProps) {
   return (
     <nav className="grid gap-3 rounded-[2rem] border border-white/10 bg-white/[0.03] p-3 backdrop-blur-md md:grid-cols-3">
@@ -38,11 +41,14 @@ export function FacebookWorkspaceTabs({
         const isActive = tab.key === activeTab;
 
         return (
-          <Link
+          <button
             key={tab.key}
-            href={`/cabinet/facebook?tab=${tab.key}`}
+            type="button"
+            onClick={() => {
+              onChange(tab.key);
+            }}
             className={[
-              "rounded-[1.5rem] border px-4 py-4 transition",
+              "rounded-[1.5rem] border px-4 py-4 text-left transition",
               isActive
                 ? "border-sky-300/20 bg-sky-300/[0.12] shadow-[0_0_0_1px_rgba(125,211,252,0.08)]"
                 : "border-white/8 bg-[#091122]/58 hover:border-white/14 hover:bg-[#0d1730]/72",
@@ -67,7 +73,7 @@ export function FacebookWorkspaceTabs({
             <p className="mt-3 text-sm leading-6 text-white/48">
               {tab.description}
             </p>
-          </Link>
+          </button>
         );
       })}
     </nav>
