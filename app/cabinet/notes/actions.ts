@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import {
@@ -21,8 +22,19 @@ async function requireOwnerEmail() {
   return session.user.email.trim().toLowerCase();
 }
 
+function getViewPeriod(formData: FormData) {
+  const viewPeriod = formData.get("viewPeriod");
+
+  if (typeof viewPeriod === "string" && isPlanPeriod(viewPeriod)) {
+    return viewPeriod;
+  }
+
+  return "today";
+}
+
 export async function createPlanAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
+  const viewPeriod = getViewPeriod(formData);
   const period = formData.get("period");
   const title = formData.get("title");
   const description = formData.get("description");
@@ -47,10 +59,12 @@ export async function createPlanAction(formData: FormData) {
   });
 
   revalidatePath("/cabinet/notes");
+  redirect(`/cabinet/notes?period=${viewPeriod}`);
 }
 
 export async function updatePlanAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
+  const viewPeriod = getViewPeriod(formData);
   const planId = formData.get("planId");
   const title = formData.get("title");
   const description = formData.get("description");
@@ -71,10 +85,12 @@ export async function updatePlanAction(formData: FormData) {
   });
 
   revalidatePath("/cabinet/notes");
+  redirect(`/cabinet/notes?period=${viewPeriod}`);
 }
 
 export async function togglePlanCompletedAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
+  const viewPeriod = getViewPeriod(formData);
   const planId = formData.get("planId");
 
   if (typeof planId !== "string") {
@@ -87,10 +103,12 @@ export async function togglePlanCompletedAction(formData: FormData) {
   });
 
   revalidatePath("/cabinet/notes");
+  redirect(`/cabinet/notes?period=${viewPeriod}`);
 }
 
 export async function deletePlanAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
+  const viewPeriod = getViewPeriod(formData);
   const planId = formData.get("planId");
 
   if (typeof planId !== "string") {
@@ -103,4 +121,5 @@ export async function deletePlanAction(formData: FormData) {
   });
 
   revalidatePath("/cabinet/notes");
+  redirect(`/cabinet/notes?period=${viewPeriod}`);
 }

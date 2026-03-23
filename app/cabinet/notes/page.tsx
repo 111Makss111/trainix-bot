@@ -3,15 +3,30 @@ import { getServerSession } from "next-auth";
 import { CabinetTopbar } from "@/components/cabinet";
 import { PlansBoard } from "@/components/notes";
 import { authOptions } from "@/lib/auth";
-import { listPlansForOwner, type PlanPeriod } from "@/lib/plans";
+import {
+  isPlanPeriod,
+  listPlansForOwner,
+  type PlanPeriod,
+} from "@/lib/plans";
 
-export default async function NotesPage() {
+type NotesPageProps = {
+  searchParams?: Promise<{
+    period?: string;
+  }>;
+};
+
+export default async function NotesPage({ searchParams }: NotesPageProps) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.isOwner || !session.user.email) {
     redirect("/");
   }
 
+  const params = (await searchParams) ?? {};
+  const activePeriod =
+    typeof params.period === "string" && isPlanPeriod(params.period)
+      ? params.period
+      : "today";
   const plans = await listPlansForOwner(session.user.email);
   const groupedPlans = {
     today: plans.filter((plan) => plan.period === "today"),
@@ -25,10 +40,10 @@ export default async function NotesPage() {
       <CabinetTopbar
         eyebrow="Notes"
         title="Плани та нотатки"
-        description="Тепер це компактний note-planner: окремо для сьогодні, тижня, місяця і року. У кожного пункту є заголовок, опис, статус виконання, редагування і видалення."
+        description="Тепер це note-planner без зайвого скролу: зверху горизонти часу, нижче тільки один активний список з нотатками, чекбоксами і швидким редагуванням."
       />
 
-      <PlansBoard groupedPlans={groupedPlans} />
+      <PlansBoard groupedPlans={groupedPlans} activePeriod={activePeriod} />
     </>
   );
 }

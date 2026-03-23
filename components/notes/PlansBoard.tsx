@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   createPlanAction,
   deletePlanAction,
@@ -8,6 +9,7 @@ import type { PlanItem, PlanPeriod } from "@/lib/plans";
 
 type PlansBoardProps = {
   groupedPlans: Record<PlanPeriod, PlanItem[]>;
+  activePeriod: PlanPeriod;
 };
 
 const sectionConfig: Record<
@@ -54,6 +56,8 @@ const sectionConfig: Record<
   },
 };
 
+const orderedPeriods = ["today", "week", "month", "year"] as const;
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("uk-UA", {
     day: "2-digit",
@@ -76,6 +80,7 @@ function AddPlanForm({
   return (
     <form action={createPlanAction} className="mt-5 space-y-3">
       <input type="hidden" name="period" value={period} />
+      <input type="hidden" name="viewPeriod" value={period} />
       <input
         type="text"
         name="title"
@@ -98,7 +103,13 @@ function AddPlanForm({
   );
 }
 
-function PlanRow({ plan }: { plan: PlanItem }) {
+function PlanRow({
+  plan,
+  activePeriod,
+}: {
+  plan: PlanItem;
+  activePeriod: PlanPeriod;
+}) {
   return (
     <article
       className={[
@@ -111,6 +122,7 @@ function PlanRow({ plan }: { plan: PlanItem }) {
       <div className="flex items-start gap-3">
         <form action={togglePlanCompletedAction} className="shrink-0">
           <input type="hidden" name="planId" value={plan.id} />
+          <input type="hidden" name="viewPeriod" value={activePeriod} />
           <button
             type="submit"
             aria-label={
@@ -181,6 +193,7 @@ function PlanRow({ plan }: { plan: PlanItem }) {
 
               <form action={updatePlanAction} className="mt-3 space-y-3">
                 <input type="hidden" name="planId" value={plan.id} />
+                <input type="hidden" name="viewPeriod" value={activePeriod} />
                 <input
                   type="text"
                   name="title"
@@ -206,6 +219,7 @@ function PlanRow({ plan }: { plan: PlanItem }) {
 
         <form action={deletePlanAction} className="shrink-0">
           <input type="hidden" name="planId" value={plan.id} />
+          <input type="hidden" name="viewPeriod" value={activePeriod} />
           <button
             type="submit"
             className="rounded-full border border-white/10 px-3 py-2 text-[0.68rem] uppercase tracking-[0.2em] text-white/52 transition hover:border-red-300/24 hover:text-red-100"
@@ -218,43 +232,72 @@ function PlanRow({ plan }: { plan: PlanItem }) {
   );
 }
 
-export function PlansBoard({ groupedPlans }: PlansBoardProps) {
+export function PlansBoard({ groupedPlans, activePeriod }: PlansBoardProps) {
+  const config = sectionConfig[activePeriod];
+  const plans = groupedPlans[activePeriod];
+
   return (
-    <div className="grid gap-4 xl:grid-cols-2">
-      {(Object.keys(sectionConfig) as PlanPeriod[]).map((period) => {
-        const config = sectionConfig[period];
-        const plans = groupedPlans[period];
+    <div className="space-y-4">
+      <nav className="grid gap-3 rounded-[2rem] border border-white/10 bg-white/[0.03] p-3 backdrop-blur-md md:grid-cols-4">
+        {orderedPeriods.map((period) => {
+          const isActive = period === activePeriod;
 
-        return (
-          <section
-            key={period}
-            className="flex min-h-[30rem] flex-col rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md"
-          >
-            <p className="text-[0.72rem] uppercase tracking-[0.32em] text-white/40">
-              {config.eyebrow}
-            </p>
-            <h2 className="mt-3 text-2xl font-medium text-white">
-              {config.title}
-            </h2>
+          return (
+            <Link
+              key={period}
+              href={`/cabinet/notes?period=${period}`}
+              className={[
+                "rounded-[1.4rem] border px-4 py-4 transition",
+                isActive
+                  ? "border-sky-300/20 bg-sky-300/[0.12] shadow-[0_0_0_1px_rgba(125,211,252,0.08)]"
+                  : "border-white/8 bg-[#091122]/58 hover:border-white/14 hover:bg-[#0d1730]/72",
+              ].join(" ")}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-white">
+                  {sectionConfig[period].title}
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[0.68rem] uppercase tracking-[0.2em] text-white/58">
+                  {groupedPlans[period].length}
+                </span>
+              </div>
 
-            <AddPlanForm
-              period={period}
-              titlePlaceholder={config.titlePlaceholder}
-              descriptionPlaceholder={config.descriptionPlaceholder}
-            />
+              <p className="mt-3 text-sm leading-6 text-white/48">
+                {sectionConfig[period].emptyText}
+              </p>
+            </Link>
+          );
+        })}
+      </nav>
 
-            <div className="mt-6 flex flex-1 flex-col gap-3">
-              {plans.length ? (
-                plans.map((plan) => <PlanRow key={plan.id} plan={plan} />)
-              ) : (
-                <div className="flex flex-1 items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-[#07101f]/45 px-5 py-10 text-center text-sm leading-7 text-white/38">
-                  {config.emptyText}
-                </div>
-              )}
+      <section className="flex min-h-[30rem] flex-col rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
+        <p className="text-[0.72rem] uppercase tracking-[0.32em] text-white/40">
+          {config.eyebrow}
+        </p>
+        <h2 className="mt-3 text-2xl font-medium text-white">{config.title}</h2>
+
+        <AddPlanForm
+          period={activePeriod}
+          titlePlaceholder={config.titlePlaceholder}
+          descriptionPlaceholder={config.descriptionPlaceholder}
+        />
+
+        <div className="mt-6 flex flex-1 flex-col gap-3">
+          {plans.length ? (
+            plans.map((plan) => (
+              <PlanRow
+                key={plan.id}
+                plan={plan}
+                activePeriod={activePeriod}
+              />
+            ))
+          ) : (
+            <div className="flex flex-1 items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-[#07101f]/45 px-5 py-10 text-center text-sm leading-7 text-white/38">
+              {config.emptyText}
             </div>
-          </section>
-        );
-      })}
+          )}
+        </div>
+      </section>
     </div>
   );
 }
