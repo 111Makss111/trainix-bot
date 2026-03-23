@@ -7,6 +7,7 @@ import {
   createPlan,
   deletePlan,
   isPlanPeriod,
+  togglePlanCompleted,
   updatePlan,
 } from "@/lib/plans";
 
@@ -23,9 +24,14 @@ async function requireOwnerEmail() {
 export async function createPlanAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
   const period = formData.get("period");
-  const content = formData.get("content");
+  const title = formData.get("title");
+  const description = formData.get("description");
 
-  if (typeof period !== "string" || typeof content !== "string") {
+  if (
+    typeof period !== "string" ||
+    typeof title !== "string" ||
+    typeof description !== "string"
+  ) {
     return;
   }
 
@@ -36,7 +42,8 @@ export async function createPlanAction(formData: FormData) {
   await createPlan({
     ownerEmail,
     period,
-    content,
+    title,
+    description,
   });
 
   revalidatePath("/cabinet/notes");
@@ -45,16 +52,38 @@ export async function createPlanAction(formData: FormData) {
 export async function updatePlanAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
   const planId = formData.get("planId");
-  const content = formData.get("content");
+  const title = formData.get("title");
+  const description = formData.get("description");
 
-  if (typeof planId !== "string" || typeof content !== "string") {
+  if (
+    typeof planId !== "string" ||
+    typeof title !== "string" ||
+    typeof description !== "string"
+  ) {
     return;
   }
 
   await updatePlan({
     ownerEmail,
     planId,
-    content,
+    title,
+    description,
+  });
+
+  revalidatePath("/cabinet/notes");
+}
+
+export async function togglePlanCompletedAction(formData: FormData) {
+  const ownerEmail = await requireOwnerEmail();
+  const planId = formData.get("planId");
+
+  if (typeof planId !== "string") {
+    return;
+  }
+
+  await togglePlanCompleted({
+    ownerEmail,
+    planId,
   });
 
   revalidatePath("/cabinet/notes");

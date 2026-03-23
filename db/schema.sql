@@ -12,14 +12,21 @@ CREATE TABLE IF NOT EXISTS profiles (
 CREATE TABLE IF NOT EXISTS plans (
   id TEXT PRIMARY KEY,
   owner_email TEXT NOT NULL,
-  period TEXT NOT NULL CHECK (period IN ('week', 'month', 'year')),
+  period TEXT NOT NULL,
+  title TEXT,
+  description TEXT,
   content TEXT NOT NULL,
+  completed BOOLEAN NOT NULL DEFAULT FALSE,
+  completed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_plans_owner_period
-ON plans (owner_email, period, updated_at DESC);
+ALTER TABLE plans DROP CONSTRAINT IF EXISTS plans_period_check;
+ALTER TABLE plans ADD CONSTRAINT plans_period_check CHECK (period IN ('today', 'week', 'month', 'year'));
+
+CREATE INDEX IF NOT EXISTS idx_plans_owner_period_status
+ON plans (owner_email, period, completed, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS web_projects (
   id TEXT PRIMARY KEY,

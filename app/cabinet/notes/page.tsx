@@ -14,6 +14,7 @@ export default async function NotesPage() {
 
   const plans = await listPlansForOwner(session.user.email);
   const groupedPlans = {
+    today: plans.filter((plan) => plan.period === "today"),
     week: plans.filter((plan) => plan.period === "week"),
     month: plans.filter((plan) => plan.period === "month"),
     year: plans.filter((plan) => plan.period === "year"),
@@ -24,7 +25,7 @@ export default async function NotesPage() {
       <CabinetTopbar
         eyebrow="Notes"
         title="Плани та нотатки"
-        description="Тут уже працює твій приватний planner: окремо для тижня, місяця і року. Записи зберігаються в базі, їх можна редагувати та видаляти прямо зі сторінки."
+        description="Тепер це компактний note-planner: окремо для сьогодні, тижня, місяця і року. У кожного пункту є заголовок, опис, статус виконання, редагування і видалення."
       />
 
       <PlansBoard groupedPlans={groupedPlans} />
