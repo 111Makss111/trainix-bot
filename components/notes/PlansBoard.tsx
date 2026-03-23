@@ -7,9 +7,12 @@ import {
 } from "@/app/cabinet/notes/actions";
 import type { PlanItem, PlanPeriod } from "@/lib/plans";
 
+export type NotesViewMode = "active" | "history";
+
 type PlansBoardProps = {
   groupedPlans: Record<PlanPeriod, PlanItem[]>;
   activePeriod: PlanPeriod;
+  activeMode: NotesViewMode;
 };
 
 const sectionConfig: Record<
@@ -19,7 +22,8 @@ const sectionConfig: Record<
     eyebrow: string;
     titlePlaceholder: string;
     descriptionPlaceholder: string;
-    emptyText: string;
+    emptyActiveText: string;
+    emptyHistoryText: string;
   }
 > = {
   today: {
@@ -28,7 +32,8 @@ const sectionConfig: Record<
     titlePlaceholder: "Наприклад: доробити Facebook publish flow",
     descriptionPlaceholder:
       "Коротко опиши, що саме треба зробити, якщо це неочевидно...",
-    emptyText: "Тут поки порожньо. Додай першу задачу на сьогодні.",
+    emptyActiveText: "Тут поки порожньо. Додай першу задачу на сьогодні.",
+    emptyHistoryText: "Історія за сьогодні поки порожня.",
   },
   week: {
     title: "Тиждень",
@@ -36,7 +41,8 @@ const sectionConfig: Record<
     titlePlaceholder: "Наприклад: допиляти Notes UX",
     descriptionPlaceholder:
       "Що саме хочеш тримати в полі зору протягом цього тижня?",
-    emptyText: "Тут поки порожньо. Додай головну задачу на тиждень.",
+    emptyActiveText: "Тут поки порожньо. Додай головну задачу на тиждень.",
+    emptyHistoryText: "Завершених тижневих задач поки немає.",
   },
   month: {
     title: "Місяць",
@@ -44,7 +50,8 @@ const sectionConfig: Record<
     titlePlaceholder: "Наприклад: зібрати Social Hub v1",
     descriptionPlaceholder:
       "Опиши більше деталей, якщо задача велика або має кілька кроків.",
-    emptyText: "Тут поки порожньо. Додай головну ціль на місяць.",
+    emptyActiveText: "Тут поки порожньо. Додай головну ціль на місяць.",
+    emptyHistoryText: "Завершених місячних задач поки немає.",
   },
   year: {
     title: "Рік",
@@ -52,11 +59,28 @@ const sectionConfig: Record<
     titlePlaceholder: "Наприклад: довести Trainix до повноцінного продукту",
     descriptionPlaceholder:
       "Велика ідея, напрям або довгострокова ціль, яку не хочеш втратити.",
-    emptyText: "Тут поки порожньо. Додай головну ціль на рік.",
+    emptyActiveText: "Тут поки порожньо. Додай головну ціль на рік.",
+    emptyHistoryText: "Річна історія поки порожня.",
   },
 };
 
 const orderedPeriods = ["today", "week", "month", "year"] as const;
+const modeConfig: Record<
+  NotesViewMode,
+  {
+    label: string;
+    badgeLabel: string;
+  }
+> = {
+  active: {
+    label: "Активні",
+    badgeLabel: "Active",
+  },
+  history: {
+    label: "Історія",
+    badgeLabel: "History",
+  },
+};
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("uk-UA", {
@@ -70,27 +94,26 @@ function formatDate(value: string) {
 
 function AddPlanForm({
   period,
-  titlePlaceholder,
-  descriptionPlaceholder,
 }: {
   period: PlanPeriod;
-  titlePlaceholder: string;
-  descriptionPlaceholder: string;
 }) {
+  const config = sectionConfig[period];
+
   return (
     <form action={createPlanAction} className="mt-5 space-y-3">
       <input type="hidden" name="period" value={period} />
       <input type="hidden" name="viewPeriod" value={period} />
+      <input type="hidden" name="viewMode" value="active" />
       <input
         type="text"
         name="title"
-        placeholder={titlePlaceholder}
+        placeholder={config.titlePlaceholder}
         className="h-12 w-full rounded-[1.3rem] border border-white/10 bg-[#0a1122] px-4 text-sm text-white outline-none transition placeholder:text-white/26 focus:border-white/18 focus:bg-[#0d152a]"
       />
       <textarea
         name="description"
         rows={3}
-        placeholder={descriptionPlaceholder}
+        placeholder={config.descriptionPlaceholder}
         className="w-full resize-none rounded-[1.5rem] border border-white/10 bg-[#0a1122] px-4 py-4 text-sm leading-7 text-white outline-none transition placeholder:text-white/26 focus:border-white/18 focus:bg-[#0d152a]"
       />
       <button
@@ -106,10 +129,16 @@ function AddPlanForm({
 function PlanRow({
   plan,
   activePeriod,
+  activeMode,
 }: {
   plan: PlanItem;
   activePeriod: PlanPeriod;
+  activeMode: NotesViewMode;
 }) {
+  const toggleLabel = plan.completed
+    ? "Повернути в активні"
+    : "Перемістити в історію";
+
   return (
     <article
       className={[
@@ -123,13 +152,11 @@ function PlanRow({
         <form action={togglePlanCompletedAction} className="shrink-0">
           <input type="hidden" name="planId" value={plan.id} />
           <input type="hidden" name="viewPeriod" value={activePeriod} />
+          <input type="hidden" name="viewMode" value={activeMode} />
           <button
             type="submit"
-            aria-label={
-              plan.completed
-                ? "Позначити як невиконане"
-                : "Позначити як виконане"
-            }
+            title={toggleLabel}
+            aria-label={toggleLabel}
             className={[
               "mt-0.5 flex h-10 w-10 items-center justify-center rounded-full border text-sm font-medium transition",
               plan.completed
@@ -194,6 +221,7 @@ function PlanRow({
               <form action={updatePlanAction} className="mt-3 space-y-3">
                 <input type="hidden" name="planId" value={plan.id} />
                 <input type="hidden" name="viewPeriod" value={activePeriod} />
+                <input type="hidden" name="viewMode" value={activeMode} />
                 <input
                   type="text"
                   name="title"
@@ -220,6 +248,7 @@ function PlanRow({
         <form action={deletePlanAction} className="shrink-0">
           <input type="hidden" name="planId" value={plan.id} />
           <input type="hidden" name="viewPeriod" value={activePeriod} />
+          <input type="hidden" name="viewMode" value={activeMode} />
           <button
             type="submit"
             className="rounded-full border border-white/10 px-3 py-2 text-[0.68rem] uppercase tracking-[0.2em] text-white/52 transition hover:border-red-300/24 hover:text-red-100"
@@ -232,20 +261,32 @@ function PlanRow({
   );
 }
 
-export function PlansBoard({ groupedPlans, activePeriod }: PlansBoardProps) {
+export function PlansBoard({
+  groupedPlans,
+  activePeriod,
+  activeMode,
+}: PlansBoardProps) {
   const config = sectionConfig[activePeriod];
-  const plans = groupedPlans[activePeriod];
+  const visiblePlans = groupedPlans[activePeriod].filter((plan) =>
+    activeMode === "history" ? plan.completed : !plan.completed,
+  );
 
   return (
     <div className="space-y-4">
       <nav className="grid gap-3 rounded-[2rem] border border-white/10 bg-white/[0.03] p-3 backdrop-blur-md md:grid-cols-4">
         {orderedPeriods.map((period) => {
           const isActive = period === activePeriod;
+          const activeCount = groupedPlans[period].filter(
+            (plan) => !plan.completed,
+          ).length;
+          const historyCount = groupedPlans[period].filter(
+            (plan) => plan.completed,
+          ).length;
 
           return (
             <Link
               key={period}
-              href={`/cabinet/notes?period=${period}`}
+              href={`/cabinet/notes?period=${period}&mode=${activeMode}`}
               className={[
                 "rounded-[1.4rem] border px-4 py-4 transition",
                 isActive
@@ -258,12 +299,12 @@ export function PlansBoard({ groupedPlans, activePeriod }: PlansBoardProps) {
                   {sectionConfig[period].title}
                 </span>
                 <span className="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[0.68rem] uppercase tracking-[0.2em] text-white/58">
-                  {groupedPlans[period].length}
+                  {activeMode === "history" ? historyCount : activeCount}
                 </span>
               </div>
 
               <p className="mt-3 text-sm leading-6 text-white/48">
-                {sectionConfig[period].emptyText}
+                Активні: {activeCount} · Історія: {historyCount}
               </p>
             </Link>
           );
@@ -271,29 +312,63 @@ export function PlansBoard({ groupedPlans, activePeriod }: PlansBoardProps) {
       </nav>
 
       <section className="flex min-h-[30rem] flex-col rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
-        <p className="text-[0.72rem] uppercase tracking-[0.32em] text-white/40">
-          {config.eyebrow}
-        </p>
-        <h2 className="mt-3 text-2xl font-medium text-white">{config.title}</h2>
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-[0.72rem] uppercase tracking-[0.32em] text-white/40">
+              {config.eyebrow}
+            </p>
+            <h2 className="mt-3 text-2xl font-medium text-white">
+              {config.title}
+            </h2>
+          </div>
 
-        <AddPlanForm
-          period={activePeriod}
-          titlePlaceholder={config.titlePlaceholder}
-          descriptionPlaceholder={config.descriptionPlaceholder}
-        />
+          <div className="grid grid-cols-2 gap-2 rounded-[1.2rem] border border-white/10 bg-[#091122]/64 p-2">
+            {(Object.keys(modeConfig) as NotesViewMode[]).map((mode) => {
+              const isActive = mode === activeMode;
+              const count = groupedPlans[activePeriod].filter((plan) =>
+                mode === "history" ? plan.completed : !plan.completed,
+              ).length;
+
+              return (
+                <Link
+                  key={mode}
+                  href={`/cabinet/notes?period=${activePeriod}&mode=${mode}`}
+                  className={[
+                    "rounded-[1rem] border px-4 py-3 text-sm transition",
+                    isActive
+                      ? "border-sky-300/20 bg-sky-300/[0.12] text-white"
+                      : "border-white/8 bg-transparent text-white/58 hover:border-white/14 hover:text-white/88",
+                  ].join(" ")}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span>{modeConfig[mode].label}</span>
+                    <span className="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[0.68rem] uppercase tracking-[0.2em] text-white/58">
+                      {count}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
+        {activeMode === "active" ? <AddPlanForm period={activePeriod} /> : null}
 
         <div className="mt-6 flex flex-1 flex-col gap-3">
-          {plans.length ? (
-            plans.map((plan) => (
+          {visiblePlans.length ? (
+            visiblePlans.map((plan) => (
               <PlanRow
                 key={plan.id}
                 plan={plan}
                 activePeriod={activePeriod}
+                activeMode={activeMode}
               />
             ))
           ) : (
             <div className="flex flex-1 items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-[#07101f]/45 px-5 py-10 text-center text-sm leading-7 text-white/38">
-              {config.emptyText}
+              {activeMode === "history"
+                ? config.emptyHistoryText
+                : config.emptyActiveText}
             </div>
           )}
         </div>

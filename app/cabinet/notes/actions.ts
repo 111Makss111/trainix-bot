@@ -32,9 +32,16 @@ function getViewPeriod(formData: FormData) {
   return "today";
 }
 
+function getViewMode(formData: FormData) {
+  const viewMode = formData.get("viewMode");
+
+  return viewMode === "history" ? "history" : "active";
+}
+
 export async function createPlanAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
   const viewPeriod = getViewPeriod(formData);
+  const viewMode = getViewMode(formData);
   const period = formData.get("period");
   const title = formData.get("title");
   const description = formData.get("description");
@@ -59,12 +66,13 @@ export async function createPlanAction(formData: FormData) {
   });
 
   revalidatePath("/cabinet/notes");
-  redirect(`/cabinet/notes?period=${viewPeriod}`);
+  redirect(`/cabinet/notes?period=${viewPeriod}&mode=${viewMode}`);
 }
 
 export async function updatePlanAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
   const viewPeriod = getViewPeriod(formData);
+  const viewMode = getViewMode(formData);
   const planId = formData.get("planId");
   const title = formData.get("title");
   const description = formData.get("description");
@@ -85,12 +93,13 @@ export async function updatePlanAction(formData: FormData) {
   });
 
   revalidatePath("/cabinet/notes");
-  redirect(`/cabinet/notes?period=${viewPeriod}`);
+  redirect(`/cabinet/notes?period=${viewPeriod}&mode=${viewMode}`);
 }
 
 export async function togglePlanCompletedAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
   const viewPeriod = getViewPeriod(formData);
+  const viewMode = getViewMode(formData);
   const planId = formData.get("planId");
 
   if (typeof planId !== "string") {
@@ -103,12 +112,13 @@ export async function togglePlanCompletedAction(formData: FormData) {
   });
 
   revalidatePath("/cabinet/notes");
-  redirect(`/cabinet/notes?period=${viewPeriod}`);
+  redirect(`/cabinet/notes?period=${viewPeriod}&mode=${viewMode}`);
 }
 
 export async function deletePlanAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
   const viewPeriod = getViewPeriod(formData);
+  const viewMode = getViewMode(formData);
   const planId = formData.get("planId");
 
   if (typeof planId !== "string") {
@@ -121,5 +131,5 @@ export async function deletePlanAction(formData: FormData) {
   });
 
   revalidatePath("/cabinet/notes");
-  redirect(`/cabinet/notes?period=${viewPeriod}`);
+  redirect(`/cabinet/notes?period=${viewPeriod}&mode=${viewMode}`);
 }

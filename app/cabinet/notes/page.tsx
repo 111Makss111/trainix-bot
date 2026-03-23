@@ -2,12 +2,14 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { CabinetTopbar } from "@/components/cabinet";
 import { PlansBoard } from "@/components/notes";
+import type { NotesViewMode } from "@/components/notes/PlansBoard";
 import { authOptions } from "@/lib/auth";
 import { isPlanPeriod, listPlansForOwner, type PlanPeriod } from "@/lib/plans";
 
 type NotesPageProps = {
   searchParams?: Promise<{
     period?: string;
+    mode?: string;
   }>;
 };
 
@@ -23,6 +25,8 @@ export default async function NotesPage({ searchParams }: NotesPageProps) {
     typeof params.period === "string" && isPlanPeriod(params.period)
       ? params.period
       : "today";
+  const activeMode: NotesViewMode =
+    params.mode === "history" ? "history" : "active";
   const plans = await listPlansForOwner(session.user.email);
   const groupedPlans = {
     today: plans.filter((plan) => plan.period === "today"),
@@ -33,7 +37,17 @@ export default async function NotesPage({ searchParams }: NotesPageProps) {
 
   return (
     <>
-      <PlansBoard groupedPlans={groupedPlans} activePeriod={activePeriod} />
+      <CabinetTopbar
+        eyebrow="Notes"
+        title="Плани та нотатки"
+        description="Тепер це planner з активними задачами та історією виконаного. Можеш окремо відкривати сьогодні, тиждень, місяць і рік та в будь-який момент дивитися, що вже закрито."
+      />
+
+      <PlansBoard
+        groupedPlans={groupedPlans}
+        activePeriod={activePeriod}
+        activeMode={activeMode}
+      />
     </>
   );
 }
