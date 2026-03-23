@@ -119,6 +119,7 @@ export async function togglePlanInProgressAction(formData: FormData) {
 export async function finishPlanAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();
   const viewPeriod = getViewPeriod(formData);
+  const viewMode = getViewMode(formData);
   const planId = formData.get("planId");
 
   if (typeof planId !== "string") {
@@ -131,7 +132,7 @@ export async function finishPlanAction(formData: FormData) {
   });
 
   revalidatePath("/cabinet/notes");
-  redirect(`/cabinet/notes?period=${viewPeriod}&mode=history`);
+  redirect(`/cabinet/notes?period=${viewPeriod}&mode=${viewMode}`);
 }
 
 export async function deletePlanAction(formData: FormData) {

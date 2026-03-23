@@ -3,10 +3,10 @@ import {
   createPlanAction,
   deletePlanAction,
   finishPlanAction,
-  togglePlanInProgressAction,
   updatePlanAction,
 } from "@/app/cabinet/notes/actions";
 import type { PlanItem, PlanPeriod } from "@/lib/plans";
+import { PlanProgressToggle } from "./PlanProgressToggle";
 
 export type NotesViewMode = "active" | "history";
 
@@ -151,32 +151,11 @@ function ActivePlanRow({
       className={[
         "rounded-[1.5rem] border px-4 py-4 transition",
         isPending
-          ? "border-sky-300/22 bg-sky-300/[0.08] shadow-[0_0_0_1px_rgba(125,211,252,0.08)]"
+          ? "border-sky-300/26 bg-[linear-gradient(135deg,rgba(56,189,248,0.18),rgba(10,17,34,0.94),rgba(56,189,248,0.04))] shadow-[0_0_0_1px_rgba(125,211,252,0.08),0_0_40px_rgba(56,189,248,0.08)]"
           : "border-white/10 bg-[#0a1122]/92",
       ].join(" ")}
     >
       <div className="flex items-start gap-3">
-        <form action={togglePlanInProgressAction} className="shrink-0">
-          <input type="hidden" name="planId" value={plan.id} />
-          <input type="hidden" name="viewPeriod" value={activePeriod} />
-          <input type="hidden" name="viewMode" value="active" />
-          <button
-            type="submit"
-            title={isPending ? "Зняти зі статусу в роботі" : "Поставити в роботу"}
-            aria-label={
-              isPending ? "Зняти зі статусу в роботі" : "Поставити в роботу"
-            }
-            className={[
-              "mt-0.5 flex h-10 w-10 items-center justify-center rounded-full border text-sm font-medium transition",
-              isPending
-                ? "border-sky-300/28 bg-sky-300/18 text-sky-50"
-                : "border-white/12 bg-white/[0.03] text-white/58 hover:border-white/18 hover:text-white/88",
-            ].join(" ")}
-          >
-            {isPending ? "●" : "○"}
-          </button>
-        </form>
-
         <details className="min-w-0 flex-1 group">
           <summary className="list-none cursor-pointer">
             <div className="flex items-start justify-between gap-3">
@@ -193,7 +172,7 @@ function ActivePlanRow({
                 className={[
                   "shrink-0 rounded-full border px-3 py-1 text-[0.68rem] uppercase tracking-[0.22em] transition",
                   isPending
-                    ? "border-sky-300/24 bg-sky-300/14 text-sky-50"
+                    ? "border-sky-300/24 bg-sky-300/16 text-sky-50 shadow-[0_0_20px_rgba(56,189,248,0.16)]"
                     : "border-white/10 bg-white/[0.04] text-white/58 group-open:border-white/18 group-open:text-white/82",
                 ].join(" ")}
               >
@@ -252,11 +231,19 @@ function ActivePlanRow({
           </div>
         </details>
 
-        <div className="flex shrink-0 flex-col gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 pt-0.5">
+          <PlanProgressToggle
+            planId={plan.id}
+            activePeriod={activePeriod}
+            activeMode="active"
+            isPending={isPending}
+          />
+
           {isPending ? (
             <form action={finishPlanAction}>
               <input type="hidden" name="planId" value={plan.id} />
               <input type="hidden" name="viewPeriod" value={activePeriod} />
+              <input type="hidden" name="viewMode" value="active" />
               <button
                 type="submit"
                 className="rounded-full border border-emerald-300/20 bg-emerald-300/12 px-3 py-2 text-[0.68rem] uppercase tracking-[0.2em] text-emerald-50 transition hover:bg-emerald-300/18"
