@@ -1,17 +1,22 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import {
   createPlan,
   deletePlan,
   finishPlan,
-  isPlanPeriod,
-  togglePlanInProgress,
   updatePlan,
+  togglePlanInProgress,
+  type PlanItem,
+  type PlanPeriod,
 } from "@/lib/plans";
+
+export type NotesMutationResult =
+  | { ok: true; plan: PlanItem }
+  | { ok: true; planId: string }
+  | { ok: false; error: string };
 
 async function requireOwnerEmail() {
   const session = await getServerSession(authOptions);
@@ -23,133 +28,122 @@ async function requireOwnerEmail() {
   return session.user.email.trim().toLowerCase();
 }
 
-function getViewPeriod(formData: FormData) {
-  const viewPeriod = formData.get("viewPeriod");
-
-  if (typeof viewPeriod === "string" && isPlanPeriod(viewPeriod)) {
-    return viewPeriod;
-  }
-
-  return "today";
+function invalidResult(error: string): NotesMutationResult {
+  return {
+    ok: false,
+    error,
+  };
 }
 
-function getViewMode(formData: FormData) {
-  const viewMode = formData.get("viewMode");
-
-  return viewMode === "history" ? "history" : "active";
-}
-
-export async function createPlanAction(formData: FormData) {
+export async function createPlanAction(input: {
+  period: PlanPeriod;
+  title: string;
+  description: string;
+}): Promise<NotesMutationResult> {
   const ownerEmail = await requireOwnerEmail();
-  const viewPeriod = getViewPeriod(formData);
-  const viewMode = getViewMode(formData);
-  const period = formData.get("period");
-  const title = formData.get("title");
-  const description = formData.get("description");
-
-  if (
-    typeof period !== "string" ||
-    typeof title !== "string" ||
-    typeof description !== "string"
-  ) {
-    return;
-  }
-
-  if (!isPlanPeriod(period)) {
-    return;
-  }
-
-  await createPlan({
+  const plan = await createPlan({
     ownerEmail,
-    period,
-    title,
-    description,
+    period: input.period,
+    title: input.title,
+    description: input.description,
   });
 
-  revalidatePath("/cabinet/notes");
-  redirect(`/cabinet/notes?period=${viewPeriod}&mode=${viewMode}`);
-}
-
-export async function updatePlanAction(formData: FormData) {
-  const ownerEmail = await requireOwnerEmail();
-  const viewPeriod = getViewPeriod(formData);
-  const viewMode = getViewMode(formData);
-  const planId = formData.get("planId");
-  const title = formData.get("title");
-  const description = formData.get("description");
-
-  if (
-    typeof planId !== "string" ||
-    typeof title !== "string" ||
-    typeof description !== "string"
-  ) {
-    return;
+  if (!plan) {
+    return invalidResult("Не вдалося створити нотатку.");
   }
 
-  await updatePlan({
-    ownerEmail,
-    planId,
-    title,
-    description,
-  });
-
   revalidatePath("/cabinet/notes");
-  redirect(`/cabinet/notes?period=${viewPeriod}&mode=${viewMode}`);
+
+  return {
+    ok: true,
+    plan,
+  };
 }
 
-export async function togglePlanInProgressAction(formData: FormData) {
+export async function updatePlanAction(input: {
+  planId: string;
+  title: string;
+  description: string;
+}): Promise<NotesMutationResult> {
   const ownerEmail = await requireOwnerEmail();
-  const viewPeriod = getViewPeriod(formData);
-  const viewMode = getViewMode(formData);
-  const planId = formData.get("planId");
-
-  if (typeof planId !== "string") {
-    return;
-  }
-
-  await togglePlanInProgress({
+  const plan = await updatePlan({
     ownerEmail,
-    planId,
+    planId: input.planId,
+    title: input.title,
+    description: input.description,
   });
 
+  if (!plan) {
+    return invalidResult("Не вдалося оновити нотатку.");
+  }
+
   revalidatePath("/cabinet/notes");
-  redirect(`/cabinet/notes?period=${viewPeriod}&mode=${viewMode}`);
+
+  return {
+    ok: true,
+    plan,
+  };
 }
 
-export async function finishPlanAction(formData: FormData) {
+export async function togglePlanInProgressAction(input: {
+  planId: string;
+}): Promise<NotesMutationResult> {
   const ownerEmail = await requireOwnerEmail();
-  const viewPeriod = getViewPeriod(formData);
-  const viewMode = getViewMode(formData);
-  const planId = formData.get("planId");
-
-  if (typeof planId !== "string") {
-    return;
-  }
-
-  await finishPlan({
+  const plan = await togglePlanInProgress({
     ownerEmail,
-    planId,
+    planId: input.planId,
   });
 
+  if (!plan) {
+    return invalidResult("Не вдалося змінити статус нотатки.");
+  }
+
   revalidatePath("/cabinet/notes");
-  redirect(`/cabinet/notes?period=${viewPeriod}&mode=${viewMode}`);
+
+  return {
+    ok: true,
+    plan,
+  };
 }
 
-export async function deletePlanAction(formData: FormData) {
+export async function finishPlanAction(input: {
+  planId: string;
+}): Promise<NotesMutationResult> {
   const ownerEmail = await requireOwnerEmail();
-  const viewPeriod = getViewPeriod(formData);
-  const viewMode = getViewMode(formData);
-  const planId = formData.get("planId");
-
-  if (typeof planId !== "string") {
-    return;
-  }
-
-  await deletePlan({
+  const plan = await finishPlan({
     ownerEmail,
-    planId,
+    planId: input.planId,
   });
 
+  if (!plan) {
+    return invalidResult("Не вдалося завершити нотатку.");
+  }
+
   revalidatePath("/cabinet/notes");
-  redirect(`/cabinet/notes?period=${viewPeriod}&mode=${viewMode}`);
+
+  return {
+    ok: true,
+    plan,
+  };
+}
+
+export async function deletePlanAction(input: {
+  planId: string;
+}): Promise<NotesMutationResult> {
+  const ownerEmail = await requireOwnerEmail();
+  const deleted = await deletePlan({
+    ownerEmail,
+    planId: input.planId,
+  });
+
+  if (!deleted) {
+    return invalidResult("Не вдалося видалити нотатку.");
+  }
+
+  revalidatePath("/cabinet/notes");
+
+  return {
+    ok: true,
+    planId: input.planId,
+  };
 }

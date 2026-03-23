@@ -21,6 +21,23 @@ export type PlanItem = {
   updatedAt: string;
 };
 
+type PlanRow = {
+  id: string;
+  owner_email: string;
+  period: PlanPeriod;
+  title: string | null;
+  description: string | null;
+  status: PlanStatus;
+  completed: boolean;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+let plansTablePromise: Promise<Awaited<ReturnType<typeof ensurePlansTableInner>>> | null =
+  null;
+
 function normalizeText(value: string) {
   return value.replace(/\r\n/g, "\n").trim();
 }
@@ -43,7 +60,23 @@ export function isPlanPeriod(value: string): value is PlanPeriod {
   return planPeriods.includes(value as PlanPeriod);
 }
 
-async function ensurePlansTable() {
+function mapPlanRow(row: PlanRow): PlanItem {
+  return {
+    id: row.id,
+    ownerEmail: row.owner_email,
+    period: row.period,
+    title: row.title?.trim() || "Нотатка",
+    description: row.description,
+    status: row.status,
+    completed: row.status === "done" || Boolean(row.completed),
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function ensurePlansTableInner() {
   const sql = getSql();
 
   if (!sql) {
@@ -161,6 +194,17 @@ async function ensurePlansTable() {
   return sql;
 }
 
+async function ensurePlansTable() {
+  if (!plansTablePromise) {
+    plansTablePromise = ensurePlansTableInner().catch((error) => {
+      plansTablePromise = null;
+      throw error;
+    });
+  }
+
+  return plansTablePromise;
+}
+
 export async function listPlansForOwner(ownerEmail: string) {
   const sql = await ensurePlansTable();
 
@@ -196,33 +240,9 @@ export async function listPlansForOwner(ownerEmail: string) {
         WHEN 'done' THEN 3
       END,
       updated_at DESC
-  `) as Array<{
-    id: string;
-    owner_email: string;
-    period: PlanPeriod;
-    title: string | null;
-    description: string | null;
-    status: PlanStatus;
-    completed: boolean;
-    started_at: string | null;
-    completed_at: string | null;
-    created_at: string;
-    updated_at: string;
-  }>;
+  `) as PlanRow[];
 
-  return rows.map((row) => ({
-    id: row.id,
-    ownerEmail: row.owner_email,
-    period: row.period,
-    title: row.title?.trim() || "Нотатка",
-    description: row.description,
-    status: row.status,
-    completed: row.status === "done" || Boolean(row.completed),
-    startedAt: row.started_at,
-    completedAt: row.completed_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }));
+  return rows.map(mapPlanRow);
 }
 
 export async function createPlan(input: {
@@ -234,17 +254,17 @@ export async function createPlan(input: {
   const sql = await ensurePlansTable();
 
   if (!sql) {
-    return;
+    return null;
   }
 
   const title = normalizeTitle(input.title);
   const description = normalizeDescription(input.description);
 
   if (!title) {
-    return;
+    return null;
   }
 
-  await sql`
+  const rows = (await sql`
     INSERT INTO plans (
       id,
       owner_email,
@@ -269,7 +289,21 @@ export async function createPlan(input: {
       NULL,
       NULL
     )
-  `;
+    RETURNING
+      id,
+      owner_email,
+      period,
+      title,
+      description,
+      status,
+      completed,
+      started_at,
+      completed_at,
+      created_at,
+      updated_at
+  `) as PlanRow[];
+
+  return rows[0] ? mapPlanRow(rows[0]) : null;
 }
 
 export async function updatePlan(input: {
@@ -281,17 +315,17 @@ export async function updatePlan(input: {
   const sql = await ensurePlansTable();
 
   if (!sql) {
-    return;
+    return null;
   }
 
   const title = normalizeTitle(input.title);
   const description = normalizeDescription(input.description);
 
   if (!title) {
-    return;
+    return null;
   }
 
-  await sql`
+  const rows = (await sql`
     UPDATE plans
     SET
       title = ${title},
@@ -300,7 +334,21 @@ export async function updatePlan(input: {
       updated_at = NOW()
     WHERE id = ${input.planId}
       AND owner_email = ${input.ownerEmail}
-  `;
+    RETURNING
+      id,
+      owner_email,
+      period,
+      title,
+      description,
+      status,
+      completed,
+      started_at,
+      completed_at,
+      created_at,
+      updated_at
+  `) as PlanRow[];
+
+  return rows[0] ? mapPlanRow(rows[0]) : null;
 }
 
 export async function togglePlanInProgress(input: {
@@ -310,10 +358,10 @@ export async function togglePlanInProgress(input: {
   const sql = await ensurePlansTable();
 
   if (!sql) {
-    return;
+    return null;
   }
 
-  await sql`
+  const rows = (await sql`
     UPDATE plans
     SET
       status = CASE
@@ -330,7 +378,21 @@ export async function togglePlanInProgress(input: {
     WHERE id = ${input.planId}
       AND owner_email = ${input.ownerEmail}
       AND status <> 'done'
-  `;
+    RETURNING
+      id,
+      owner_email,
+      period,
+      title,
+      description,
+      status,
+      completed,
+      started_at,
+      completed_at,
+      created_at,
+      updated_at
+  `) as PlanRow[];
+
+  return rows[0] ? mapPlanRow(rows[0]) : null;
 }
 
 export async function finishPlan(input: {
@@ -340,10 +402,10 @@ export async function finishPlan(input: {
   const sql = await ensurePlansTable();
 
   if (!sql) {
-    return;
+    return null;
   }
 
-  await sql`
+  const rows = (await sql`
     UPDATE plans
     SET
       status = 'done',
@@ -353,7 +415,21 @@ export async function finishPlan(input: {
     WHERE id = ${input.planId}
       AND owner_email = ${input.ownerEmail}
       AND status <> 'done'
-  `;
+    RETURNING
+      id,
+      owner_email,
+      period,
+      title,
+      description,
+      status,
+      completed,
+      started_at,
+      completed_at,
+      created_at,
+      updated_at
+  `) as PlanRow[];
+
+  return rows[0] ? mapPlanRow(rows[0]) : null;
 }
 
 export async function deletePlan(input: {
@@ -363,12 +439,15 @@ export async function deletePlan(input: {
   const sql = await ensurePlansTable();
 
   if (!sql) {
-    return;
+    return false;
   }
 
-  await sql`
+  const rows = (await sql`
     DELETE FROM plans
     WHERE id = ${input.planId}
       AND owner_email = ${input.ownerEmail}
-  `;
+    RETURNING id
+  `) as Array<{ id: string }>;
+
+  return rows.length > 0;
 }

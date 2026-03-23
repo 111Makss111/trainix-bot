@@ -1,9 +1,12 @@
-import Link from "next/link";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
 import {
   createPlanAction,
   deletePlanAction,
   finishPlanAction,
   updatePlanAction,
+  togglePlanInProgressAction,
 } from "@/app/cabinet/notes/actions";
 import type { PlanItem, PlanPeriod } from "@/lib/plans";
 import { PlanProgressToggle } from "./PlanProgressToggle";
@@ -15,6 +18,8 @@ type PlansBoardProps = {
   activePeriod: PlanPeriod;
   activeMode: NotesViewMode;
 };
+
+type GroupedPlans = Record<PlanPeriod, PlanItem[]>;
 
 const sectionConfig: Record<
   PlanPeriod,
@@ -75,6 +80,12 @@ const modeConfig: Record<NotesViewMode, { label: string }> = {
   },
 };
 
+const statusWeight = {
+  in_progress: 1,
+  todo: 2,
+  done: 3,
+} as const;
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("uk-UA", {
     day: "2-digit",
@@ -85,8 +96,8 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-function formatElapsedTime(value: string) {
-  const diffMs = Date.now() - new Date(value).getTime();
+function formatElapsedTime(value: string, now: number) {
+  const diffMs = now - new Date(value).getTime();
   const totalMinutes = Math.max(1, Math.floor(diffMs / 60000));
 
   if (totalMinutes < 60) {
@@ -103,35 +114,99 @@ function formatElapsedTime(value: string) {
   return `${hours} год ${minutes} хв`;
 }
 
+function cloneGroupedPlans(groupedPlans: GroupedPlans): GroupedPlans {
+  return {
+    today: [...groupedPlans.today],
+    week: [...groupedPlans.week],
+    month: [...groupedPlans.month],
+    year: [...groupedPlans.year],
+  };
+}
+
+function sortPlans(plans: PlanItem[]) {
+  return [...plans].sort((left, right) => {
+    const statusDiff = statusWeight[left.status] - statusWeight[right.status];
+
+    if (statusDiff !== 0) {
+      return statusDiff;
+    }
+
+    return (
+      new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+    );
+  });
+}
+
+function upsertPlan(groupedPlans: GroupedPlans, plan: PlanItem): GroupedPlans {
+  const nextPlans = cloneGroupedPlans(groupedPlans);
+
+  nextPlans[plan.period] = sortPlans([
+    plan,
+    ...nextPlans[plan.period].filter((item) => item.id !== plan.id),
+  ]);
+
+  return nextPlans;
+}
+
+function removePlan(
+  groupedPlans: GroupedPlans,
+  period: PlanPeriod,
+  planId: string,
+): GroupedPlans {
+  const nextPlans = cloneGroupedPlans(groupedPlans);
+  nextPlans[period] = nextPlans[period].filter((plan) => plan.id !== planId);
+  return nextPlans;
+}
+
+function useUrlState(activePeriod: PlanPeriod, activeMode: NotesViewMode) {
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("period", activePeriod);
+    url.searchParams.set("mode", activeMode);
+    window.history.replaceState({}, "", url.toString());
+  }, [activeMode, activePeriod]);
+}
+
 function AddPlanForm({
   period,
+  isCreating,
+  onCreate,
 }: {
   period: PlanPeriod;
+  isCreating: boolean;
+  onCreate: (formData: FormData, form: HTMLFormElement) => Promise<void>;
 }) {
   const config = sectionConfig[period];
 
   return (
-    <form action={createPlanAction} className="mt-5 space-y-3">
-      <input type="hidden" name="period" value={period} />
-      <input type="hidden" name="viewPeriod" value={period} />
-      <input type="hidden" name="viewMode" value="active" />
+    <form
+      className="mt-5 space-y-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        void onCreate(new FormData(form), form);
+      }}
+    >
       <input
         type="text"
         name="title"
         placeholder={config.titlePlaceholder}
-        className="h-12 w-full rounded-[1.3rem] border border-white/10 bg-[#0a1122] px-4 text-sm text-white outline-none transition placeholder:text-white/26 focus:border-white/18 focus:bg-[#0d152a]"
+        disabled={isCreating}
+        className="h-12 w-full rounded-[1.3rem] border border-white/10 bg-[#0a1122] px-4 text-sm text-white outline-none transition placeholder:text-white/26 focus:border-white/18 focus:bg-[#0d152a] disabled:cursor-not-allowed disabled:opacity-60"
       />
       <textarea
         name="description"
         rows={3}
+        disabled={isCreating}
         placeholder={config.descriptionPlaceholder}
-        className="w-full resize-none rounded-[1.5rem] border border-white/10 bg-[#0a1122] px-4 py-4 text-sm leading-7 text-white outline-none transition placeholder:text-white/26 focus:border-white/18 focus:bg-[#0d152a]"
+        className="w-full resize-none rounded-[1.5rem] border border-white/10 bg-[#0a1122] px-4 py-4 text-sm leading-7 text-white outline-none transition placeholder:text-white/26 focus:border-white/18 focus:bg-[#0d152a] disabled:cursor-not-allowed disabled:opacity-60"
       />
       <button
         type="submit"
-        className="rounded-full border border-white/14 bg-white/8 px-4 py-2.5 text-sm font-medium text-white/88 transition hover:bg-white/12"
+        disabled={isCreating}
+        className="rounded-full border border-white/14 bg-white/8 px-4 py-2.5 text-sm font-medium text-white/88 transition hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        Додати нотатку
+        {isCreating ? "Додаю..." : "Додати нотатку"}
       </button>
     </form>
   );
@@ -139,10 +214,24 @@ function AddPlanForm({
 
 function ActivePlanRow({
   plan,
-  activePeriod,
+  now,
+  isBusy,
+  onTogglePending,
+  onFinish,
+  onDelete,
+  onUpdate,
 }: {
   plan: PlanItem;
-  activePeriod: PlanPeriod;
+  now: number;
+  isBusy: boolean;
+  onTogglePending: (plan: PlanItem) => Promise<void>;
+  onFinish: (plan: PlanItem) => Promise<void>;
+  onDelete: (plan: PlanItem) => Promise<void>;
+  onUpdate: (
+    plan: PlanItem,
+    formData: FormData,
+    form: HTMLFormElement,
+  ) => Promise<void>;
 }) {
   const isPending = plan.status === "in_progress";
 
@@ -153,6 +242,7 @@ function ActivePlanRow({
         isPending
           ? "border-sky-300/26 bg-[linear-gradient(135deg,rgba(56,189,248,0.18),rgba(10,17,34,0.94),rgba(56,189,248,0.04))] shadow-[0_0_0_1px_rgba(125,211,252,0.08),0_0_40px_rgba(56,189,248,0.08)]"
           : "border-white/10 bg-[#0a1122]/92",
+        isBusy ? "opacity-85" : "",
       ].join(" ")}
     >
       <div className="flex items-start gap-3">
@@ -195,7 +285,7 @@ function ActivePlanRow({
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs uppercase tracking-[0.2em] text-white/32">
               <span>Оновлено {formatDate(plan.updatedAt)}</span>
               {plan.startedAt ? (
-                <span>В роботі {formatElapsedTime(plan.startedAt)}</span>
+                <span>В роботі {formatElapsedTime(plan.startedAt, now)}</span>
               ) : null}
             </div>
 
@@ -204,25 +294,31 @@ function ActivePlanRow({
                 Змінити
               </summary>
 
-              <form action={updatePlanAction} className="mt-3 space-y-3">
-                <input type="hidden" name="planId" value={plan.id} />
-                <input type="hidden" name="viewPeriod" value={activePeriod} />
-                <input type="hidden" name="viewMode" value="active" />
+              <form
+                className="mt-3 space-y-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void onUpdate(plan, new FormData(event.currentTarget), event.currentTarget);
+                }}
+              >
                 <input
                   type="text"
                   name="title"
                   defaultValue={plan.title}
-                  className="h-11 w-full rounded-[1rem] border border-white/10 bg-[#07101f] px-4 text-sm text-white outline-none transition focus:border-white/18 focus:bg-[#091327]"
+                  disabled={isBusy}
+                  className="h-11 w-full rounded-[1rem] border border-white/10 bg-[#07101f] px-4 text-sm text-white outline-none transition focus:border-white/18 focus:bg-[#091327] disabled:cursor-not-allowed disabled:opacity-60"
                 />
                 <textarea
                   name="description"
                   defaultValue={plan.description || ""}
                   rows={4}
-                  className="w-full resize-none rounded-[1.2rem] border border-white/10 bg-[#07101f] px-4 py-3 text-sm leading-7 text-white outline-none transition focus:border-white/18 focus:bg-[#091327]"
+                  disabled={isBusy}
+                  className="w-full resize-none rounded-[1.2rem] border border-white/10 bg-[#07101f] px-4 py-3 text-sm leading-7 text-white outline-none transition focus:border-white/18 focus:bg-[#091327] disabled:cursor-not-allowed disabled:opacity-60"
                 />
                 <button
                   type="submit"
-                  className="rounded-full border border-white/14 bg-white/8 px-4 py-2 text-sm font-medium text-white/88 transition hover:bg-white/12"
+                  disabled={isBusy}
+                  className="rounded-full border border-white/14 bg-white/8 px-4 py-2 text-sm font-medium text-white/88 transition hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Зберегти
                 </button>
@@ -233,37 +329,36 @@ function ActivePlanRow({
 
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 pt-0.5">
           <PlanProgressToggle
-            planId={plan.id}
-            activePeriod={activePeriod}
-            activeMode="active"
-            isPending={isPending}
+            checked={isPending}
+            disabled={isBusy}
+            onToggle={() => {
+              void onTogglePending(plan);
+            }}
           />
 
           {isPending ? (
-            <form action={finishPlanAction}>
-              <input type="hidden" name="planId" value={plan.id} />
-              <input type="hidden" name="viewPeriod" value={activePeriod} />
-              <input type="hidden" name="viewMode" value="active" />
-              <button
-                type="submit"
-                className="rounded-full border border-emerald-300/20 bg-emerald-300/12 px-3 py-2 text-[0.68rem] uppercase tracking-[0.2em] text-emerald-50 transition hover:bg-emerald-300/18"
-              >
-                Закінчити
-              </button>
-            </form>
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => {
+                void onFinish(plan);
+              }}
+              className="rounded-full border border-emerald-300/20 bg-emerald-300/12 px-3 py-2 text-[0.68rem] uppercase tracking-[0.2em] text-emerald-50 transition hover:bg-emerald-300/18 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Закінчити
+            </button>
           ) : null}
 
-          <form action={deletePlanAction}>
-            <input type="hidden" name="planId" value={plan.id} />
-            <input type="hidden" name="viewPeriod" value={activePeriod} />
-            <input type="hidden" name="viewMode" value="active" />
-            <button
-              type="submit"
-              className="rounded-full border border-white/10 px-3 py-2 text-[0.68rem] uppercase tracking-[0.2em] text-white/52 transition hover:border-red-300/24 hover:text-red-100"
-            >
-              Видалити
-            </button>
-          </form>
+          <button
+            type="button"
+            disabled={isBusy}
+            onClick={() => {
+              void onDelete(plan);
+            }}
+            className="rounded-full border border-white/10 px-3 py-2 text-[0.68rem] uppercase tracking-[0.2em] text-white/52 transition hover:border-red-300/24 hover:text-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Видалити
+          </button>
         </div>
       </div>
     </article>
@@ -272,10 +367,12 @@ function ActivePlanRow({
 
 function HistoryPlanRow({
   plan,
-  activePeriod,
+  isBusy,
+  onDelete,
 }: {
   plan: PlanItem;
-  activePeriod: PlanPeriod;
+  isBusy: boolean;
+  onDelete: (plan: PlanItem) => Promise<void>;
 }) {
   return (
     <article className="rounded-[1.5rem] border border-emerald-300/12 bg-emerald-300/[0.06] px-4 py-4 transition">
@@ -320,17 +417,16 @@ function HistoryPlanRow({
           </div>
         </details>
 
-        <form action={deletePlanAction} className="shrink-0">
-          <input type="hidden" name="planId" value={plan.id} />
-          <input type="hidden" name="viewPeriod" value={activePeriod} />
-          <input type="hidden" name="viewMode" value="history" />
-          <button
-            type="submit"
-            className="rounded-full border border-white/10 px-3 py-2 text-[0.68rem] uppercase tracking-[0.2em] text-white/52 transition hover:border-red-300/24 hover:text-red-100"
-          >
-            Видалити
-          </button>
-        </form>
+        <button
+          type="button"
+          disabled={isBusy}
+          onClick={() => {
+            void onDelete(plan);
+          }}
+          className="shrink-0 rounded-full border border-white/10 px-3 py-2 text-[0.68rem] uppercase tracking-[0.2em] text-white/52 transition hover:border-red-300/24 hover:text-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Видалити
+        </button>
       </div>
     </article>
   );
@@ -341,29 +437,274 @@ export function PlansBoard({
   activePeriod,
   activeMode,
 }: PlansBoardProps) {
-  const config = sectionConfig[activePeriod];
-  const visiblePlans = groupedPlans[activePeriod].filter((plan) =>
-    activeMode === "history" ? plan.status === "done" : plan.status !== "done",
+  const [plansState, setPlansState] = useState<GroupedPlans>(() =>
+    cloneGroupedPlans(groupedPlans),
   );
+  const [selectedPeriod, setSelectedPeriod] = useState(activePeriod);
+  const [selectedMode, setSelectedMode] = useState<NotesViewMode>(activeMode);
+  const [isCreating, setIsCreating] = useState(false);
+  const [busyPlanIds, setBusyPlanIds] = useState<string[]>([]);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
+
+  useUrlState(selectedPeriod, selectedMode);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+    }, 60000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const currentConfig = sectionConfig[selectedPeriod];
+  const visiblePlans = useMemo(
+    () =>
+      plansState[selectedPeriod].filter((plan) =>
+        selectedMode === "history" ? plan.status === "done" : plan.status !== "done",
+      ),
+    [plansState, selectedMode, selectedPeriod],
+  );
+
+  function setPlanBusy(planId: string, nextBusy: boolean) {
+    setBusyPlanIds((current) => {
+      if (nextBusy) {
+        return current.includes(planId) ? current : [...current, planId];
+      }
+
+      return current.filter((id) => id !== planId);
+    });
+  }
+
+  async function handleCreate(formData: FormData, form: HTMLFormElement) {
+    const title = formData.get("title");
+    const description = formData.get("description");
+
+    if (typeof title !== "string" || typeof description !== "string") {
+      return;
+    }
+
+    const trimmedTitle = title.trim();
+
+    if (!trimmedTitle) {
+      setFeedback("Спочатку дай короткий заголовок нотатці.");
+      return;
+    }
+
+    setFeedback(null);
+    setIsCreating(true);
+
+    const nowIso = new Date().toISOString();
+    const tempPlan: PlanItem = {
+      id: `temp-${Date.now()}`,
+      ownerEmail: "local",
+      period: selectedPeriod,
+      title: trimmedTitle,
+      description: description.trim() || null,
+      status: "todo",
+      completed: false,
+      startedAt: null,
+      completedAt: null,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    const previousSnapshot = cloneGroupedPlans(plansState);
+
+    setPlansState((current) => upsertPlan(current, tempPlan));
+    form.reset();
+
+    try {
+      const result = await createPlanAction({
+        period: selectedPeriod,
+        title,
+        description,
+      });
+
+      if (!result.ok) {
+        setPlansState(previousSnapshot);
+        setFeedback(result.error);
+        return;
+      }
+
+      if ("plan" in result) {
+        setPlansState((current) =>
+          upsertPlan(removePlan(current, selectedPeriod, tempPlan.id), result.plan),
+        );
+      }
+    } finally {
+      setIsCreating(false);
+    }
+  }
+
+  async function handleUpdate(
+    plan: PlanItem,
+    formData: FormData,
+    form: HTMLFormElement,
+  ) {
+    const title = formData.get("title");
+    const description = formData.get("description");
+
+    if (typeof title !== "string" || typeof description !== "string") {
+      return;
+    }
+
+    const trimmedTitle = title.trim();
+
+    if (!trimmedTitle) {
+      setFeedback("Заголовок не може бути порожнім.");
+      return;
+    }
+
+    setFeedback(null);
+    setPlanBusy(plan.id, true);
+    const previousSnapshot = cloneGroupedPlans(plansState);
+    const optimisticPlan: PlanItem = {
+      ...plan,
+      title: trimmedTitle,
+      description: description.trim() || null,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setPlansState((current) => upsertPlan(current, optimisticPlan));
+
+    try {
+      const result = await updatePlanAction({
+        planId: plan.id,
+        title,
+        description,
+      });
+
+      if (!result.ok) {
+        setPlansState(previousSnapshot);
+        setFeedback(result.error);
+        return;
+      }
+
+      if ("plan" in result) {
+        setPlansState((current) => upsertPlan(current, result.plan));
+        const details = form.closest("details");
+
+        if (details instanceof HTMLDetailsElement) {
+          details.open = false;
+        }
+      }
+    } finally {
+      setPlanBusy(plan.id, false);
+    }
+  }
+
+  async function handleTogglePending(plan: PlanItem) {
+    setFeedback(null);
+    setPlanBusy(plan.id, true);
+    const previousSnapshot = cloneGroupedPlans(plansState);
+    const nextStatus = plan.status === "in_progress" ? "todo" : "in_progress";
+    const optimisticPlan: PlanItem = {
+      ...plan,
+      status: nextStatus,
+      completed: false,
+      startedAt: nextStatus === "in_progress" ? new Date().toISOString() : null,
+      completedAt: null,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setPlansState((current) => upsertPlan(current, optimisticPlan));
+
+    try {
+      const result = await togglePlanInProgressAction({
+        planId: plan.id,
+      });
+
+      if (!result.ok) {
+        setPlansState(previousSnapshot);
+        setFeedback(result.error);
+        return;
+      }
+
+      if ("plan" in result) {
+        setPlansState((current) => upsertPlan(current, result.plan));
+      }
+    } finally {
+      setPlanBusy(plan.id, false);
+    }
+  }
+
+  async function handleFinish(plan: PlanItem) {
+    setFeedback(null);
+    setPlanBusy(plan.id, true);
+    const previousSnapshot = cloneGroupedPlans(plansState);
+    const optimisticPlan: PlanItem = {
+      ...plan,
+      status: "done",
+      completed: true,
+      completedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setPlansState((current) => upsertPlan(current, optimisticPlan));
+
+    try {
+      const result = await finishPlanAction({
+        planId: plan.id,
+      });
+
+      if (!result.ok) {
+        setPlansState(previousSnapshot);
+        setFeedback(result.error);
+        return;
+      }
+
+      if ("plan" in result) {
+        setPlansState((current) => upsertPlan(current, result.plan));
+      }
+    } finally {
+      setPlanBusy(plan.id, false);
+    }
+  }
+
+  async function handleDelete(plan: PlanItem) {
+    setFeedback(null);
+    setPlanBusy(plan.id, true);
+    const previousSnapshot = cloneGroupedPlans(plansState);
+
+    setPlansState((current) => removePlan(current, plan.period, plan.id));
+
+    try {
+      const result = await deletePlanAction({
+        planId: plan.id,
+      });
+
+      if (!result.ok) {
+        setPlansState(previousSnapshot);
+        setFeedback(result.error);
+      }
+    } finally {
+      setPlanBusy(plan.id, false);
+    }
+  }
 
   return (
     <div className="space-y-4">
       <nav className="grid gap-3 rounded-[2rem] border border-white/10 bg-white/[0.03] p-3 backdrop-blur-md md:grid-cols-4">
         {orderedPeriods.map((period) => {
-          const isActive = period === activePeriod;
-          const activeCount = groupedPlans[period].filter(
+          const isActive = period === selectedPeriod;
+          const activeCount = plansState[period].filter(
             (plan) => plan.status !== "done",
           ).length;
-          const historyCount = groupedPlans[period].filter(
+          const historyCount = plansState[period].filter(
             (plan) => plan.status === "done",
           ).length;
 
           return (
-            <Link
+            <button
               key={period}
-              href={`/cabinet/notes?period=${period}&mode=${activeMode}`}
+              type="button"
+              onClick={() => {
+                setSelectedPeriod(period);
+              }}
               className={[
-                "rounded-[1.4rem] border px-4 py-4 transition",
+                "rounded-[1.4rem] border px-4 py-4 text-left transition",
                 isActive
                   ? "border-sky-300/20 bg-sky-300/[0.12] shadow-[0_0_0_1px_rgba(125,211,252,0.08)]"
                   : "border-white/8 bg-[#091122]/58 hover:border-white/14 hover:bg-[#0d1730]/72",
@@ -374,14 +715,14 @@ export function PlansBoard({
                   {sectionConfig[period].title}
                 </span>
                 <span className="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[0.68rem] uppercase tracking-[0.2em] text-white/58">
-                  {activeMode === "history" ? historyCount : activeCount}
+                  {selectedMode === "history" ? historyCount : activeCount}
                 </span>
               </div>
 
               <p className="mt-3 text-sm leading-6 text-white/48">
                 Активні: {activeCount} · Історія: {historyCount}
               </p>
-            </Link>
+            </button>
           );
         })}
       </nav>
@@ -390,24 +731,27 @@ export function PlansBoard({
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-[0.72rem] uppercase tracking-[0.32em] text-white/40">
-              {config.eyebrow}
+              {currentConfig.eyebrow}
             </p>
             <h2 className="mt-3 text-2xl font-medium text-white">
-              {config.title}
+              {currentConfig.title}
             </h2>
           </div>
 
           <div className="grid grid-cols-2 gap-2 rounded-[1.2rem] border border-white/10 bg-[#091122]/64 p-2">
             {(Object.keys(modeConfig) as NotesViewMode[]).map((mode) => {
-              const isActive = mode === activeMode;
-              const count = groupedPlans[activePeriod].filter((plan) =>
+              const isActive = mode === selectedMode;
+              const count = plansState[selectedPeriod].filter((plan) =>
                 mode === "history" ? plan.status === "done" : plan.status !== "done",
               ).length;
 
               return (
-                <Link
+                <button
                   key={mode}
-                  href={`/cabinet/notes?period=${activePeriod}&mode=${mode}`}
+                  type="button"
+                  onClick={() => {
+                    setSelectedMode(mode);
+                  }}
                   className={[
                     "rounded-[1rem] border px-4 py-3 text-sm transition",
                     isActive
@@ -421,36 +765,54 @@ export function PlansBoard({
                       {count}
                     </span>
                   </div>
-                </Link>
+                </button>
               );
             })}
           </div>
         </div>
 
-        {activeMode === "active" ? <AddPlanForm period={activePeriod} /> : null}
+        {feedback ? (
+          <div className="mt-5 rounded-[1.2rem] border border-amber-300/14 bg-amber-300/[0.08] px-4 py-3 text-sm text-amber-50/92">
+            {feedback}
+          </div>
+        ) : null}
+
+        {selectedMode === "active" ? (
+          <AddPlanForm
+            period={selectedPeriod}
+            isCreating={isCreating}
+            onCreate={handleCreate}
+          />
+        ) : null}
 
         <div className="mt-6 flex flex-1 flex-col gap-3">
           {visiblePlans.length ? (
             visiblePlans.map((plan) =>
-              activeMode === "history" ? (
+              selectedMode === "history" ? (
                 <HistoryPlanRow
                   key={plan.id}
                   plan={plan}
-                  activePeriod={activePeriod}
+                  isBusy={busyPlanIds.includes(plan.id)}
+                  onDelete={handleDelete}
                 />
               ) : (
                 <ActivePlanRow
                   key={plan.id}
                   plan={plan}
-                  activePeriod={activePeriod}
+                  now={now}
+                  isBusy={busyPlanIds.includes(plan.id)}
+                  onTogglePending={handleTogglePending}
+                  onFinish={handleFinish}
+                  onDelete={handleDelete}
+                  onUpdate={handleUpdate}
                 />
               ),
             )
           ) : (
             <div className="flex flex-1 items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-[#07101f]/45 px-5 py-10 text-center text-sm leading-7 text-white/38">
-              {activeMode === "history"
-                ? config.emptyHistoryText
-                : config.emptyActiveText}
+              {selectedMode === "history"
+                ? currentConfig.emptyHistoryText
+                : currentConfig.emptyActiveText}
             </div>
           )}
         </div>
