@@ -5,6 +5,12 @@ CREATE TABLE IF NOT EXISTS profiles (
   role TEXT NOT NULL DEFAULT 'owner',
   display_name TEXT,
   avatar_url TEXT,
+  two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  two_factor_secret_encrypted TEXT,
+  two_factor_setup_secret_encrypted TEXT,
+  two_factor_backup_codes_json TEXT,
+  two_factor_enabled_at TIMESTAMPTZ,
+  two_factor_last_verified_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireOwnerEmail } from "@/lib/auth-guards";
 import {
   archiveFacebookDrafts,
   attachFacebookDraftImage,
@@ -24,16 +23,6 @@ import {
   verifyFacebookPageConnection,
   type FacebookWorkspaceTab,
 } from "@/lib/social/facebook";
-
-async function requireOwnerEmail() {
-  const session = await getServerSession(authOptions);
-
-  if (!session?.user?.isOwner || !session.user.email) {
-    throw new Error("Unauthorized");
-  }
-
-  return session.user.email.trim().toLowerCase();
-}
 
 function getFacebookWorkspaceTab(
   formData: FormData,

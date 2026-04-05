@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getOwnerAccessState } from "@/lib/auth-guards";
 import { listRecentTelegramMessagesForProject } from "@/lib/web-projects";
 
 export const dynamic = "force-dynamic";
@@ -9,9 +8,9 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ projectId: string }> },
 ) {
-  const session = await getServerSession(authOptions);
+  const access = await getOwnerAccessState();
 
-  if (!session?.user?.isOwner || !session.user.email) {
+  if (!access.isOwner || !access.email || !access.twoFactorVerified) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
 
@@ -23,7 +22,7 @@ export async function GET(
     : 20;
 
   const messages = await listRecentTelegramMessagesForProject({
-    ownerEmail: session.user.email,
+    ownerEmail: access.email,
     projectId,
     limit,
   });

@@ -3,8 +3,7 @@
 import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireOwnerEmail } from "@/lib/auth-guards";
 import { createPostDraftBatchForProject, createScheduledPostDraftBatch } from "@/lib/post-queue";
 import { isPostContentType } from "@/lib/post-studio";
 import {
@@ -36,16 +35,6 @@ import {
   updateWebProjectAiInstructions,
   updateWebProjectTelegramSettings,
 } from "@/lib/web-projects";
-
-async function requireOwnerEmail() {
-  const session = await getServerSession(authOptions);
-
-  if (!session?.user?.isOwner || !session.user.email) {
-    throw new Error("Unauthorized");
-  }
-
-  return session.user.email.trim().toLowerCase();
-}
 
 export async function createWebProjectAction(formData: FormData) {
   const ownerEmail = await requireOwnerEmail();

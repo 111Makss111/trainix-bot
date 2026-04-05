@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireOwnerEmail } from "@/lib/auth-guards";
 import {
   createPlan,
   deletePlan,
@@ -17,16 +16,6 @@ export type NotesMutationResult =
   | { ok: true; plan: PlanItem }
   | { ok: true; planId: string }
   | { ok: false; error: string };
-
-async function requireOwnerEmail() {
-  const session = await getServerSession(authOptions);
-
-  if (!session?.user?.isOwner || !session.user.email) {
-    throw new Error("Unauthorized");
-  }
-
-  return session.user.email.trim().toLowerCase();
-}
 
 function invalidResult(error: string): NotesMutationResult {
   return {

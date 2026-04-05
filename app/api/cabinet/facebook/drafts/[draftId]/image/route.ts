@@ -1,5 +1,4 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getOwnerAccessState } from "@/lib/auth-guards";
 import { getFacebookDraftStoredImage } from "@/lib/social/facebook";
 
 type RouteContext = {
@@ -22,16 +21,15 @@ function parseDataImageUrl(value: string) {
 }
 
 export async function GET(_: Request, context: RouteContext) {
-  const session = await getServerSession(authOptions);
+  const access = await getOwnerAccessState();
 
-  if (!session?.user?.isOwner || !session.user.email) {
+  if (!access.isOwner || !access.email || !access.twoFactorVerified) {
     return new Response("Unauthorized", { status: 401 });
   }
 
   const { draftId } = await context.params;
-  const ownerEmail = session.user.email.trim().toLowerCase();
   const asset = await getFacebookDraftStoredImage({
-    ownerEmail,
+    ownerEmail: access.email,
     draftId,
   });
 

@@ -8,14 +8,18 @@ type EnsureOwnerProfileInput = {
   image?: string | null;
 };
 
-export async function ensureOwnerProfile(input: EnsureOwnerProfileInput) {
+let hasEnsuredProfilesTable = false;
+
+async function ensureProfilesTable() {
+  if (hasEnsuredProfilesTable) {
+    return;
+  }
+
   const sql = getSql();
 
   if (!sql) {
     return;
   }
-
-  const email = input.email.trim().toLowerCase();
 
   await sql`
     CREATE TABLE IF NOT EXISTS profiles (
@@ -25,10 +29,55 @@ export async function ensureOwnerProfile(input: EnsureOwnerProfileInput) {
       role TEXT NOT NULL DEFAULT 'owner',
       display_name TEXT,
       avatar_url TEXT,
+      two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+      two_factor_secret_encrypted TEXT,
+      two_factor_setup_secret_encrypted TEXT,
+      two_factor_backup_codes_json TEXT,
+      two_factor_enabled_at TIMESTAMPTZ,
+      two_factor_last_verified_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+
+  await sql`
+    ALTER TABLE profiles
+    ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE
+  `;
+  await sql`
+    ALTER TABLE profiles
+    ADD COLUMN IF NOT EXISTS two_factor_secret_encrypted TEXT
+  `;
+  await sql`
+    ALTER TABLE profiles
+    ADD COLUMN IF NOT EXISTS two_factor_setup_secret_encrypted TEXT
+  `;
+  await sql`
+    ALTER TABLE profiles
+    ADD COLUMN IF NOT EXISTS two_factor_backup_codes_json TEXT
+  `;
+  await sql`
+    ALTER TABLE profiles
+    ADD COLUMN IF NOT EXISTS two_factor_enabled_at TIMESTAMPTZ
+  `;
+  await sql`
+    ALTER TABLE profiles
+    ADD COLUMN IF NOT EXISTS two_factor_last_verified_at TIMESTAMPTZ
+  `;
+
+  hasEnsuredProfilesTable = true;
+}
+
+export async function ensureOwnerProfile(input: EnsureOwnerProfileInput) {
+  const sql = getSql();
+
+  if (!sql) {
+    return;
+  }
+
+  const email = input.email.trim().toLowerCase();
+
+  await ensureProfilesTable();
 
   await sql`
     INSERT INTO profiles (

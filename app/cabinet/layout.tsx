@@ -1,18 +1,21 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
 import { CabinetSidebar } from "@/components/cabinet";
-import { authOptions } from "@/lib/auth";
+import { getOwnerAccessState } from "@/lib/auth-guards";
 
 export default async function CabinetLayout({
   children,
 }: Readonly<{
   children: ReactNode;
 }>) {
-  const session = await getServerSession(authOptions);
+  const access = await getOwnerAccessState();
 
-  if (!session?.user?.isOwner) {
+  if (!access.isOwner) {
     redirect("/");
+  }
+
+  if (!access.twoFactorVerified) {
+    redirect("/verify-2fa");
   }
 
   return (
