@@ -185,3 +185,27 @@ CREATE TABLE IF NOT EXISTS facebook_post_drafts (
 
 CREATE INDEX IF NOT EXISTS idx_facebook_post_drafts_owner_status
 ON facebook_post_drafts (owner_email, status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS practice_tasks (
+  id TEXT PRIMARY KEY,
+  owner_email TEXT NOT NULL,
+  stack TEXT NOT NULL,
+  difficulty TEXT NOT NULL,
+  task_type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  instructions TEXT NOT NULL,
+  provided_data TEXT,
+  starter_code TEXT,
+  hint TEXT,
+  expected_outcome TEXT,
+  fingerprint TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  solved_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (owner_email, fingerprint)
+);
+
+CREATE INDEX IF NOT EXISTS idx_practice_tasks_owner_status_created
+ON practice_tasks (owner_email, status, created_at DESC);

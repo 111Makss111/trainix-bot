@@ -82,6 +82,25 @@ function NotesIcon() {
   );
 }
 
+function PracticeIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M6.5 5.5h11a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-4.25L9.5 21v-2.5h-3a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8.5 10h7M8.5 13.5h4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function WebIcon() {
   return (
     <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
@@ -189,6 +208,12 @@ const navItems: NavItem[] = [
     label: "Нотатки",
     description: "Ідеї та чернетки",
     icon: <NotesIcon />,
+  },
+  {
+    href: "/cabinet/practice",
+    label: "Practice",
+    description: "Dev-задачі й тренажер",
+    icon: <PracticeIcon />,
   },
   {
     href: "/cabinet/web",
