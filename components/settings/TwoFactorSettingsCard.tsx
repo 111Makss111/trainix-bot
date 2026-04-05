@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
+import QRCode from "qrcode";
 import {
   beginTwoFactorSetupAction,
   cancelTwoFactorSetupAction,
@@ -92,6 +94,7 @@ export function TwoFactorSettingsCard({
   initialState,
 }: TwoFactorSettingsCardProps) {
   const [state, setState] = useState(initialState);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
   const [result, setResult] = useState<TwoFactorMutationResult | null>(null);
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [setupCode, setSetupCode] = useState("");
@@ -100,6 +103,45 @@ export function TwoFactorSettingsCard({
   const [isConfirmingSetup, setIsConfirmingSetup] = useState(false);
   const [isCancellingSetup, setIsCancellingSetup] = useState(false);
   const [isDisabling, setIsDisabling] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function buildQrCode() {
+      if (!state.otpauthUri) {
+        setQrCodeDataUrl(null);
+        return;
+      }
+
+      try {
+        const nextQr = await QRCode.toDataURL(state.otpauthUri, {
+          errorCorrectionLevel: "M",
+          margin: 1,
+          width: 320,
+          color: {
+            dark: "#f8fbff",
+            light: "#00000000",
+          },
+        });
+
+        if (active) {
+          setQrCodeDataUrl(nextQr);
+        }
+      } catch (error) {
+        console.error("Failed to generate two-factor QR", error);
+
+        if (active) {
+          setQrCodeDataUrl(null);
+        }
+      }
+    }
+
+    void buildQrCode();
+
+    return () => {
+      active = false;
+    };
+  }, [state.otpauthUri]);
 
   async function handleStartSetup() {
     setIsStartingSetup(true);
@@ -285,7 +327,28 @@ export function TwoFactorSettingsCard({
 
           <div className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="rounded-[1.4rem] border border-white/10 bg-[#06101e] px-4 py-4">
-              <p className="text-xs uppercase tracking-[0.22em] text-white/36">Secret key</p>
+              <p className="text-xs uppercase tracking-[0.22em] text-white/36">QR Code</p>
+
+              <div className="mt-4 flex min-h-[18rem] items-center justify-center rounded-[1.3rem] border border-white/10 bg-[#091321] p-4">
+                {qrCodeDataUrl ? (
+                  <Image
+                    src={qrCodeDataUrl}
+                    alt="QR code for Google Authenticator"
+                    width={320}
+                    height={320}
+                    unoptimized
+                    className="h-auto w-full max-w-[16rem] rounded-[1.2rem] border border-white/8 bg-[#0b1525] p-3"
+                  />
+                ) : (
+                  <div className="max-w-xs text-center text-sm leading-7 text-white/44">
+                    QR-код з’явиться тут одразу після генерації setup key.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-[1.4rem] border border-white/10 bg-[#06101e] px-4 py-4">
+              <p className="text-xs uppercase tracking-[0.22em] text-white/36">Manual entry</p>
               <p className="mt-3 break-all font-mono text-sm tracking-[0.18em] text-white/88">
                 {state.manualEntryKey}
               </p>
@@ -299,10 +362,7 @@ export function TwoFactorSettingsCard({
                   />
                 </div>
               ) : null}
-            </div>
 
-            <div className="rounded-[1.4rem] border border-white/10 bg-[#06101e] px-4 py-4">
-              <p className="text-xs uppercase tracking-[0.22em] text-white/36">Manual entry</p>
               <ul className="mt-3 space-y-2 text-sm leading-6 text-white/68">
                 <li>1. Відкрий Google Authenticator.</li>
                 <li>2. Натисни `+` і вибери ручне додавання.</li>
