@@ -158,6 +158,24 @@ function TikTokIcon() {
   );
 }
 
+function SettingsIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M12 8.25a3.75 3.75 0 1 0 0 7.5 3.75 3.75 0 0 0 0-7.5Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M19.1 13.5a7.98 7.98 0 0 0 .06-1.5 7.98 7.98 0 0 0-.06-1.5l1.72-1.35a.75.75 0 0 0 .18-.96l-1.63-2.82a.75.75 0 0 0-.9-.33l-2.04.82a7.56 7.56 0 0 0-2.6-1.5l-.31-2.18A.75.75 0 0 0 12.78 2h-3.26a.75.75 0 0 0-.74.63L8.47 4.8a7.56 7.56 0 0 0-2.6 1.5l-2.04-.82a.75.75 0 0 0-.9.33L1.3 8.63a.75.75 0 0 0 .18.96L3.2 10.94a7.98 7.98 0 0 0-.06 1.5c0 .5.02 1 .06 1.5l-1.72 1.35a.75.75 0 0 0-.18.96l1.63 2.82a.75.75 0 0 0 .9.33l2.04-.82a7.56 7.56 0 0 0 2.6 1.5l.31 2.18a.75.75 0 0 0 .74.63h3.26a.75.75 0 0 0 .74-.63l.31-2.18a7.56 7.56 0 0 0 2.6-1.5l2.04.82a.75.75 0 0 0 .9-.33l1.63-2.82a.75.75 0 0 0-.18-.96L19.1 13.5Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 const navItems: NavItem[] = [
   {
     href: "/cabinet",
@@ -201,6 +219,12 @@ const navItems: NavItem[] = [
     label: "TikTok",
     description: "Short video модуль",
     icon: <TikTokIcon />,
+  },
+  {
+    href: "/cabinet/settings",
+    label: "Налаштування",
+    description: "Безпека та доступ",
+    icon: <SettingsIcon />,
   },
 ];
 
