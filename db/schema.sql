@@ -209,3 +209,27 @@ CREATE TABLE IF NOT EXISTS practice_tasks (
 
 CREATE INDEX IF NOT EXISTS idx_practice_tasks_owner_status_created
 ON practice_tasks (owner_email, status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS crypto_weekly_zones (
+  id TEXT PRIMARY KEY,
+  market_type TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  week_key TEXT NOT NULL,
+  zone_kind TEXT NOT NULL,
+  bias TEXT NOT NULL,
+  label TEXT NOT NULL,
+  price_from DOUBLE PRECISION NOT NULL,
+  price_to DOUBLE PRECISION NOT NULL,
+  confidence INTEGER NOT NULL DEFAULT 50,
+  status TEXT NOT NULL DEFAULT 'active',
+  source_interval TEXT NOT NULL DEFAULT '4h',
+  touched_at TIMESTAMPTZ,
+  broken_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (market_type, symbol, week_key, label)
+);
+
+CREATE INDEX IF NOT EXISTS idx_crypto_weekly_zones_market_week
+ON crypto_weekly_zones (market_type, symbol, week_key, updated_at DESC);

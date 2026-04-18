@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CryptoWeeklyZone } from "@/lib/crypto-zones";
 import {
   CandlestickSeries,
   ColorType,
@@ -61,6 +62,13 @@ type TopBook = {
 };
 
 type MarketType = "spot" | "futures";
+
+type WeeklyZonesResponse = {
+  weekKey: string;
+  generatedAt: string;
+  currentPrice: number | null;
+  zones: CryptoWeeklyZone[];
+};
 
 const spotPresetSymbols = [
   "BTCUSDT",
@@ -130,6 +138,47 @@ function formatTime(value: number) {
   }).format(new Date(value));
 }
 
+function formatDistancePercent(value: number | null) {
+  if (value === null) {
+    return "—";
+  }
+
+  return `${(value * 100).toFixed(2)}%`;
+}
+
+function getZoneStatusLabel(status: CryptoWeeklyZone["status"]) {
+  switch (status) {
+    case "touched":
+      return "Торкнулась";
+    case "broken":
+      return "Зламана";
+    case "completed":
+      return "Відпрацювала";
+    default:
+      return "Активна";
+  }
+}
+
+function getZoneColor(zone: CryptoWeeklyZone) {
+  if (zone.zoneKind === "zero_trend") {
+    return zone.status === "broken" ? "rgba(125, 211, 252, 0.38)" : "rgba(125, 211, 252, 0.58)";
+  }
+
+  if (zone.bias === "support" || zone.bias === "breakout-up") {
+    return zone.status === "completed"
+      ? "rgba(52, 211, 153, 0.72)"
+      : zone.status === "broken"
+        ? "rgba(52, 211, 153, 0.32)"
+        : "rgba(52, 211, 153, 0.58)";
+  }
+
+  return zone.status === "completed"
+    ? "rgba(251, 146, 60, 0.68)"
+    : zone.status === "broken"
+      ? "rgba(248, 113, 113, 0.34)"
+      : "rgba(248, 113, 113, 0.56)";
+}
+
 function buildAttentionScore(input: {
   largeTrades: LargeTrade[];
   walls: OrderWall[];
@@ -180,12 +229,18 @@ export function CryptoWorkspace() {
   const [topBook, setTopBook] = useState<TopBook>({ bid: null, ask: null });
   const [largeTrades, setLargeTrades] = useState<LargeTrade[]>([]);
   const [walls, setWalls] = useState<OrderWall[]>([]);
+  const [weeklyZones, setWeeklyZones] = useState<CryptoWeeklyZone[]>([]);
+  const [weeklyZonesWeekKey, setWeeklyZonesWeekKey] = useState<string | null>(null);
+  const [weeklyZonesGeneratedAt, setWeeklyZonesGeneratedAt] = useState<string | null>(null);
+  const [weeklyZonesStatus, setWeeklyZonesStatus] = useState("Готую weekly snapshot...");
+  const [weeklyZonesError, setWeeklyZonesError] = useState<string | null>(null);
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const wallLinesRef = useRef<IPriceLine[]>([]);
+  const zoneLinesRef = useRef<IPriceLine[]>([]);
   const orderBookRef = useRef<{
     bids: Map<string, number>;
     asks: Map<string, number>;
@@ -285,6 +340,61 @@ export function CryptoWorkspace() {
   }, [symbol]);
 
   useEffect(() => {
+    let active = true;
+
+    async function loadWeeklyZones() {
+      setWeeklyZonesError(null);
+      setWeeklyZonesStatus("Оновлюю weekly snapshot...");
+
+      try {
+        const response = await fetch(
+          `/api/crypto/zones?marketType=${encodeURIComponent(marketType)}&symbol=${encodeURIComponent(symbol)}`,
+          {
+            cache: "no-store",
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to load weekly zones");
+        }
+
+        const payload = (await response.json()) as WeeklyZonesResponse;
+
+        if (!active) {
+          return;
+        }
+
+        setWeeklyZones(payload.zones);
+        setWeeklyZonesWeekKey(payload.weekKey);
+        setWeeklyZonesGeneratedAt(payload.generatedAt);
+        setWeeklyZonesStatus(
+          payload.zones.length
+            ? `${payload.weekKey} · ${payload.zones.length} frozen zones готові`
+            : "Weekly zones ще не зібрались",
+        );
+      } catch (loadError) {
+        console.error(loadError);
+
+        if (!active) {
+          return;
+        }
+
+        setWeeklyZones([]);
+        setWeeklyZonesWeekKey(null);
+        setWeeklyZonesGeneratedAt(null);
+        setWeeklyZonesError("Не вдалося побудувати weekly zones для цього активу.");
+        setWeeklyZonesStatus("Weekly snapshot тимчасово недоступний.");
+      }
+    }
+
+    void loadWeeklyZones();
+
+    return () => {
+      active = false;
+    };
+  }, [marketType, symbol]);
+
+  useEffect(() => {
     if (!chartContainerRef.current || chartRef.current) {
       return;
     }
@@ -366,6 +476,8 @@ export function CryptoWorkspace() {
       resizeObserver.disconnect();
       wallLinesRef.current.forEach((line) => candleSeries.removePriceLine(line));
       wallLinesRef.current = [];
+      zoneLinesRef.current.forEach((line) => candleSeries.removePriceLine(line));
+      zoneLinesRef.current = [];
       markersRef.current = null;
       chart.remove();
       chartRef.current = null;
@@ -693,6 +805,42 @@ export function CryptoWorkspace() {
     };
   }, [interval, largeTradeThreshold, marketType, symbol]);
 
+  useEffect(() => {
+    const candleSeries = candleSeriesRef.current;
+
+    if (!candleSeries) {
+      return;
+    }
+
+    zoneLinesRef.current.forEach((line) => candleSeries.removePriceLine(line));
+    zoneLinesRef.current = weeklyZones.flatMap((zone) => {
+      const color = getZoneColor(zone);
+      const lower = candleSeries.createPriceLine({
+        price: zone.priceFrom,
+        color,
+        lineWidth: zone.status === "active" ? 1 : 2,
+        lineStyle: LineStyle.SparseDotted,
+        axisLabelVisible: false,
+        title: "",
+      });
+      const upper = candleSeries.createPriceLine({
+        price: zone.priceTo,
+        color,
+        lineWidth: zone.status === "active" ? 1 : 2,
+        lineStyle: LineStyle.SparseDotted,
+        axisLabelVisible: true,
+        title: `${zone.label} · ${getZoneStatusLabel(zone.status)}`,
+      });
+
+      return [lower, upper];
+    });
+
+    return () => {
+      zoneLinesRef.current.forEach((line) => candleSeries.removePriceLine(line));
+      zoneLinesRef.current = [];
+    };
+  }, [weeklyZones]);
+
   return (
     <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
       <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.25fr)_24rem]">
@@ -896,11 +1044,108 @@ export function CryptoWorkspace() {
           </div>
 
           <p className="mt-4 text-xs leading-6 text-white/34">
-            Графік побудований на Lightweight Charts від TradingView. Дані йдуть з Binance Spot WebSocket та REST snapshot.
+            Графік побудований на Lightweight Charts від TradingView. Live-дані йдуть з Binance{" "}
+            {marketType === "spot" ? "Spot" : "Futures"} WebSocket та REST snapshot, а weekly zones
+            фіксуються окремим тижневим snapshot.
           </p>
         </div>
 
         <div className="space-y-4">
+          <div className="rounded-[1.7rem] border border-white/10 bg-[#08101d]/82 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[0.72rem] uppercase tracking-[0.24em] text-white/38">
+                  Weekly zones
+                </p>
+                <h3 className="mt-2 text-lg font-medium text-white">Тижневі зони</h3>
+                <p className="mt-1 text-sm leading-6 text-white/40">
+                  Frozen-рівні на тиждень, які не рухаються щохвилини.
+                </p>
+              </div>
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] uppercase tracking-[0.22em] text-white/58">
+                {weeklyZones.length}
+              </span>
+            </div>
+
+            <div className="mt-4 rounded-[1.2rem] border border-white/8 bg-black/10 px-4 py-3">
+              <p className="text-xs leading-6 text-white/46">{weeklyZonesStatus}</p>
+              {weeklyZonesWeekKey ? (
+                <p className="mt-2 text-[0.72rem] uppercase tracking-[0.18em] text-white/32">
+                  {weeklyZonesWeekKey}
+                  {weeklyZonesGeneratedAt
+                    ? ` · snapshot ${new Date(weeklyZonesGeneratedAt).toLocaleDateString("uk-UA")}`
+                    : ""}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {weeklyZones.length ? (
+                weeklyZones.map((zone) => (
+                  <div
+                    key={zone.id}
+                    className="rounded-[1.2rem] border border-white/8 bg-black/10 px-4 py-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className="inline-flex h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: getZoneColor(zone) }}
+                          />
+                          <span className="text-sm font-medium text-white">{zone.label}</span>
+                        </div>
+                        <p className="mt-2 text-xs leading-6 text-white/44">
+                          {zone.zoneKind === "interest"
+                            ? "Зона інтересу, де ринок уже реагував."
+                            : zone.zoneKind === "zero_trend"
+                              ? "Боковик або слабкий тренд без чіткого напрямку."
+                              : "Тригерна зона для можливого імпульсного виходу."}
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[0.64rem] uppercase tracking-[0.18em] text-white/64">
+                        {getZoneStatusLabel(zone.status)}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                      <div>
+                        <p className="text-[0.64rem] uppercase tracking-[0.18em] text-white/30">
+                          Діапазон
+                        </p>
+                        <p className="mt-1 text-sm text-white/72">
+                          {formatPrice(zone.priceFrom)} - {formatPrice(zone.priceTo)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[0.64rem] uppercase tracking-[0.18em] text-white/30">
+                          Distance
+                        </p>
+                        <p className="mt-1 text-sm text-white/72">
+                          {formatDistancePercent(zone.distancePercent)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[0.64rem] uppercase tracking-[0.18em] text-white/30">
+                          Confidence
+                        </p>
+                        <p className="mt-1 text-sm text-white/72">{zone.confidence}/100</p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : weeklyZonesError ? (
+                <div className="rounded-[1.2rem] border border-red-300/14 bg-red-300/[0.08] px-4 py-6 text-sm leading-7 text-red-50/88">
+                  {weeklyZonesError}
+                </div>
+              ) : (
+                <div className="rounded-[1.2rem] border border-dashed border-white/10 bg-black/10 px-4 py-6 text-sm leading-7 text-white/38">
+                  Після побудови тижневого snapshot тут з’являться frozen zones зі статусами.
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="rounded-[1.7rem] border border-white/10 bg-[#08101d]/82 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
