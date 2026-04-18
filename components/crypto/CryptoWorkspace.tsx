@@ -695,7 +695,7 @@ export function CryptoWorkspace() {
 
   return (
     <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_24rem]">
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.25fr)_24rem]">
         <div className="rounded-[1.7rem] border border-white/10 bg-[#08101d]/82 p-4">
           <div className="grid gap-4 2xl:grid-cols-[minmax(0,17rem)_minmax(0,1fr)] 2xl:items-start">
             <div className="min-w-0 rounded-[1.3rem] border border-white/8 bg-black/10 p-4">
@@ -709,7 +709,7 @@ export function CryptoWorkspace() {
             </div>
 
             <div className="rounded-[1.3rem] border border-white/8 bg-black/10 p-4">
-              <div className="grid gap-3 xl:grid-cols-[minmax(8rem,0.72fr)_minmax(0,1.35fr)_minmax(8rem,0.72fr)_minmax(10rem,0.95fr)]">
+              <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
                 <label className="grid gap-2">
                   <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
                     Ринок
@@ -785,11 +785,11 @@ export function CryptoWorkspace() {
                   </select>
                 </label>
 
-                <label className="grid gap-2 xl:col-span-4">
+                <label className="grid gap-2 md:col-span-2 2xl:col-span-4">
                   <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
                     Власна пара Binance {marketType === "spot" ? "Spot" : "Futures"}
                   </span>
-                  <div className="flex flex-col gap-2 lg:flex-row">
+                  <div className="flex flex-col gap-2 xl:flex-row">
                     <input
                       value={symbolInput}
                       onChange={(event) => setSymbolInput(event.target.value)}
@@ -805,7 +805,7 @@ export function CryptoWorkspace() {
                     <button
                       type="button"
                       onClick={applySymbolInput}
-                      className="h-11 rounded-[1rem] border border-white/12 bg-white/[0.05] px-4 text-sm font-medium text-white/82 transition hover:bg-white/[0.08] lg:min-w-[9rem]"
+                      className="h-11 rounded-[1rem] border border-white/12 bg-white/[0.05] px-4 text-sm font-medium text-white/82 transition hover:bg-white/[0.08] xl:min-w-[9rem]"
                     >
                       Застосувати
                     </button>
