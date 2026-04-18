@@ -101,6 +101,20 @@ function PracticeIcon() {
   );
 }
 
+function CryptoIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M12 3.5v17M8.5 6.5h4.3a2.6 2.6 0 1 1 0 5.2H9.7a2.8 2.8 0 1 0 0 5.6H16"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function WebIcon() {
   return (
     <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
@@ -214,6 +228,12 @@ const navItems: NavItem[] = [
     label: "Practice",
     description: "Dev-задачі й тренажер",
     icon: <PracticeIcon />,
+  },
+  {
+    href: "/cabinet/crypto",
+    label: "Crypto",
+    description: "Графік і ордери",
+    icon: <CryptoIcon />,
   },
   {
     href: "/cabinet/web",
