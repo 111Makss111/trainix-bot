@@ -1,6 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  evaluateZoneStatus,
+  generateWeeklyZonesFromCandles,
+  getIsoWeekKey,
+  getWeekStartUtc,
+  type Candle,
+  type CryptoZoneDraft,
+} from "@/lib/crypto-zone-engine";
 import type { CryptoWeeklyZone } from "@/lib/crypto-zones";
 import {
   CandlestickSeries,
@@ -111,6 +119,28 @@ const marketOptions = [
     label: "Futures",
   },
 ] as const;
+const weeklySnapshotVersion = "v1";
+
+function getRestBase(marketType: MarketType) {
+  return marketType === "spot"
+    ? "https://api.binance.com/api/v3"
+    : "https://fapi.binance.com/fapi/v1";
+}
+
+function parseKlines(rows: BinanceRestKline[]): Candle[] {
+  return rows.map((row) => ({
+    openTime: Number(row[0]),
+    open: Number(row[1]),
+    high: Number(row[2]),
+    low: Number(row[3]),
+    close: Number(row[4]),
+    volume: Number(row[5]),
+  }));
+}
+
+function getWeeklySnapshotStorageKey(marketType: MarketType, symbol: string, weekKey: string) {
+  return `crypto-weekly-zones:${weeklySnapshotVersion}:${marketType}:${symbol}:${weekKey}`;
+}
 
 function toChartTime(value: number) {
   return Math.floor(value / 1000) as UTCTimestamp;
@@ -241,6 +271,7 @@ export function CryptoWorkspace() {
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const wallLinesRef = useRef<IPriceLine[]>([]);
   const zoneLinesRef = useRef<IPriceLine[]>([]);
+  const candlesRef = useRef<Candle[]>([]);
   const orderBookRef = useRef<{
     bids: Map<string, number>;
     asks: Map<string, number>;
@@ -335,6 +366,110 @@ export function CryptoWorkspace() {
     }
   }
 
+  async function buildClientWeeklyZonesSnapshot(
+    activeMarketType: MarketType,
+    activeSymbol: string,
+  ): Promise<WeeklyZonesResponse> {
+    const now = new Date();
+    const weekKey = getIsoWeekKey(now);
+    const generatedAt = now.toISOString();
+    const storageKey = getWeeklySnapshotStorageKey(activeMarketType, activeSymbol, weekKey);
+    const restBase = getRestBase(activeMarketType);
+
+    let snapshot: CryptoZoneDraft[] | null = null;
+
+    if (typeof window !== "undefined") {
+      const raw = window.localStorage.getItem(storageKey);
+
+      if (raw) {
+        try {
+          snapshot = JSON.parse(raw) as CryptoZoneDraft[];
+        } catch (error) {
+          console.error("Failed to parse local weekly snapshot", error);
+          window.localStorage.removeItem(storageKey);
+        }
+      }
+    }
+
+    if (!snapshot || !snapshot.length) {
+      const sourceResponse = await fetch(
+        `${restBase}/klines?symbol=${activeSymbol}&interval=4h&limit=120`,
+        {
+          cache: "no-store",
+        },
+      );
+
+      if (!sourceResponse.ok) {
+        throw new Error("Failed to load browser-side klines for weekly zones");
+      }
+
+      const sourceRows = (await sourceResponse.json()) as BinanceRestKline[];
+      snapshot = generateWeeklyZonesFromCandles(parseKlines(sourceRows));
+
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
+      }
+    }
+
+    const statusResponse = await fetch(
+      `${restBase}/klines?symbol=${activeSymbol}&interval=1h&startTime=${getWeekStartUtc(now).getTime()}&limit=240`,
+      {
+        cache: "no-store",
+      },
+    );
+
+    if (!statusResponse.ok) {
+      throw new Error("Failed to load browser-side status candles for weekly zones");
+    }
+
+    const statusRows = (await statusResponse.json()) as BinanceRestKline[];
+    const statusCandles = parseKlines(statusRows);
+    const currentWeeklyPrice = statusCandles[statusCandles.length - 1]?.close ?? null;
+
+    return {
+      weekKey,
+      generatedAt,
+      currentPrice: currentWeeklyPrice,
+      zones: snapshot
+        .map((zone) => {
+          const statusState = evaluateZoneStatus(zone, statusCandles);
+          const midPrice = (zone.priceFrom + zone.priceTo) / 2;
+          const distancePercent =
+            currentWeeklyPrice && currentWeeklyPrice > 0
+              ? Math.abs(midPrice - currentWeeklyPrice) / currentWeeklyPrice
+              : null;
+
+          return {
+            id: `${weekKey}-${zone.label}-${zone.bias}`,
+            marketType: activeMarketType,
+            symbol: activeSymbol,
+            weekKey,
+            zoneKind: zone.zoneKind,
+            bias: zone.bias,
+            label: zone.label,
+            priceFrom: zone.priceFrom,
+            priceTo: zone.priceTo,
+            confidence: zone.confidence,
+            status: statusState.status,
+            sourceInterval: zone.sourceInterval,
+            generatedAt,
+            updatedAt: generatedAt,
+            touchedAt: statusState.touchedAt,
+            brokenAt: statusState.brokenAt,
+            completedAt: statusState.completedAt,
+            currentPrice: currentWeeklyPrice,
+            distancePercent,
+          } satisfies CryptoWeeklyZone;
+        })
+        .sort((left, right) => {
+          const leftDistance = left.distancePercent ?? Number.POSITIVE_INFINITY;
+          const rightDistance = right.distancePercent ?? Number.POSITIVE_INFINITY;
+
+          return leftDistance - rightDistance;
+        }),
+    };
+  }
+
   useEffect(() => {
     setSymbolInput(symbol);
   }, [symbol]);
@@ -374,16 +509,38 @@ export function CryptoWorkspace() {
         );
       } catch (loadError) {
         console.error(loadError);
+        try {
+          const fallbackPayload = await buildClientWeeklyZonesSnapshot(
+            marketType,
+            symbol,
+          );
 
-        if (!active) {
-          return;
+          if (!active) {
+            return;
+          }
+
+          setWeeklyZones(fallbackPayload.zones);
+          setWeeklyZonesWeekKey(fallbackPayload.weekKey);
+          setWeeklyZonesGeneratedAt(fallbackPayload.generatedAt);
+          setWeeklyZonesStatus(
+            fallbackPayload.zones.length
+              ? `${fallbackPayload.weekKey} · локальний frozen snapshot готовий`
+              : "Weekly zones ще не зібрались",
+          );
+          setWeeklyZonesError(null);
+        } catch (fallbackError) {
+          console.error(fallbackError);
+
+          if (!active) {
+            return;
+          }
+
+          setWeeklyZones([]);
+          setWeeklyZonesWeekKey(null);
+          setWeeklyZonesGeneratedAt(null);
+          setWeeklyZonesError("Не вдалося побудувати weekly zones для цього активу.");
+          setWeeklyZonesStatus("Weekly snapshot тимчасово недоступний.");
         }
-
-        setWeeklyZones([]);
-        setWeeklyZonesWeekKey(null);
-        setWeeklyZonesGeneratedAt(null);
-        setWeeklyZonesError("Не вдалося побудувати weekly zones для цього активу.");
-        setWeeklyZonesStatus("Weekly snapshot тимчасово недоступний.");
       }
     }
 
@@ -584,6 +741,14 @@ export function CryptoWorkspace() {
           close: Number(item[4]),
           volume: Number(item[5]),
         }));
+        candlesRef.current = klines.map((item) => ({
+          openTime: Number(item[0]),
+          open: Number(item[1]),
+          high: Number(item[2]),
+          low: Number(item[3]),
+          close: Number(item[4]),
+          volume: Number(item[5]),
+        }));
 
         candleSeriesInstance.setData(candles);
         volumeSeriesInstance.setData(
@@ -648,6 +813,24 @@ export function CryptoWorkspace() {
             };
 
             candleSeriesInstance.update(candle);
+            const nextRawCandle: Candle = {
+              openTime: Number(kline.t),
+              open: Number(kline.o),
+              high: Number(kline.h),
+              low: Number(kline.l),
+              close: Number(kline.c),
+              volume: Number(kline.v),
+            };
+            const nextCandles = [...candlesRef.current];
+            const lastCandle = nextCandles[nextCandles.length - 1];
+
+            if (lastCandle?.openTime === nextRawCandle.openTime) {
+              nextCandles[nextCandles.length - 1] = nextRawCandle;
+            } else {
+              nextCandles.push(nextRawCandle);
+            }
+
+            candlesRef.current = nextCandles.slice(-250);
             volumeSeriesInstance.update({
               time: candle.time,
               value: candle.volume,
