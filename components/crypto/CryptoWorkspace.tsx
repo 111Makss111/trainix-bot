@@ -709,15 +709,15 @@ export function CryptoWorkspace() {
             </div>
 
             <div className="rounded-[1.3rem] border border-white/8 bg-black/10 p-4">
-              <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
-                <label className="grid gap-2">
-                  <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
+              <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-12">
+                <label className="grid min-w-0 gap-2 2xl:col-span-2">
+                  <span className="block text-[0.64rem] uppercase tracking-[0.16em] whitespace-nowrap text-white/34">
                     Ринок
                   </span>
                   <select
                     value={marketType}
                     onChange={(event) => setMarketType(event.target.value as MarketType)}
-                    className="h-11 w-full min-w-0 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition focus:border-white/18"
+                    className="h-11 w-full min-w-0 rounded-[1rem] border border-white/12 bg-[#0a1328]/95 px-4 text-sm text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition focus:border-white/20"
                   >
                     {marketOptions.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -727,14 +727,14 @@ export function CryptoWorkspace() {
                   </select>
                 </label>
 
-                <label className="grid gap-2">
-                  <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
+                <label className="grid min-w-0 gap-2 2xl:col-span-4">
+                  <span className="block text-[0.64rem] uppercase tracking-[0.16em] whitespace-nowrap text-white/34">
                     Актив
                   </span>
                   <select
                     value={symbol}
                     onChange={(event) => setSymbol(event.target.value)}
-                    className="h-11 w-full min-w-0 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition focus:border-white/18"
+                    className="h-11 w-full min-w-0 rounded-[1rem] border border-white/12 bg-[#0a1328]/95 px-4 text-sm text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition focus:border-white/20"
                   >
                     {!activePresetSymbols.includes(symbol) ? (
                       <option value={symbol}>{symbol} · custom</option>
@@ -747,8 +747,8 @@ export function CryptoWorkspace() {
                   </select>
                 </label>
 
-                <label className="grid gap-2">
-                  <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
+                <label className="grid min-w-0 gap-2 2xl:col-span-3">
+                  <span className="block text-[0.64rem] uppercase tracking-[0.16em] whitespace-nowrap text-white/34">
                     Таймфрейм
                   </span>
                   <select
@@ -756,7 +756,7 @@ export function CryptoWorkspace() {
                     onChange={(event) =>
                       setInterval(event.target.value as (typeof intervalOptions)[number])
                     }
-                    className="h-11 w-full min-w-0 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition focus:border-white/18"
+                    className="h-11 w-full min-w-0 rounded-[1rem] border border-white/12 bg-[#0a1328]/95 px-4 text-sm text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition focus:border-white/20"
                   >
                     {intervalOptions.map((option) => (
                       <option key={option} value={option}>
@@ -766,8 +766,8 @@ export function CryptoWorkspace() {
                   </select>
                 </label>
 
-                <label className="grid gap-2">
-                  <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
+                <label className="grid min-w-0 gap-2 2xl:col-span-3">
+                  <span className="block text-[0.64rem] uppercase tracking-[0.16em] whitespace-nowrap text-white/34">
                     Поріг трейду
                   </span>
                   <select
@@ -775,7 +775,7 @@ export function CryptoWorkspace() {
                     onChange={(event) =>
                       setLargeTradeThreshold(Number(event.target.value) as (typeof largeTradeThresholds)[number])
                     }
-                    className="h-11 w-full min-w-0 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition focus:border-white/18"
+                    className="h-11 w-full min-w-0 rounded-[1rem] border border-white/12 bg-[#0a1328]/95 px-4 text-sm text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition focus:border-white/20"
                   >
                     {largeTradeThresholds.map((option) => (
                       <option key={option} value={option}>
@@ -785,8 +785,8 @@ export function CryptoWorkspace() {
                   </select>
                 </label>
 
-                <label className="grid gap-2 md:col-span-2 2xl:col-span-4">
-                  <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
+                <label className="grid gap-2 md:col-span-2 2xl:col-span-12">
+                  <span className="block text-[0.64rem] uppercase tracking-[0.16em] whitespace-nowrap text-white/34">
                     Власна пара Binance {marketType === "spot" ? "Spot" : "Futures"}
                   </span>
                   <div className="flex flex-col gap-2 xl:flex-row">
@@ -800,17 +800,17 @@ export function CryptoWorkspace() {
                         }
                       }}
                       placeholder="Наприклад POPCATUSDT"
-                      className="h-11 min-w-0 flex-1 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition placeholder:text-white/24 focus:border-white/18"
+                      className="h-11 min-w-0 flex-1 rounded-[1rem] border border-white/12 bg-[#0a1328]/95 px-4 text-sm text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition placeholder:text-white/24 focus:border-white/20"
                     />
                     <button
                       type="button"
                       onClick={applySymbolInput}
-                      className="h-11 rounded-[1rem] border border-white/12 bg-white/[0.05] px-4 text-sm font-medium text-white/82 transition hover:bg-white/[0.08] xl:min-w-[9rem]"
+                      className="h-11 shrink-0 rounded-[1rem] border border-white/12 bg-white/[0.05] px-4 text-sm font-medium text-white/82 transition hover:bg-white/[0.08] xl:min-w-[9rem]"
                     >
                       Застосувати
                     </button>
                   </div>
-                  <p className="text-xs leading-6 text-white/34">
+                  <p className="max-w-[52rem] text-xs leading-6 text-white/34">
                     Якщо потрібної монети немає в списку, введи свою пару вручну. Для мем-монет типу{" "}
                     <span className="text-white/60">POPCATUSDT</span>{" "}
                     переключайся на{" "}
