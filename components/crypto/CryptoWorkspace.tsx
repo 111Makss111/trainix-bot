@@ -48,10 +48,36 @@ type OrderWall = {
   notional: number;
 };
 
-const symbolOptions = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"] as const;
+type DayTickerStats = {
+  priceChangePercent: number;
+  quoteVolume: number;
+  highPrice: number;
+  lowPrice: number;
+};
+
+type TopBook = {
+  bid: number | null;
+  ask: number | null;
+};
+
+const presetSymbols = [
+  "BTCUSDT",
+  "ETHUSDT",
+  "SOLUSDT",
+  "BNBUSDT",
+  "XRPUSDT",
+  "DOGEUSDT",
+  "ADAUSDT",
+  "LINKUSDT",
+  "AVAXUSDT",
+  "SUIUSDT",
+  "PEPEUSDT",
+  "SHIBUSDT",
+] as const;
 const intervalOptions = ["1m", "5m", "15m", "1h", "4h"] as const;
 const largeTradeThresholds = [25000, 50000, 100000, 250000, 500000] as const;
 const maxTradeMarkers = 30;
+const presetSymbolList: readonly string[] = presetSymbols;
 
 function toChartTime(value: number) {
   return Math.floor(value / 1000) as UTCTimestamp;
@@ -115,7 +141,8 @@ function describeAttention(score: number) {
 }
 
 export function CryptoWorkspace() {
-  const [symbol, setSymbol] = useState<(typeof symbolOptions)[number]>("BTCUSDT");
+  const [symbol, setSymbol] = useState("BTCUSDT");
+  const [symbolInput, setSymbolInput] = useState("BTCUSDT");
   const [interval, setInterval] = useState<(typeof intervalOptions)[number]>("5m");
   const [largeTradeThreshold, setLargeTradeThreshold] =
     useState<(typeof largeTradeThresholds)[number]>(100000);
@@ -123,6 +150,8 @@ export function CryptoWorkspace() {
   const [status, setStatus] = useState("Підключаю ринок...");
   const [error, setError] = useState<string | null>(null);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+  const [dayStats, setDayStats] = useState<DayTickerStats | null>(null);
+  const [topBook, setTopBook] = useState<TopBook>({ bid: null, ask: null });
   const [largeTrades, setLargeTrades] = useState<LargeTrade[]>([]);
   const [walls, setWalls] = useState<OrderWall[]>([]);
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
@@ -148,6 +177,77 @@ export function CryptoWorkspace() {
       }),
     [currentPrice, largeTrades, walls],
   );
+
+  const spreadData = useMemo(() => {
+    if (!topBook.bid || !topBook.ask) {
+      return null;
+    }
+
+    const spread = topBook.ask - topBook.bid;
+    const mid = (topBook.ask + topBook.bid) / 2;
+
+    return {
+      absolute: spread,
+      percent: mid > 0 ? (spread / mid) * 100 : 0,
+    };
+  }, [topBook]);
+
+  const wallPressure = useMemo(() => {
+    const bidNotional = walls
+      .filter((wall) => wall.side === "bid")
+      .reduce((sum, wall) => sum + wall.notional, 0);
+    const askNotional = walls
+      .filter((wall) => wall.side === "ask")
+      .reduce((sum, wall) => sum + wall.notional, 0);
+    const total = bidNotional + askNotional;
+
+    if (!total) {
+      return {
+        label: "Нейтрально",
+        percent: 50,
+      };
+    }
+
+    const bidPercent = Math.round((bidNotional / total) * 100);
+
+    if (bidPercent >= 60) {
+      return {
+        label: "Перевага bid",
+        percent: bidPercent,
+      };
+    }
+
+    if (bidPercent <= 40) {
+      return {
+        label: "Перевага ask",
+        percent: bidPercent,
+      };
+    }
+
+    return {
+      label: "Баланс",
+      percent: bidPercent,
+    };
+  }, [walls]);
+
+  function applySymbolInput() {
+    const normalized = symbolInput.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+    if (!normalized) {
+      setSymbolInput(symbol);
+      return;
+    }
+
+    setSymbolInput(normalized);
+
+    if (normalized !== symbol) {
+      setSymbol(normalized);
+    }
+  }
+
+  useEffect(() => {
+    setSymbolInput(symbol);
+  }, [symbol]);
 
   useEffect(() => {
     if (!chartContainerRef.current || chartRef.current) {
@@ -262,6 +362,8 @@ export function CryptoWorkspace() {
       setLargeTrades([]);
       setWalls([]);
       setCurrentPrice(null);
+      setDayStats(null);
+      setTopBook({ bid: null, ask: null });
       orderBookRef.current = {
         bids: new Map(),
         asks: new Map(),
@@ -271,7 +373,8 @@ export function CryptoWorkspace() {
       wallLinesRef.current = [];
 
       try {
-        const [klinesResponse, depthResponse] = await Promise.all([
+        const [klinesResponse, depthResponse, tickerResponse, bookTickerResponse] =
+          await Promise.all([
           fetch(
             `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=250`,
             { cache: "no-store" },
@@ -280,9 +383,20 @@ export function CryptoWorkspace() {
             `https://api.binance.com/api/v3/depth?symbol=${symbol}&limit=100`,
             { cache: "no-store" },
           ),
+          fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`, {
+            cache: "no-store",
+          }),
+          fetch(`https://api.binance.com/api/v3/ticker/bookTicker?symbol=${symbol}`, {
+            cache: "no-store",
+          }),
         ]);
 
-        if (!klinesResponse.ok || !depthResponse.ok) {
+        if (
+          !klinesResponse.ok ||
+          !depthResponse.ok ||
+          !tickerResponse.ok ||
+          !bookTickerResponse.ok
+        ) {
           throw new Error("Binance не віддав дані для старту.");
         }
 
@@ -290,6 +404,16 @@ export function CryptoWorkspace() {
         const depth = (await depthResponse.json()) as {
           bids: Array<[string, string]>;
           asks: Array<[string, string]>;
+        };
+        const ticker = (await tickerResponse.json()) as {
+          priceChangePercent: string;
+          quoteVolume: string;
+          highPrice: string;
+          lowPrice: string;
+        };
+        const bookTicker = (await bookTickerResponse.json()) as {
+          bidPrice: string;
+          askPrice: string;
         };
 
         if (cancelled) {
@@ -318,6 +442,16 @@ export function CryptoWorkspace() {
         );
         chartRef.current?.timeScale().fitContent();
         setCurrentPrice(candles[candles.length - 1]?.close ?? null);
+        setDayStats({
+          priceChangePercent: Number(ticker.priceChangePercent),
+          quoteVolume: Number(ticker.quoteVolume),
+          highPrice: Number(ticker.highPrice),
+          lowPrice: Number(ticker.lowPrice),
+        });
+        setTopBook({
+          bid: Number(bookTicker.bidPrice),
+          ask: Number(bookTicker.askPrice),
+        });
 
         for (const [price, quantity] of depth.bids) {
           orderBookRef.current.bids.set(price, Number(quantity));
@@ -333,7 +467,7 @@ export function CryptoWorkspace() {
 
         const streamBase = symbol.toLowerCase();
         socket = new WebSocket(
-          `wss://stream.binance.com:9443/stream?streams=${streamBase}@kline_${interval}/${streamBase}@aggTrade/${streamBase}@depth@100ms`,
+          `wss://stream.binance.com:9443/stream?streams=${streamBase}@kline_${interval}/${streamBase}@aggTrade/${streamBase}@depth@100ms/${streamBase}@bookTicker`,
         );
 
         socket.onmessage = (event) => {
@@ -432,6 +566,14 @@ export function CryptoWorkspace() {
             }
 
             syncWalls(candleSeriesInstance, symbol);
+            return;
+          }
+
+          if (payload.stream.includes("@bookTicker")) {
+            setTopBook({
+              bid: Number(payload.data.b),
+              ask: Number(payload.data.a),
+            });
           }
         };
 
@@ -518,19 +660,20 @@ export function CryptoWorkspace() {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-4">
               <label className="grid gap-2">
                 <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
                   Актив
                 </span>
                 <select
                   value={symbol}
-                  onChange={(event) =>
-                    setSymbol(event.target.value as (typeof symbolOptions)[number])
-                  }
+                  onChange={(event) => setSymbol(event.target.value)}
                   className="h-11 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition focus:border-white/18"
                 >
-                  {symbolOptions.map((option) => (
+                  {!presetSymbolList.includes(symbol) ? (
+                    <option value={symbol}>{symbol} · custom</option>
+                  ) : null}
+                  {presetSymbols.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>
@@ -575,10 +718,44 @@ export function CryptoWorkspace() {
                   ))}
                 </select>
               </label>
+
+              <label className="grid gap-2 sm:col-span-4">
+                <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
+                  Власна пара Binance Spot
+                </span>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    value={symbolInput}
+                    onChange={(event) => setSymbolInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        applySymbolInput();
+                      }
+                    }}
+                    placeholder="Наприклад POPCATUSDT"
+                    className="h-11 min-w-0 flex-1 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition placeholder:text-white/24 focus:border-white/18"
+                  />
+                  <button
+                    type="button"
+                    onClick={applySymbolInput}
+                    className="h-11 rounded-[1rem] border border-white/12 bg-white/[0.05] px-4 text-sm font-medium text-white/82 transition hover:bg-white/[0.08]"
+                  >
+                    Застосувати
+                  </button>
+                </div>
+                <p className="text-xs leading-6 text-white/34">
+                  Якщо потрібної монети немає в списку, введи свою пару вручну. Для твоїх мем-монет типу
+                  {" "}
+                  <span className="text-white/60">POPCATUSDT</span>
+                  {" "}
+                  це якраз найзручніший шлях.
+                </p>
+              </label>
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 lg:grid-cols-[repeat(3,minmax(0,1fr))]">
+          <div className="mt-5 grid gap-3 lg:grid-cols-[repeat(5,minmax(0,1fr))]">
             <div className="rounded-[1.2rem] border border-white/8 bg-black/10 px-4 py-3">
               <p className="text-[0.68rem] uppercase tracking-[0.22em] text-white/36">
                 Ціна
@@ -593,6 +770,44 @@ export function CryptoWorkspace() {
               </p>
               <p className="mt-2 text-lg font-medium text-white">{attentionScore}/100</p>
               <p className="mt-1 text-sm text-white/48">{describeAttention(attentionScore)}</p>
+            </div>
+            <div className="rounded-[1.2rem] border border-white/8 bg-black/10 px-4 py-3">
+              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-white/36">
+                24h зміна
+              </p>
+              <p
+                className={[
+                  "mt-2 text-lg font-medium",
+                  !dayStats
+                    ? "text-white"
+                    : dayStats.priceChangePercent >= 0
+                      ? "text-emerald-300"
+                      : "text-red-300",
+                ].join(" ")}
+              >
+                {dayStats ? `${dayStats.priceChangePercent >= 0 ? "+" : ""}${dayStats.priceChangePercent.toFixed(2)}%` : "—"}
+              </p>
+              <p className="mt-1 text-sm text-white/48">
+                {dayStats ? `Vol ${formatCompactNumber(dayStats.quoteVolume)} USDT` : "24h ticker"}
+              </p>
+            </div>
+            <div className="rounded-[1.2rem] border border-white/8 bg-black/10 px-4 py-3">
+              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-white/36">
+                Spread
+              </p>
+              <p className="mt-2 text-lg font-medium text-white">
+                {spreadData ? formatPrice(spreadData.absolute) : "—"}
+              </p>
+              <p className="mt-1 text-sm text-white/48">
+                {spreadData ? `${spreadData.percent.toFixed(3)}% між bid/ask` : "book ticker"}
+              </p>
+            </div>
+            <div className="rounded-[1.2rem] border border-white/8 bg-black/10 px-4 py-3">
+              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-white/36">
+                Тиск стакану
+              </p>
+              <p className="mt-2 text-lg font-medium text-white">{wallPressure.percent}%</p>
+              <p className="mt-1 text-sm text-white/48">{wallPressure.label}</p>
             </div>
             <div className="rounded-[1.2rem] border border-white/8 bg-black/10 px-4 py-3">
               <p className="text-[0.68rem] uppercase tracking-[0.22em] text-white/36">
