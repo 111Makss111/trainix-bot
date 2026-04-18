@@ -647,10 +647,10 @@ export function CryptoWorkspace() {
 
   return (
     <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_23rem]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_24rem]">
         <div className="rounded-[1.7rem] border border-white/10 bg-[#08101d]/82 p-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,17rem)_minmax(0,1fr)] xl:items-start">
+            <div className="min-w-0 rounded-[1.3rem] border border-white/8 bg-black/10 p-4">
               <p className="text-[0.72rem] uppercase tracking-[0.28em] text-white/38">
                 Binance Spot
               </p>
@@ -660,7 +660,8 @@ export function CryptoWorkspace() {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-4">
+            <div className="rounded-[1.3rem] border border-white/8 bg-black/10 p-4">
+              <div className="grid gap-3 md:grid-cols-3">
               <label className="grid gap-2">
                 <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
                   Актив
@@ -719,11 +720,11 @@ export function CryptoWorkspace() {
                 </select>
               </label>
 
-              <label className="grid gap-2 sm:col-span-4">
+                <label className="grid gap-2 md:col-span-3">
                 <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
                   Власна пара Binance Spot
                 </span>
-                <div className="flex flex-col gap-2 sm:flex-row">
+                  <div className="flex flex-col gap-2 lg:flex-row">
                   <input
                     value={symbolInput}
                     onChange={(event) => setSymbolInput(event.target.value)}
@@ -739,7 +740,7 @@ export function CryptoWorkspace() {
                   <button
                     type="button"
                     onClick={applySymbolInput}
-                    className="h-11 rounded-[1rem] border border-white/12 bg-white/[0.05] px-4 text-sm font-medium text-white/82 transition hover:bg-white/[0.08]"
+                      className="h-11 rounded-[1rem] border border-white/12 bg-white/[0.05] px-4 text-sm font-medium text-white/82 transition hover:bg-white/[0.08] lg:min-w-[9rem]"
                   >
                     Застосувати
                   </button>
@@ -752,10 +753,11 @@ export function CryptoWorkspace() {
                   це якраз найзручніший шлях.
                 </p>
               </label>
+              </div>
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 lg:grid-cols-[repeat(5,minmax(0,1fr))]">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
             <div className="rounded-[1.2rem] border border-white/8 bg-black/10 px-4 py-3">
               <p className="text-[0.68rem] uppercase tracking-[0.22em] text-white/36">
                 Ціна
@@ -813,7 +815,9 @@ export function CryptoWorkspace() {
               <p className="text-[0.68rem] uppercase tracking-[0.22em] text-white/36">
                 Потік
               </p>
-              <p className="mt-2 text-sm leading-6 text-white/68">{status}</p>
+              <p className="mt-2 text-sm leading-6 text-white/68">
+                {status}
+              </p>
             </div>
           </div>
 
