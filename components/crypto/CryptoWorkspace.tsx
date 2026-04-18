@@ -60,7 +60,9 @@ type TopBook = {
   ask: number | null;
 };
 
-const presetSymbols = [
+type MarketType = "spot" | "futures";
+
+const spotPresetSymbols = [
   "BTCUSDT",
   "ETHUSDT",
   "SOLUSDT",
@@ -74,10 +76,33 @@ const presetSymbols = [
   "PEPEUSDT",
   "SHIBUSDT",
 ] as const;
+const futuresPresetSymbols = [
+  "BTCUSDT",
+  "ETHUSDT",
+  "SOLUSDT",
+  "BNBUSDT",
+  "XRPUSDT",
+  "DOGEUSDT",
+  "SUIUSDT",
+  "WIFUSDT",
+  "PNUTUSDT",
+  "FARTCOINUSDT",
+  "POPCATUSDT",
+  "1000BONKUSDT",
+] as const;
 const intervalOptions = ["1m", "5m", "15m", "1h", "4h"] as const;
 const largeTradeThresholds = [25000, 50000, 100000, 250000, 500000] as const;
 const maxTradeMarkers = 30;
-const presetSymbolList: readonly string[] = presetSymbols;
+const marketOptions = [
+  {
+    value: "spot",
+    label: "Spot",
+  },
+  {
+    value: "futures",
+    label: "Futures",
+  },
+] as const;
 
 function toChartTime(value: number) {
   return Math.floor(value / 1000) as UTCTimestamp;
@@ -141,6 +166,7 @@ function describeAttention(score: number) {
 }
 
 export function CryptoWorkspace() {
+  const [marketType, setMarketType] = useState<MarketType>("spot");
   const [symbol, setSymbol] = useState("BTCUSDT");
   const [symbolInput, setSymbolInput] = useState("BTCUSDT");
   const [interval, setInterval] = useState<(typeof intervalOptions)[number]>("5m");
@@ -176,6 +202,11 @@ export function CryptoWorkspace() {
         currentPrice,
       }),
     [currentPrice, largeTrades, walls],
+  );
+
+  const activePresetSymbols = useMemo<readonly string[]>(
+    () => (marketType === "spot" ? spotPresetSymbols : futuresPresetSymbols),
+    [marketType],
   );
 
   const spreadData = useMemo(() => {
@@ -239,6 +270,10 @@ export function CryptoWorkspace() {
     }
 
     setSymbolInput(normalized);
+
+    if (normalized === "POPCATUSDT" && marketType === "spot") {
+      setMarketType("futures");
+    }
 
     if (normalized !== symbol) {
       setSymbol(normalized);
@@ -373,20 +408,29 @@ export function CryptoWorkspace() {
       wallLinesRef.current = [];
 
       try {
+        const restBase =
+          marketType === "spot"
+            ? "https://api.binance.com/api/v3"
+            : "https://fapi.binance.com/fapi/v1";
+        const wsBase =
+          marketType === "spot"
+            ? "wss://stream.binance.com:9443/stream?streams="
+            : "wss://fstream.binance.com/stream?streams=";
+
         const [klinesResponse, depthResponse, tickerResponse, bookTickerResponse] =
           await Promise.all([
           fetch(
-            `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=250`,
+            `${restBase}/klines?symbol=${symbol}&interval=${interval}&limit=250`,
             { cache: "no-store" },
           ),
           fetch(
-            `https://api.binance.com/api/v3/depth?symbol=${symbol}&limit=100`,
+            `${restBase}/depth?symbol=${symbol}&limit=100`,
             { cache: "no-store" },
           ),
-          fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`, {
+          fetch(`${restBase}/ticker/24hr?symbol=${symbol}`, {
             cache: "no-store",
           }),
-          fetch(`https://api.binance.com/api/v3/ticker/bookTicker?symbol=${symbol}`, {
+          fetch(`${restBase}/ticker/bookTicker?symbol=${symbol}`, {
             cache: "no-store",
           }),
         ]);
@@ -467,7 +511,7 @@ export function CryptoWorkspace() {
 
         const streamBase = symbol.toLowerCase();
         socket = new WebSocket(
-          `wss://stream.binance.com:9443/stream?streams=${streamBase}@kline_${interval}/${streamBase}@aggTrade/${streamBase}@depth@100ms/${streamBase}@bookTicker`,
+          `${wsBase}${streamBase}@kline_${interval}/${streamBase}@aggTrade/${streamBase}@depth@100ms/${streamBase}@bookTicker`,
         );
 
         socket.onmessage = (event) => {
@@ -586,7 +630,11 @@ export function CryptoWorkspace() {
       } catch (loadError) {
         console.error(loadError);
         if (!cancelled) {
-          setError("Не вдалося завантажити ринок. Перевір підключення або спробуй інший актив.");
+          setError(
+            marketType === "spot"
+              ? "Не вдалося завантажити ринок. Можливо, ця пара недоступна на Binance Spot."
+              : "Не вдалося завантажити ринок. Перевір підключення або спробуй інший futures-актив.",
+          );
           setStatus("Стартові дані не завантажились.");
           setIsLoading(false);
         }
@@ -643,7 +691,7 @@ export function CryptoWorkspace() {
         socket.close();
       }
     };
-  }, [interval, largeTradeThreshold, symbol]);
+  }, [interval, largeTradeThreshold, marketType, symbol]);
 
   return (
     <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
@@ -652,7 +700,7 @@ export function CryptoWorkspace() {
           <div className="grid gap-4 2xl:grid-cols-[minmax(0,17rem)_minmax(0,1fr)] 2xl:items-start">
             <div className="min-w-0 rounded-[1.3rem] border border-white/8 bg-black/10 p-4">
               <p className="text-[0.72rem] uppercase tracking-[0.28em] text-white/38">
-                Binance Spot
+                {marketType === "spot" ? "Binance Spot" : "Binance Futures"}
               </p>
               <h2 className="mt-3 text-2xl font-medium text-white">{symbol}</h2>
               <p className="mt-2 text-sm leading-7 text-white/58">
@@ -661,7 +709,24 @@ export function CryptoWorkspace() {
             </div>
 
             <div className="rounded-[1.3rem] border border-white/8 bg-black/10 p-4">
-              <div className="grid gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(8rem,0.75fr)_minmax(10rem,0.95fr)]">
+              <div className="grid gap-3 xl:grid-cols-[minmax(8rem,0.72fr)_minmax(0,1.35fr)_minmax(8rem,0.72fr)_minmax(10rem,0.95fr)]">
+                <label className="grid gap-2">
+                  <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
+                    Ринок
+                  </span>
+                  <select
+                    value={marketType}
+                    onChange={(event) => setMarketType(event.target.value as MarketType)}
+                    className="h-11 w-full min-w-0 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition focus:border-white/18"
+                  >
+                    {marketOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
                 <label className="grid gap-2">
                   <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
                     Актив
@@ -671,10 +736,10 @@ export function CryptoWorkspace() {
                     onChange={(event) => setSymbol(event.target.value)}
                     className="h-11 w-full min-w-0 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition focus:border-white/18"
                   >
-                    {!presetSymbolList.includes(symbol) ? (
+                    {!activePresetSymbols.includes(symbol) ? (
                       <option value={symbol}>{symbol} · custom</option>
                     ) : null}
-                    {presetSymbols.map((option) => (
+                    {activePresetSymbols.map((option) => (
                       <option key={option} value={option}>
                         {option}
                       </option>
@@ -720,9 +785,9 @@ export function CryptoWorkspace() {
                   </select>
                 </label>
 
-                <label className="grid gap-2 xl:col-span-3">
+                <label className="grid gap-2 xl:col-span-4">
                   <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
-                    Власна пара Binance Spot
+                    Власна пара Binance {marketType === "spot" ? "Spot" : "Futures"}
                   </span>
                   <div className="flex flex-col gap-2 lg:flex-row">
                     <input
@@ -746,9 +811,10 @@ export function CryptoWorkspace() {
                     </button>
                   </div>
                   <p className="text-xs leading-6 text-white/34">
-                    Якщо потрібної монети немає в списку, введи свою пару вручну. Для твоїх мем-монет типу{" "}
+                    Якщо потрібної монети немає в списку, введи свою пару вручну. Для мем-монет типу{" "}
                     <span className="text-white/60">POPCATUSDT</span>{" "}
-                    це якраз найзручніший шлях.
+                    переключайся на{" "}
+                    <span className="text-white/60">Futures</span>, бо на Binance Spot ця пара недоступна.
                   </p>
                 </label>
               </div>
