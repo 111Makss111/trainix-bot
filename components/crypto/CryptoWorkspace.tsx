@@ -649,7 +649,7 @@ export function CryptoWorkspace() {
     <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_24rem]">
         <div className="rounded-[1.7rem] border border-white/10 bg-[#08101d]/82 p-4">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,17rem)_minmax(0,1fr)] xl:items-start">
+          <div className="grid gap-4 2xl:grid-cols-[minmax(0,17rem)_minmax(0,1fr)] 2xl:items-start">
             <div className="min-w-0 rounded-[1.3rem] border border-white/8 bg-black/10 p-4">
               <p className="text-[0.72rem] uppercase tracking-[0.28em] text-white/38">
                 Binance Spot
@@ -661,98 +661,96 @@ export function CryptoWorkspace() {
             </div>
 
             <div className="rounded-[1.3rem] border border-white/8 bg-black/10 p-4">
-              <div className="grid gap-3 md:grid-cols-3">
-              <label className="grid gap-2">
-                <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
-                  Актив
-                </span>
-                <select
-                  value={symbol}
-                  onChange={(event) => setSymbol(event.target.value)}
-                  className="h-11 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition focus:border-white/18"
-                >
-                  {!presetSymbolList.includes(symbol) ? (
-                    <option value={symbol}>{symbol} · custom</option>
-                  ) : null}
-                  {presetSymbols.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="grid gap-2">
-                <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
-                  Таймфрейм
-                </span>
-                <select
-                  value={interval}
-                  onChange={(event) =>
-                    setInterval(event.target.value as (typeof intervalOptions)[number])
-                  }
-                  className="h-11 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition focus:border-white/18"
-                >
-                  {intervalOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="grid gap-2">
-                <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
-                  Поріг трейду
-                </span>
-                <select
-                  value={largeTradeThreshold}
-                  onChange={(event) =>
-                    setLargeTradeThreshold(Number(event.target.value) as (typeof largeTradeThresholds)[number])
-                  }
-                  className="h-11 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition focus:border-white/18"
-                >
-                  {largeTradeThresholds.map((option) => (
-                    <option key={option} value={option}>
-                      ${formatCompactNumber(option)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-                <label className="grid gap-2 md:col-span-3">
-                <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
-                  Власна пара Binance Spot
-                </span>
-                  <div className="flex flex-col gap-2 lg:flex-row">
-                  <input
-                    value={symbolInput}
-                    onChange={(event) => setSymbolInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        applySymbolInput();
-                      }
-                    }}
-                    placeholder="Наприклад POPCATUSDT"
-                    className="h-11 min-w-0 flex-1 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition placeholder:text-white/24 focus:border-white/18"
-                  />
-                  <button
-                    type="button"
-                    onClick={applySymbolInput}
-                      className="h-11 rounded-[1rem] border border-white/12 bg-white/[0.05] px-4 text-sm font-medium text-white/82 transition hover:bg-white/[0.08] lg:min-w-[9rem]"
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(8rem,0.75fr)_minmax(10rem,0.95fr)]">
+                <label className="grid gap-2">
+                  <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
+                    Актив
+                  </span>
+                  <select
+                    value={symbol}
+                    onChange={(event) => setSymbol(event.target.value)}
+                    className="h-11 w-full min-w-0 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition focus:border-white/18"
                   >
-                    Застосувати
-                  </button>
-                </div>
-                <p className="text-xs leading-6 text-white/34">
-                  Якщо потрібної монети немає в списку, введи свою пару вручну. Для твоїх мем-монет типу
-                  {" "}
-                  <span className="text-white/60">POPCATUSDT</span>
-                  {" "}
-                  це якраз найзручніший шлях.
-                </p>
-              </label>
+                    {!presetSymbolList.includes(symbol) ? (
+                      <option value={symbol}>{symbol} · custom</option>
+                    ) : null}
+                    {presetSymbols.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-2">
+                  <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
+                    Таймфрейм
+                  </span>
+                  <select
+                    value={interval}
+                    onChange={(event) =>
+                      setInterval(event.target.value as (typeof intervalOptions)[number])
+                    }
+                    className="h-11 w-full min-w-0 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition focus:border-white/18"
+                  >
+                    {intervalOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-2">
+                  <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
+                    Поріг трейду
+                  </span>
+                  <select
+                    value={largeTradeThreshold}
+                    onChange={(event) =>
+                      setLargeTradeThreshold(Number(event.target.value) as (typeof largeTradeThresholds)[number])
+                    }
+                    className="h-11 w-full min-w-0 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition focus:border-white/18"
+                  >
+                    {largeTradeThresholds.map((option) => (
+                      <option key={option} value={option}>
+                        ${formatCompactNumber(option)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-2 xl:col-span-3">
+                  <span className="text-[0.7rem] uppercase tracking-[0.22em] text-white/34">
+                    Власна пара Binance Spot
+                  </span>
+                  <div className="flex flex-col gap-2 lg:flex-row">
+                    <input
+                      value={symbolInput}
+                      onChange={(event) => setSymbolInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          applySymbolInput();
+                        }
+                      }}
+                      placeholder="Наприклад POPCATUSDT"
+                      className="h-11 min-w-0 flex-1 rounded-[1rem] border border-white/10 bg-[#0a1328] px-4 text-sm text-white outline-none transition placeholder:text-white/24 focus:border-white/18"
+                    />
+                    <button
+                      type="button"
+                      onClick={applySymbolInput}
+                      className="h-11 rounded-[1rem] border border-white/12 bg-white/[0.05] px-4 text-sm font-medium text-white/82 transition hover:bg-white/[0.08] lg:min-w-[9rem]"
+                    >
+                      Застосувати
+                    </button>
+                  </div>
+                  <p className="text-xs leading-6 text-white/34">
+                    Якщо потрібної монети немає в списку, введи свою пару вручну. Для твоїх мем-монет типу{" "}
+                    <span className="text-white/60">POPCATUSDT</span>{" "}
+                    це якраз найзручніший шлях.
+                  </p>
+                </label>
               </div>
             </div>
           </div>
