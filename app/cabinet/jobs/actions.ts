@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { requireOwnerEmail } from "@/lib/auth-guards";
 import {
-  getJobHuntSettings,
   jobLeadStatuses,
   refreshJobLeadsForOwner,
   regenerateJobLeadProposal,
@@ -154,22 +153,31 @@ export async function regenerateJobLeadProposalAction(input: {
   };
 }
 
-export async function sendJobTelegramTestAction(): Promise<JobTelegramTestActionResult> {
+export async function sendJobTelegramTestAction(input: {
+  telegramBotToken: string;
+  telegramChatId: string;
+}): Promise<JobTelegramTestActionResult> {
   const ownerEmail = await requireOwnerEmail();
-  const settings = await getJobHuntSettings(ownerEmail);
 
-  if (!settings.telegramBotToken?.trim()) {
+  if (!ownerEmail) {
+    return invalid("Не вдалося підтвердити власника кабінету.");
+  }
+
+  const botToken = input.telegramBotToken.trim();
+  const chatId = input.telegramChatId.trim();
+
+  if (!botToken) {
     return invalid("Спершу додай Telegram bot token у налаштування Jobs.");
   }
 
-  if (!settings.telegramChatId?.trim()) {
+  if (!chatId) {
     return invalid("Спершу додай Telegram chat id у налаштування Jobs.");
   }
 
   try {
     await sendTelegramTextMessage({
-      botToken: settings.telegramBotToken.trim(),
-      chatId: settings.telegramChatId.trim(),
+      botToken,
+      chatId,
       text: [
         "Jobs radar test повідомлення.",
         "",

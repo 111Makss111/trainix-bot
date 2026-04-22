@@ -350,9 +350,23 @@ export function JobsWorkspace({
   }
 
   function handleTelegramTest() {
+    const form = settingsFormRef.current;
+
+    if (!form) {
+      setFeedback("Форма налаштувань поки недоступна. Спробуй ще раз.");
+      return;
+    }
+
+    const formData = new FormData(form);
+    const telegramBotToken = String(formData.get("telegramBotToken") || "").trim();
+    const telegramChatId = String(formData.get("telegramChatId") || "").trim();
+
     setFeedback(null);
     startTelegramTest(async () => {
-      const result = await sendJobTelegramTestAction();
+      const result = await sendJobTelegramTestAction({
+        telegramBotToken,
+        telegramChatId,
+      });
 
       if (!result.ok) {
         setFeedback(result.error);
