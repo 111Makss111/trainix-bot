@@ -248,3 +248,47 @@ CREATE TABLE IF NOT EXISTS crypto_weekly_zones (
 
 CREATE INDEX IF NOT EXISTS idx_crypto_weekly_zones_market_week
 ON crypto_weekly_zones (market_type, symbol, week_key, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS job_hunt_settings (
+  owner_email TEXT PRIMARY KEY,
+  source_freelancehunt_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  auto_scan_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  scan_interval_minutes INTEGER NOT NULL DEFAULT 5,
+  max_leads_per_run INTEGER NOT NULL DEFAULT 8,
+  include_keywords_text TEXT,
+  exclude_keywords_text TEXT,
+  telegram_alerts_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  telegram_bot_token TEXT,
+  telegram_chat_id TEXT,
+  last_scan_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS job_leads (
+  id TEXT PRIMARY KEY,
+  owner_email TEXT NOT NULL,
+  source TEXT NOT NULL,
+  external_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  link TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  budget_text TEXT,
+  categories_json TEXT,
+  published_at TIMESTAMPTZ,
+  score INTEGER NOT NULL DEFAULT 0,
+  match_reason TEXT NOT NULL,
+  proposal_text TEXT,
+  status TEXT NOT NULL DEFAULT 'new',
+  alerted_at TIMESTAMPTZ,
+  source_payload TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (owner_email, source, link)
+);
+
+CREATE INDEX IF NOT EXISTS idx_job_leads_owner_status_created
+ON job_leads (owner_email, status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_job_leads_owner_source_published
+ON job_leads (owner_email, source, published_at DESC);

@@ -101,6 +101,30 @@ function PracticeIcon() {
   );
 }
 
+function JobsIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M8 6.5V5.8A2.3 2.3 0 0 1 10.3 3.5h3.4A2.3 2.3 0 0 1 16 5.8v.7"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M5.5 7.5h13a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2V9.5a2 2 0 0 1 2-2Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M3.5 12h17"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function CryptoIcon() {
   return (
     <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
@@ -228,6 +252,12 @@ const navItems: NavItem[] = [
     label: "Practice",
     description: "Dev-задачі й тренажер",
     icon: <PracticeIcon />,
+  },
+  {
+    href: "/cabinet/jobs",
+    label: "Jobs",
+    description: "Пошук замовлень",
+    icon: <JobsIcon />,
   },
   {
     href: "/cabinet/crypto",
