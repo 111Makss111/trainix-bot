@@ -4,11 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import {
   createPlanAction,
   deletePlanAction,
+  deletePlanAttachmentAction,
   finishPlanAction,
+  uploadPlanAttachmentAction,
   updatePlanAction,
   togglePlanInProgressAction,
 } from "@/app/cabinet/notes/actions";
 import type { PlanItem, PlanPeriod } from "@/lib/plans";
+import { PlanAttachmentsPanel } from "./PlanAttachmentsPanel";
 import { PlanProgressToggle } from "./PlanProgressToggle";
 
 export type NotesViewMode = "active" | "history";
@@ -219,6 +222,8 @@ function ActivePlanRow({
   onTogglePending,
   onFinish,
   onDelete,
+  onUploadAttachment,
+  onDeleteAttachment,
   onUpdate,
 }: {
   plan: PlanItem;
@@ -227,6 +232,8 @@ function ActivePlanRow({
   onTogglePending: (plan: PlanItem) => Promise<void>;
   onFinish: (plan: PlanItem) => Promise<void>;
   onDelete: (plan: PlanItem) => Promise<void>;
+  onUploadAttachment: (planId: string, file: File) => Promise<void>;
+  onDeleteAttachment: (planId: string, attachmentId: string) => Promise<void>;
   onUpdate: (
     plan: PlanItem,
     formData: FormData,
@@ -288,6 +295,15 @@ function ActivePlanRow({
                 <span>В роботі {formatElapsedTime(plan.startedAt, now)}</span>
               ) : null}
             </div>
+
+            <PlanAttachmentsPanel
+              planId={plan.id}
+              attachments={plan.attachments}
+              editable
+              isBusy={isBusy}
+              onUpload={onUploadAttachment}
+              onDelete={onDeleteAttachment}
+            />
 
             <details className="group/edit">
               <summary className="cursor-pointer list-none rounded-full border border-white/10 px-3 py-1.5 text-xs uppercase tracking-[0.22em] text-white/58 transition hover:border-white/14 hover:text-white/88 [&::-webkit-details-marker]:hidden">
@@ -414,6 +430,11 @@ function HistoryPlanRow({
                 <span>Закінчено {formatDate(plan.completedAt)}</span>
               ) : null}
             </div>
+
+            <PlanAttachmentsPanel
+              planId={plan.id}
+              attachments={plan.attachments}
+            />
           </div>
         </details>
 
@@ -509,6 +530,7 @@ export function PlansBoard({
       completedAt: null,
       createdAt: nowIso,
       updatedAt: nowIso,
+      attachments: [],
     };
     const previousSnapshot = cloneGroupedPlans(plansState);
 
@@ -684,6 +706,53 @@ export function PlansBoard({
     }
   }
 
+  async function handleUploadAttachment(planId: string, file: File) {
+    setFeedback(null);
+    setPlanBusy(planId, true);
+
+    try {
+      const payload = new FormData();
+      payload.set("planId", planId);
+      payload.set("file", file);
+
+      const result = await uploadPlanAttachmentAction(payload);
+
+      if (!result.ok) {
+        setFeedback(result.error);
+        return;
+      }
+
+      if ("plan" in result) {
+        setPlansState((current) => upsertPlan(current, result.plan));
+      }
+    } finally {
+      setPlanBusy(planId, false);
+    }
+  }
+
+  async function handleDeleteAttachment(planId: string, attachmentId: string) {
+    setFeedback(null);
+    setPlanBusy(planId, true);
+
+    try {
+      const result = await deletePlanAttachmentAction({
+        planId,
+        attachmentId,
+      });
+
+      if (!result.ok) {
+        setFeedback(result.error);
+        return;
+      }
+
+      if ("plan" in result) {
+        setPlansState((current) => upsertPlan(current, result.plan));
+      }
+    } finally {
+      setPlanBusy(planId, false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <nav className="grid gap-3 rounded-[2rem] border border-white/10 bg-white/[0.03] p-3 backdrop-blur-md md:grid-cols-4">
@@ -804,6 +873,8 @@ export function PlansBoard({
                   onTogglePending={handleTogglePending}
                   onFinish={handleFinish}
                   onDelete={handleDelete}
+                  onUploadAttachment={handleUploadAttachment}
+                  onDeleteAttachment={handleDeleteAttachment}
                   onUpdate={handleUpdate}
                 />
               ),

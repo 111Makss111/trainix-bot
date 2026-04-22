@@ -36,6 +36,21 @@ ALTER TABLE plans DROP CONSTRAINT IF EXISTS plans_status_check;
 CREATE INDEX IF NOT EXISTS idx_plans_owner_period_status
 ON plans (owner_email, period, status, updated_at DESC);
 
+CREATE TABLE IF NOT EXISTS plan_attachments (
+  id TEXT PRIMARY KEY,
+  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  owner_email TEXT NOT NULL,
+  file_name TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  text_preview TEXT,
+  content_base64 TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_plan_attachments_plan_created
+ON plan_attachments (plan_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS web_projects (
   id TEXT PRIMARY KEY,
   owner_email TEXT NOT NULL,
