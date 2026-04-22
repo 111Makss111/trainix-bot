@@ -1,19 +1,28 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import {
   refreshJobLeadsAction,
   regenerateJobLeadProposalAction,
   saveJobHuntSettingsAction,
+  sendJobTelegramTestAction,
   updateJobLeadStatusAction,
+  verifyJobTelegramConnectionAction,
 } from "@/app/cabinet/jobs/actions";
 import { CabinetTopbar } from "@/components/cabinet";
 import { CopyTextButton } from "@/components/social/shared/CopyTextButton";
 import type { JobHuntSettings, JobLead, JobLeadStatus } from "@/lib/jobs";
+import type { TelegramBotInfo, TelegramChatInfo } from "@/lib/telegram";
 
 type JobsWorkspaceProps = {
   initialSettings: JobHuntSettings;
   initialLeads: JobLead[];
+  cronSecretConfigured: boolean;
+};
+
+type TelegramVerificationState = {
+  bot: TelegramBotInfo;
+  chat: TelegramChatInfo;
 };
 
 type JobsTab = "leads" | "history" | "settings";
@@ -231,15 +240,21 @@ function LeadCard({
 export function JobsWorkspace({
   initialSettings,
   initialLeads,
+  cronSecretConfigured,
 }: JobsWorkspaceProps) {
+  const settingsFormRef = useRef<HTMLFormElement | null>(null);
   const [activeTab, setActiveTab] = useState<JobsTab>("leads");
   const [settings, setSettings] = useState(initialSettings);
   const [leads, setLeads] = useState(initialLeads);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [pendingLeadId, setPendingLeadId] = useState<string | null>(null);
+  const [telegramVerification, setTelegramVerification] =
+    useState<TelegramVerificationState | null>(null);
   const [isRefreshing, startRefresh] = useTransition();
   const [isSavingSettings, startSaveSettings] = useTransition();
   const [isLeadActionPending, startLeadAction] = useTransition();
+  const [isTestingTelegram, startTelegramTest] = useTransition();
+  const [isVerifyingTelegram, startTelegramVerify] = useTransition();
 
   const activeLeads = useMemo(
     () => leads.filter((lead) => lead.status === "new" || lead.status === "reviewed"),
@@ -289,6 +304,7 @@ export function JobsWorkspace({
       }
 
       setSettings(result.settings);
+      setTelegramVerification(null);
       setFeedback(result.message ?? null);
     });
   }
@@ -330,6 +346,53 @@ export function JobsWorkspace({
 
       setLeads((current) => upsertLead(current, result.lead));
       setFeedback(result.message ?? null);
+    });
+  }
+
+  function handleTelegramTest() {
+    setFeedback(null);
+    startTelegramTest(async () => {
+      const result = await sendJobTelegramTestAction();
+
+      if (!result.ok) {
+        setFeedback(result.error);
+        return;
+      }
+
+      setFeedback(result.message);
+    });
+  }
+
+  function handleTelegramVerify() {
+    const form = settingsFormRef.current;
+
+    if (!form) {
+      setFeedback("Форма налаштувань поки недоступна. Спробуй ще раз.");
+      return;
+    }
+
+    const formData = new FormData(form);
+    const telegramBotToken = String(formData.get("telegramBotToken") || "").trim();
+    const telegramChatId = String(formData.get("telegramChatId") || "").trim();
+
+    setFeedback(null);
+    startTelegramVerify(async () => {
+      const result = await verifyJobTelegramConnectionAction({
+        telegramBotToken,
+        telegramChatId,
+      });
+
+      if (!result.ok) {
+        setTelegramVerification(null);
+        setFeedback(result.error);
+        return;
+      }
+
+      setTelegramVerification({
+        bot: result.bot,
+        chat: result.chat,
+      });
+      setFeedback(result.message);
     });
   }
 
@@ -405,6 +468,7 @@ export function JobsWorkspace({
         <div className="mt-6">
           {activeTab === "settings" ? (
             <form
+              ref={settingsFormRef}
               className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
               onSubmit={(event) => {
                 event.preventDefault();
@@ -476,6 +540,17 @@ export function JobsWorkspace({
                     />
                     Дозволити фонового сканера через cron
                   </label>
+
+                  <div className="rounded-[1.1rem] border border-white/8 bg-black/10 px-4 py-3 text-sm leading-6 text-white/54">
+                    <p>
+                      {cronSecretConfigured
+                        ? "Cron route уже готовий, але зовнішній scheduler ще треба підключити окремо."
+                        : "CRON_SECRET ще не заданий, тому фоновий сканер поки не зможе стартувати."}
+                    </p>
+                    <p className="mt-2 text-white/38">
+                      Кнопка `Знайти нові задачі` вже працює вручну. Для повного автоскану треба окремо під’єднати cron-job.org або Vercel Cron.
+                    </p>
+                  </div>
                 </div>
               </section>
 
@@ -521,6 +596,69 @@ export function JobsWorkspace({
                       className="h-12 w-full rounded-[1.1rem] border border-white/10 bg-[#091327] px-4 text-sm text-white outline-none"
                     />
                   </label>
+
+                  <div className="rounded-[1.1rem] border border-white/8 bg-black/10 px-4 py-3 text-sm leading-6 text-white/54">
+                    <p>
+                      Тут використовується звичайний Telegram-бот. Ми не створюємо його автоматично: потрібен bot token від @BotFather і chat id чату, куди надсилати ліди.
+                    </p>
+                  </div>
+
+                  {telegramVerification ? (
+                    <div className="rounded-[1.1rem] border border-emerald-300/16 bg-emerald-300/[0.08] px-4 py-3 text-sm leading-6 text-emerald-50/90">
+                      <p className="text-[0.68rem] uppercase tracking-[0.22em] text-emerald-100/58">
+                        Telegram verified
+                      </p>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <div>
+                          <p className="text-[0.68rem] uppercase tracking-[0.22em] text-emerald-100/48">
+                            Bot identity
+                          </p>
+                          <p className="mt-2 font-medium text-white">
+                            {telegramVerification.bot.username
+                              ? `@${telegramVerification.bot.username}`
+                              : telegramVerification.bot.first_name}
+                          </p>
+                          <p className="mt-1 text-white/58">
+                            {telegramVerification.bot.first_name}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[0.68rem] uppercase tracking-[0.22em] text-emerald-100/48">
+                            Chat binding
+                          </p>
+                          <p className="mt-2 font-medium text-white">
+                            {telegramVerification.chat.title ||
+                              telegramVerification.chat.username ||
+                              telegramVerification.chat.id}
+                          </p>
+                          <p className="mt-1 text-white/58">
+                            {telegramVerification.chat.type} · {telegramVerification.chat.id}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-wrap justify-end gap-3">
+                    <button
+                      type="button"
+                      disabled={isVerifyingTelegram}
+                      onClick={handleTelegramVerify}
+                      className="rounded-full border border-white/12 bg-white/[0.04] px-5 py-3 text-sm font-medium text-white/88 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isVerifyingTelegram
+                        ? "Перевіряю Telegram..."
+                        : "Verify Telegram connection"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isTestingTelegram || isVerifyingTelegram}
+                      onClick={handleTelegramTest}
+                      className="rounded-full border border-sky-300/18 bg-sky-300/12 px-5 py-3 text-sm font-medium text-sky-50 transition hover:bg-sky-300/18 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isTestingTelegram ? "Надсилаю тест..." : "Надіслати тест у Telegram"}
+                    </button>
+                  </div>
                 </div>
               </section>
 

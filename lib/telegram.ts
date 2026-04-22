@@ -1,4 +1,4 @@
-type TelegramBotInfo = {
+export type TelegramBotInfo = {
   id: number;
   first_name: string;
   username?: string;
@@ -6,7 +6,7 @@ type TelegramBotInfo = {
   can_read_all_group_messages?: boolean;
 };
 
-type TelegramChatInfo = {
+export type TelegramChatInfo = {
   id: number;
   type: string;
   title?: string;

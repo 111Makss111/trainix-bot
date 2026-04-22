@@ -17,5 +17,11 @@ export default async function JobsPage() {
     listJobLeads(ownerEmail, 60),
   ]);
 
-  return <JobsWorkspace initialSettings={settings} initialLeads={leads} />;
+  return (
+    <JobsWorkspace
+      initialSettings={settings}
+      initialLeads={leads}
+      cronSecretConfigured={Boolean(process.env.CRON_SECRET?.trim())}
+    />
+  );
 }

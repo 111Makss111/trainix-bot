@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireOwnerEmail } from "@/lib/auth-guards";
 import {
+  getJobHuntSettings,
   jobLeadStatuses,
   refreshJobLeadsForOwner,
   regenerateJobLeadProposal,
@@ -12,6 +13,12 @@ import {
   type JobLead,
   type JobLeadStatus,
 } from "@/lib/jobs";
+import {
+  sendTelegramTextMessage,
+  verifyTelegramConnection,
+  type TelegramBotInfo,
+  type TelegramChatInfo,
+} from "@/lib/telegram";
 
 export type JobsActionResult =
   | { ok: true; settings: JobHuntSettings; leads?: JobLead[]; message?: string }
@@ -28,6 +35,19 @@ export type RefreshJobLeadsActionResult =
 
 export type JobLeadMutationActionResult =
   | { ok: true; lead: JobLead; message?: string }
+  | { ok: false; error: string };
+
+export type JobTelegramTestActionResult =
+  | { ok: true; message: string }
+  | { ok: false; error: string };
+
+export type JobTelegramVerifyActionResult =
+  | {
+      ok: true;
+      message: string;
+      bot: TelegramBotInfo;
+      chat: TelegramChatInfo;
+    }
   | { ok: false; error: string };
 
 function invalid(error: string): { ok: false; error: string } {
@@ -132,4 +152,82 @@ export async function regenerateJobLeadProposalAction(input: {
     lead,
     message: "Текст відповіді оновлено.",
   };
+}
+
+export async function sendJobTelegramTestAction(): Promise<JobTelegramTestActionResult> {
+  const ownerEmail = await requireOwnerEmail();
+  const settings = await getJobHuntSettings(ownerEmail);
+
+  if (!settings.telegramBotToken?.trim()) {
+    return invalid("Спершу додай Telegram bot token у налаштування Jobs.");
+  }
+
+  if (!settings.telegramChatId?.trim()) {
+    return invalid("Спершу додай Telegram chat id у налаштування Jobs.");
+  }
+
+  try {
+    await sendTelegramTextMessage({
+      botToken: settings.telegramBotToken.trim(),
+      chatId: settings.telegramChatId.trim(),
+      text: [
+        "Jobs radar test повідомлення.",
+        "",
+        "Telegram для модуля пошуку замовлень підключений і готовий приймати нові ліди.",
+      ].join("\n"),
+    });
+
+    return {
+      ok: true,
+      message: "Тестове повідомлення вже має бути в Telegram.",
+    };
+  } catch (error) {
+    return invalid(
+      error instanceof Error
+        ? error.message
+        : "Не вдалося надіслати тест у Telegram.",
+    );
+  }
+}
+
+export async function verifyJobTelegramConnectionAction(input: {
+  telegramBotToken: string;
+  telegramChatId: string;
+}): Promise<JobTelegramVerifyActionResult> {
+  const ownerEmail = await requireOwnerEmail();
+
+  if (!ownerEmail) {
+    return invalid("Не вдалося підтвердити власника кабінету.");
+  }
+
+  const botToken = input.telegramBotToken.trim();
+  const chatId = input.telegramChatId.trim();
+
+  if (!botToken) {
+    return invalid("Спершу встав Telegram bot token.");
+  }
+
+  if (!chatId) {
+    return invalid("Спершу встав Telegram chat id.");
+  }
+
+  try {
+    const result = await verifyTelegramConnection({
+      botToken,
+      chatId,
+    });
+
+    return {
+      ok: true,
+      bot: result.bot,
+      chat: result.chat,
+      message: "Telegram підключений коректно.",
+    };
+  } catch (error) {
+    return invalid(
+      error instanceof Error
+        ? error.message
+        : "Не вдалося перевірити Telegram connection.",
+    );
+  }
 }
