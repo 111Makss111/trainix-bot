@@ -140,6 +140,8 @@ function leadStatusLabel(status: JobLeadStatus) {
       return "Переглянуто";
     case "applied":
       return "Відгукнувся";
+    case "hidden":
+      return "Сховано";
     case "ignored":
       return "Пропущено";
     default:
@@ -153,6 +155,8 @@ function leadStatusClass(status: JobLeadStatus) {
       return "border-sky-300/16 bg-sky-300/10 text-sky-50";
     case "applied":
       return "border-emerald-300/16 bg-emerald-300/10 text-emerald-50";
+    case "hidden":
+      return "border-white/10 bg-white/[0.04] text-white/58";
     case "ignored":
       return "border-white/10 bg-white/[0.04] text-white/58";
     default:

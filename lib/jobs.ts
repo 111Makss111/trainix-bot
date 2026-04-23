@@ -162,6 +162,17 @@ let jobsTablesPromise:
   | Promise<Awaited<ReturnType<typeof ensureJobsTablesInner>>>
   | null = null;
 
+function createDeterministicIndex(seed: string, length: number) {
+  if (length <= 0) {
+    return 0;
+  }
+
+  const digest = createHash("sha1").update(seed).digest("hex");
+  const numeric = Number.parseInt(digest.slice(0, 8), 16);
+
+  return numeric % length;
+}
+
 function mapJobHuntSettings(row: JobHuntSettingsRow): JobHuntSettings {
   return {
     ownerEmail: row.owner_email,
@@ -445,19 +456,161 @@ function scoreJobLead(input: {
   } satisfies ScoredJobLead;
 }
 
-function buildFallbackProposal(lead: ScoredJobLead) {
-  const shortSummary = lead.summary.split(".").slice(0, 2).join(". ").trim();
-
-  return [
-    "Вітаю!",
-    `Зацікавив ваш проєкт «${lead.title}».`,
-    "Я можу швидко включитись у роботу й спокійно закрити саме front-end частину без зайвого затягування.",
-    shortSummary ? `З того, що бачу по опису: ${shortSummary}.` : null,
-    "Можу одразу оцінити обсяг, уточнити деталі й почати з найближчого вільного часу.",
-    "Якщо зручно, можу коротко написати план реалізації та орієнтир по термінах.",
+function inferProposalAngle(lead: ScoredJobLead) {
+  const haystack = [
+    lead.title,
+    lead.summary,
+    lead.categories.join(" "),
   ]
-    .filter(Boolean)
-    .join("\n\n");
+    .join(" ")
+    .toLowerCase();
+
+  if (
+    haystack.includes("shopify") &&
+    (haystack.includes("landing") || haystack.includes("storefront"))
+  ) {
+    return {
+      observation:
+        "Тут важливо не просто намалювати красивий екран, а зібрати landing під Shopify так, щоб він одразу працював на продаж і нормально поводився на мобільних.",
+      execution:
+        "Я б почав із структури першого екрану, оферу, блоків довіри та адаптиву, а потім уже довів би сторінку до чистого production-стану без візуального шуму.",
+      question:
+        "Чи є вже готовий референс/макет і чи потрібна саме секційна реалізація всередині Shopify, чи можна зібрати окремим кастомним шаблоном?",
+    };
+  }
+
+  if (
+    haystack.includes("journal") ||
+    haystack.includes("author") ||
+    haystack.includes("admin review") ||
+    haystack.includes("publish workflow")
+  ) {
+    return {
+      observation:
+        "Тут цінність не тільки у верстці, а в тому, щоб акуратно зібрати сам workflow: автор, перевірка адміністратором, розмежування free/paid і логічна публікація без плутанини в статусах.",
+      execution:
+        "Я б одразу розклав це на ролі, статуси матеріалу й переходи між ними, щоб інтерфейс не був просто красивим, а реально підтримував процес редакційної роботи.",
+      question:
+        "Чи вже зафіксовані ролі, статуси та правила переходів між review, approval, paid/free і publish, чи це ще треба допомогти структурувати?",
+    };
+  }
+
+  if (haystack.includes("next.js") || haystack.includes("nextjs")) {
+    return {
+      observation:
+        "Схоже на задачу, де важливо не тільки зібрати інтерфейс, а й акуратно розкласти компоненти, стани та структуру сторінки, щоб далі це нормально розвивалося.",
+      execution:
+        "Я б робив це через чисту компонентну структуру, адаптив і уважну збірку ключових сценаріїв, щоб не довелося потім усе перетрушувати після першої ітерації.",
+      question:
+        "Проєкт уже має готову архітектуру/components tree, чи потрібно ще й допомогти нормально зібрати основу під подальший розвиток?",
+    };
+  }
+
+  if (haystack.includes("react")) {
+    return {
+      observation:
+        "Тут добре видно front-end задачу, де вирішує не загальна балачка, а те, наскільки акуратно буде зібраний UI і логіка взаємодії.",
+      execution:
+        "Я можу взяти це як нормальний React-флоу: розкласти екран на компоненти, зробити чистий адаптив і не залишити після себе хаотичний шар коду.",
+      question:
+        "Чи є вже готові API/дані для інтеграції, чи зараз ключова задача саме у збірці інтерфейсу та UX-поведінки?",
+    };
+  }
+
+  if (
+    haystack.includes("html") ||
+    haystack.includes("css") ||
+    haystack.includes("figma") ||
+    haystack.includes("frontend") ||
+    haystack.includes("front-end")
+  ) {
+    return {
+      observation:
+        "Такі задачі зазвичай виграються не обіцянками, а акуратною версткою, адаптивом і точним перенесенням структури без дрібних візуальних провалів.",
+      execution:
+        "Я б сфокусувався на чистій верстці, адекватній мобільній поведінці й тому, щоб сторінка виглядала зібрано вже з першої відправленої версії.",
+      question:
+        "Чи є вже готовий макет/референс і які блоки для тебе критичні в першій ітерації, щоб можна було швидко зібрати найважливіше?",
+    };
+  }
+
+  if (haystack.includes("api") || haystack.includes("dashboard")) {
+    return {
+      observation:
+        "Тут ключове, щоб інтерфейс не просто відображав дані, а був зрозумілим у роботі: зі станами, помилками, порожніми екранами і нормальною логікою сценаріїв.",
+      execution:
+        "Я б одразу зібрав основу так, щоб було легко під’єднувати API, не губитись у станах і не латати все після першого демо.",
+      question:
+        "Чи вже є опис основних сценаріїв користувача й структура даних, чи це ще можна підсилити на етапі реалізації?",
+    };
+  }
+
+  return {
+    observation:
+      "Задача виглядає не як абстрактний “потрібен фронтенд”, а як робота, де важливо швидко зрозуміти пріоритет, зібрати акуратний інтерфейс і не розтягнути реалізацію.",
+    execution:
+      "Я можу зайти в таку задачу спокійно й предметно: швидко розібрати обсяг, запропонувати робочий підхід і зосередитись на тому, що справді потрібно в першій версії.",
+    question:
+      "Що для тебе тут найкритичніше на старті: швидко зібрати першу робочу версію чи відразу детально продумати повний сценарій?",
+  };
+}
+
+function normalizeProposalOutput(text: string) {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+}
+
+function looksLikeMixedOrWeakProposal(text: string) {
+  const normalized = normalizeProposalOutput(text).toLowerCase();
+
+  if (!normalized) {
+    return true;
+  }
+
+  if (/[ыэъё]/i.test(normalized)) {
+    return true;
+  }
+
+  const bannedPhrases = [
+    "я можу швидко включитись у роботу",
+    "можу одразу оцінити обсяг",
+    "якщо зручно, можу коротко написати план реалізації",
+    "з того, що бачу по опису:",
+  ];
+
+  return bannedPhrases.some((phrase) => normalized.includes(phrase));
+}
+
+function buildFallbackProposal(lead: ScoredJobLead) {
+  const angle = inferProposalAngle(lead);
+  const openerVariants = [
+    `Доброго дня. Переглянув ваш проєкт «${lead.title}» і тут якраз той випадок, де уважність до деталей буде важливішою за шаблонну відповідь.`,
+    `Вітаю. Ваш проєкт «${lead.title}» виглядає як задача, яку можна закрити сильніше саме за рахунок продуманої реалізації, а не просто “зробити по ТЗ”.`,
+    `Доброго дня. По «${lead.title}» видно, що тут потрібен не випадковий виконавець, а людина, яка швидко вловить суть задачі й збере її без зайвого хаосу.`,
+    `Вітаю. Задача «${lead.title}» сподобалась тим, що тут важливий не лише результат на екрані, а й те, наскільки акуратно буде зібрана сама логіка реалізації.`,
+  ];
+  const closerVariants = [
+    "Якщо хочете, я у відповідь можу коротко накидати, з чого саме почав би роботу і як би розбив це на найближчі етапи.",
+    "Якщо буде зручно, можу одразу запропонувати короткий план першого етапу без зайвої води.",
+    "Якщо вам підходить такий підхід, я можу відразу описати перші кроки по реалізації й уточнити строки після відповідей на ключові питання.",
+    "Якщо хочете, я не розтягуватиму листування і відразу дам короткий робочий план по старту.",
+  ];
+  const seed = `${lead.externalId}:${lead.title}`;
+  const opener = openerVariants[createDeterministicIndex(seed, openerVariants.length)];
+  const closer = closerVariants[createDeterministicIndex(`${seed}:closer`, closerVariants.length)];
+
+  return normalizeProposalOutput(
+    [
+      opener,
+      angle.observation,
+      angle.execution,
+      angle.question,
+      closer,
+    ].join("\n\n"),
+  );
 }
 
 async function generateProposalForLead(lead: ScoredJobLead) {
@@ -469,14 +622,20 @@ async function generateProposalForLead(lead: ScoredJobLead) {
 
   try {
     const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+    const angle = inferProposalAngle(lead);
     const prompt = [
-      "You write short first-contact freelance proposals.",
-      "Write in Ukrainian.",
-      "Do not sound desperate or generic.",
-      "Do not invent years of experience or fake portfolio items.",
-      "Sound like a calm, capable front-end developer who can start quickly.",
-      "Keep it between 550 and 850 characters.",
-      "Focus on clarity, speed, and relevance.",
+      "You write first-contact freelance proposals for a front-end developer.",
+      "Write in clean natural Ukrainian only.",
+      "Never use Russian words, Russian grammar, surzhyk, or mixed-language phrasing.",
+      "If the project description is in English, understand it and answer in Ukrainian. Do not quote raw English sentences back to the client.",
+      "The client will compare many generic bids, so the opening must feel specific and thoughtful, not templated.",
+      "Do not invent years of experience, fake portfolio items, or fake team size.",
+      "Sound calm, precise, and switched-on. Low-profile freelancer, but sharp and attentive.",
+      "Avoid generic phrases like 'можу швидко включитись у роботу', 'можу оцінити обсяг', 'можу написати план реалізації'.",
+      "Structure: 1) strong opening, 2) one concrete observation about this task, 3) one clear execution angle, 4) one smart clarifying question, 5) short confident close.",
+      "No bullet points. No emojis. Plain text only.",
+      "Length: 650-1100 characters.",
+      "Vary sentence rhythm and phrasing so different projects do not get the same skeleton.",
       "",
       `Project title: ${lead.title}`,
       `Project summary: ${lead.summary}`,
@@ -485,6 +644,9 @@ async function generateProposalForLead(lead: ScoredJobLead) {
         ? `Categories: ${lead.categories.join(", ")}`
         : null,
       `Why it matched: ${lead.reasons.join("; ")}`,
+      `Useful observation to incorporate: ${angle.observation}`,
+      `Useful execution angle to incorporate: ${angle.execution}`,
+      `Useful clarifying question to incorporate: ${angle.question}`,
       "",
       "Return plain text only.",
     ]
@@ -535,7 +697,15 @@ async function generateProposalForLead(lead: ScoredJobLead) {
       .join("")
       .trim();
 
-    return text || buildFallbackProposal(lead);
+    if (!text) {
+      return buildFallbackProposal(lead);
+    }
+
+    const normalizedText = normalizeProposalOutput(text);
+
+    return looksLikeMixedOrWeakProposal(normalizedText)
+      ? buildFallbackProposal(lead)
+      : normalizedText;
   } catch {
     return buildFallbackProposal(lead);
   }
