@@ -252,6 +252,8 @@ ON crypto_weekly_zones (market_type, symbol, week_key, updated_at DESC);
 CREATE TABLE IF NOT EXISTS job_hunt_settings (
   owner_email TEXT PRIMARY KEY,
   source_freelancehunt_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  source_freelancer_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  source_weworkremotely_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   auto_scan_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   scan_interval_minutes INTEGER NOT NULL DEFAULT 5,
   max_leads_per_run INTEGER NOT NULL DEFAULT 8,

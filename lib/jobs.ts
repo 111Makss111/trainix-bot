@@ -10,11 +10,13 @@ export const jobLeadStatuses = [
 ] as const;
 
 export type JobLeadStatus = (typeof jobLeadStatuses)[number];
-export type JobLeadSource = "freelancehunt";
+export type JobLeadSource = "freelancehunt" | "freelancer" | "weworkremotely";
 
 export type JobHuntSettings = {
   ownerEmail: string;
   sourceFreelancehuntEnabled: boolean;
+  sourceFreelancerEnabled: boolean;
+  sourceWeworkremotelyEnabled: boolean;
   autoScanEnabled: boolean;
   scanIntervalMinutes: number;
   maxLeadsPerRun: number;
@@ -52,6 +54,8 @@ export type JobLead = {
 type JobHuntSettingsRow = {
   owner_email: string;
   source_freelancehunt_enabled: boolean;
+  source_freelancer_enabled: boolean;
+  source_weworkremotely_enabled: boolean;
   auto_scan_enabled: boolean;
   scan_interval_minutes: number;
   max_leads_per_run: number;
@@ -85,7 +89,7 @@ type JobLeadRow = {
   updated_at: string;
 };
 
-type FreelancehuntRssItem = {
+type JobFeedItem = {
   source: JobLeadSource;
   sourceLabel: string;
   externalId: string;
@@ -97,7 +101,7 @@ type FreelancehuntRssItem = {
   publishedAt: string | null;
 };
 
-type ScoredFreelancehuntLead = FreelancehuntRssItem & {
+type ScoredJobLead = JobFeedItem & {
   score: number;
   accepted: boolean;
   reasons: string[];
@@ -113,6 +117,11 @@ type RefreshJobLeadsResult = {
 };
 
 const FREELANCEHUNT_RSS_URL = "https://freelancehunt.com/projects.rss";
+const FREELANCER_ACTIVE_PROJECTS_URL =
+  "https://www.freelancer.com/api/projects/0.1/projects/active/";
+const WEWORKREMOTELY_FRONTEND_RSS_URL =
+  "https://weworkremotely.com/categories/remote-front-end-programming-jobs.rss";
+
 const DEFAULT_INCLUDE_KEYWORDS = [
   "верстка",
   "landing",
@@ -156,6 +165,8 @@ function mapJobHuntSettings(row: JobHuntSettingsRow): JobHuntSettings {
   return {
     ownerEmail: row.owner_email,
     sourceFreelancehuntEnabled: row.source_freelancehunt_enabled,
+    sourceFreelancerEnabled: row.source_freelancer_enabled,
+    sourceWeworkremotelyEnabled: row.source_weworkremotely_enabled,
     autoScanEnabled: row.auto_scan_enabled,
     scanIntervalMinutes: row.scan_interval_minutes,
     maxLeadsPerRun: row.max_leads_per_run,
@@ -178,6 +189,8 @@ function defaultJobHuntSettings(ownerEmail: string): JobHuntSettings {
   return {
     ownerEmail,
     sourceFreelancehuntEnabled: true,
+    sourceFreelancerEnabled: true,
+    sourceWeworkremotelyEnabled: false,
     autoScanEnabled: false,
     scanIntervalMinutes: 5,
     maxLeadsPerRun: 8,
@@ -193,11 +206,17 @@ function defaultJobHuntSettings(ownerEmail: string): JobHuntSettings {
 }
 
 function mapJobLead(row: JobLeadRow): JobLead {
+  const sourceLabelBySource: Record<JobLeadSource, string> = {
+    freelancehunt: "Freelancehunt",
+    freelancer: "Freelancer.com",
+    weworkremotely: "We Work Remotely",
+  };
+
   return {
     id: row.id,
     ownerEmail: row.owner_email,
     source: row.source,
-    sourceLabel: row.source === "freelancehunt" ? "Freelancehunt" : row.source,
+    sourceLabel: sourceLabelBySource[row.source] ?? row.source,
     externalId: row.external_id,
     title: row.title,
     link: row.link,
@@ -279,11 +298,16 @@ function extractBudgetText(summary: string) {
   return budgetMatch?.[1]?.replace(/\s+/g, " ").trim() ?? null;
 }
 
-function parseFreelancehuntRss(xml: string) {
+function parseRssFeed(input: {
+  xml: string;
+  source: JobLeadSource;
+  sourceLabel: string;
+}) {
+  const { xml, source, sourceLabel } = input;
   const itemMatches = xml.match(/<item\b[\s\S]*?<\/item>/gi) ?? [];
 
   return itemMatches
-    .map((item): FreelancehuntRssItem | null => {
+    .map((item): JobFeedItem | null => {
       const title = stripHtml(getFirstTagValue(item, "title") ?? "");
       const link = stripHtml(getFirstTagValue(item, "link") ?? "");
       const description = getFirstTagValue(item, "description") ?? "";
@@ -299,8 +323,8 @@ function parseFreelancehuntRss(xml: string) {
       }
 
       return {
-        source: "freelancehunt",
-        sourceLabel: "Freelancehunt RSS",
+        source,
+        sourceLabel,
         externalId: createHash("sha1").update(link).digest("hex"),
         title,
         link,
@@ -310,11 +334,27 @@ function parseFreelancehuntRss(xml: string) {
         publishedAt,
       };
     })
-    .filter((item): item is FreelancehuntRssItem => Boolean(item));
+    .filter((item): item is JobFeedItem => Boolean(item));
 }
 
-function scoreFreelancehuntLead(input: {
-  item: FreelancehuntRssItem;
+function parseFreelancehuntRss(xml: string) {
+  return parseRssFeed({
+    xml,
+    source: "freelancehunt",
+    sourceLabel: "Freelancehunt RSS",
+  });
+}
+
+function parseWeWorkRemotelyRss(xml: string) {
+  return parseRssFeed({
+    xml,
+    source: "weworkremotely",
+    sourceLabel: "We Work Remotely RSS",
+  });
+}
+
+function scoreJobLead(input: {
+  item: JobFeedItem;
   settings: JobHuntSettings;
 }) {
   const haystack = [
@@ -401,10 +441,10 @@ function scoreFreelancehuntLead(input: {
     score,
     accepted: !hardReject && score >= 52,
     reasons: reasons.slice(0, 5),
-  } satisfies ScoredFreelancehuntLead;
+  } satisfies ScoredJobLead;
 }
 
-function buildFallbackProposal(lead: ScoredFreelancehuntLead) {
+function buildFallbackProposal(lead: ScoredJobLead) {
   const shortSummary = lead.summary.split(".").slice(0, 2).join(". ").trim();
 
   return [
@@ -419,7 +459,7 @@ function buildFallbackProposal(lead: ScoredFreelancehuntLead) {
     .join("\n\n");
 }
 
-async function generateProposalForLead(lead: ScoredFreelancehuntLead) {
+async function generateProposalForLead(lead: ScoredJobLead) {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
 
   if (!apiKey) {
@@ -517,6 +557,164 @@ async function fetchFreelancehuntLeads() {
   return parseFreelancehuntRss(xml);
 }
 
+async function fetchWeWorkRemotelyLeads() {
+  const response = await fetch(WEWORKREMOTELY_FRONTEND_RSS_URL, {
+    cache: "no-store",
+    headers: {
+      "User-Agent": "Trainix Jobs Radar/1.0",
+      Accept: "application/rss+xml, application/xml, text/xml",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Не вдалося завантажити We Work Remotely RSS.");
+  }
+
+  const xml = await response.text();
+  return parseWeWorkRemotelyRss(xml);
+}
+
+type FreelancerProjectResponse = {
+  status?: string;
+  result?: {
+    projects?: Array<{
+      id?: number | string;
+      title?: string;
+      seo_url?: string;
+      preview_description?: string;
+      description?: string;
+      submitdate?: number;
+      budget?: {
+        minimum?: number;
+        maximum?: number;
+      };
+      currency?: {
+        code?: string;
+        sign?: string;
+      };
+      jobs?: Array<{
+        name?: string;
+      }>;
+    }>;
+  };
+};
+
+type FreelancerProject = NonNullable<
+  NonNullable<FreelancerProjectResponse["result"]>["projects"]
+>[number];
+
+function formatFreelancerBudget(project: FreelancerProject) {
+  const minimum = project.budget?.minimum;
+  const maximum = project.budget?.maximum;
+
+  if (typeof minimum !== "number" && typeof maximum !== "number") {
+    return null;
+  }
+
+  const currency = project.currency?.sign || project.currency?.code || "";
+  const formatAmount = (value: number) =>
+    `${currency}${value.toLocaleString("en-US", { maximumFractionDigits: 0 })}`.trim();
+
+  if (typeof minimum === "number" && typeof maximum === "number") {
+    return minimum === maximum
+      ? formatAmount(minimum)
+      : `${formatAmount(minimum)}-${formatAmount(maximum)}`;
+  }
+
+  return formatAmount(typeof minimum === "number" ? minimum : (maximum as number));
+}
+
+function parseFreelancerProjects(data: FreelancerProjectResponse) {
+  const projects = data.result?.projects ?? [];
+
+  return projects
+    .map((project): JobFeedItem | null => {
+      const id = String(project.id ?? "").trim();
+      const title = stripHtml(project.title ?? "");
+      const summary = stripHtml(
+        project.preview_description || project.description || "",
+      ).slice(0, 1200);
+      const categories =
+        project.jobs?.map((job) => stripHtml(job.name ?? "")).filter(Boolean) ?? [];
+      const link = project.seo_url
+        ? `https://www.freelancer.com/projects/${project.seo_url}`
+        : id
+          ? `https://www.freelancer.com/projects/${id}`
+          : "";
+      const publishedAt =
+        typeof project.submitdate === "number"
+          ? new Date(project.submitdate * 1000).toISOString()
+          : null;
+
+      if (!id || !title || !link || !summary) {
+        return null;
+      }
+
+      return {
+        source: "freelancer",
+        sourceLabel: "Freelancer.com API",
+        externalId: `freelancer-${id}`,
+        title,
+        link,
+        summary,
+        budgetText: formatFreelancerBudget(project),
+        categories,
+        publishedAt,
+      };
+    })
+    .filter((item): item is JobFeedItem => Boolean(item));
+}
+
+async function fetchFreelancerLeads() {
+  const url = new URL(FREELANCER_ACTIVE_PROJECTS_URL);
+  url.searchParams.set("limit", "50");
+  url.searchParams.set("compact", "true");
+  url.searchParams.set("full_description", "true");
+  url.searchParams.set("job_details", "true");
+
+  const response = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      "User-Agent": "Trainix Jobs Radar/1.0",
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Не вдалося завантажити Freelancer.com API.");
+  }
+
+  const data = (await response.json()) as FreelancerProjectResponse;
+
+  return parseFreelancerProjects(data);
+}
+
+async function fetchEnabledJobFeedItems(settings: JobHuntSettings) {
+  const tasks: Array<Promise<JobFeedItem[]>> = [];
+
+  if (settings.sourceFreelancehuntEnabled) {
+    tasks.push(fetchFreelancehuntLeads());
+  }
+
+  if (settings.sourceFreelancerEnabled) {
+    tasks.push(fetchFreelancerLeads());
+  }
+
+  if (settings.sourceWeworkremotelyEnabled) {
+    tasks.push(fetchWeWorkRemotelyLeads());
+  }
+
+  if (!tasks.length) {
+    return [] as JobFeedItem[];
+  }
+
+  const results = await Promise.allSettled(tasks);
+
+  return results.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : [],
+  );
+}
+
 async function ensureJobsTablesInner() {
   const sql = getSql();
 
@@ -528,6 +726,8 @@ async function ensureJobsTablesInner() {
     CREATE TABLE IF NOT EXISTS job_hunt_settings (
       owner_email TEXT PRIMARY KEY,
       source_freelancehunt_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      source_freelancer_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      source_weworkremotely_enabled BOOLEAN NOT NULL DEFAULT FALSE,
       auto_scan_enabled BOOLEAN NOT NULL DEFAULT FALSE,
       scan_interval_minutes INTEGER NOT NULL DEFAULT 5,
       max_leads_per_run INTEGER NOT NULL DEFAULT 8,
@@ -540,6 +740,16 @@ async function ensureJobsTablesInner() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `;
+
+  await sql`
+    ALTER TABLE job_hunt_settings
+    ADD COLUMN IF NOT EXISTS source_freelancer_enabled BOOLEAN NOT NULL DEFAULT TRUE
+  `;
+
+  await sql`
+    ALTER TABLE job_hunt_settings
+    ADD COLUMN IF NOT EXISTS source_weworkremotely_enabled BOOLEAN NOT NULL DEFAULT FALSE
   `;
 
   await sql`
@@ -601,6 +811,8 @@ export async function getJobHuntSettings(ownerEmail: string) {
     SELECT
       owner_email,
       source_freelancehunt_enabled,
+      source_freelancer_enabled,
+      source_weworkremotely_enabled,
       auto_scan_enabled,
       scan_interval_minutes,
       max_leads_per_run,
@@ -623,6 +835,8 @@ export async function getJobHuntSettings(ownerEmail: string) {
 export async function saveJobHuntSettings(input: {
   ownerEmail: string;
   sourceFreelancehuntEnabled: boolean;
+  sourceFreelancerEnabled: boolean;
+  sourceWeworkremotelyEnabled: boolean;
   autoScanEnabled: boolean;
   scanIntervalMinutes: number;
   maxLeadsPerRun: number;
@@ -642,6 +856,8 @@ export async function saveJobHuntSettings(input: {
     INSERT INTO job_hunt_settings (
       owner_email,
       source_freelancehunt_enabled,
+      source_freelancer_enabled,
+      source_weworkremotely_enabled,
       auto_scan_enabled,
       scan_interval_minutes,
       max_leads_per_run,
@@ -654,6 +870,8 @@ export async function saveJobHuntSettings(input: {
     VALUES (
       ${input.ownerEmail},
       ${input.sourceFreelancehuntEnabled},
+      ${input.sourceFreelancerEnabled},
+      ${input.sourceWeworkremotelyEnabled},
       ${input.autoScanEnabled},
       ${Math.max(1, Math.min(60, Math.floor(input.scanIntervalMinutes)))},
       ${Math.max(1, Math.min(20, Math.floor(input.maxLeadsPerRun)))},
@@ -666,6 +884,8 @@ export async function saveJobHuntSettings(input: {
     ON CONFLICT (owner_email)
     DO UPDATE SET
       source_freelancehunt_enabled = EXCLUDED.source_freelancehunt_enabled,
+      source_freelancer_enabled = EXCLUDED.source_freelancer_enabled,
+      source_weworkremotely_enabled = EXCLUDED.source_weworkremotely_enabled,
       auto_scan_enabled = EXCLUDED.auto_scan_enabled,
       scan_interval_minutes = EXCLUDED.scan_interval_minutes,
       max_leads_per_run = EXCLUDED.max_leads_per_run,
@@ -678,6 +898,8 @@ export async function saveJobHuntSettings(input: {
     RETURNING
       owner_email,
       source_freelancehunt_enabled,
+      source_freelancer_enabled,
+      source_weworkremotely_enabled,
       auto_scan_enabled,
       scan_interval_minutes,
       max_leads_per_run,
@@ -808,7 +1030,12 @@ export async function refreshJobLeadsForOwner(ownerEmail: string) {
     } satisfies RefreshJobLeadsResult;
   }
 
-  if (!settings.sourceFreelancehuntEnabled) {
+  const hasEnabledSource =
+    settings.sourceFreelancehuntEnabled ||
+    settings.sourceFreelancerEnabled ||
+    settings.sourceWeworkremotelyEnabled;
+
+  if (!hasEnabledSource) {
     await setLastScanAt(ownerEmail);
     return {
       scanned: 0,
@@ -820,9 +1047,9 @@ export async function refreshJobLeadsForOwner(ownerEmail: string) {
     } satisfies RefreshJobLeadsResult;
   }
 
-  const rssItems = await fetchFreelancehuntLeads();
-  const scored = rssItems
-    .map((item) => scoreFreelancehuntLead({ item, settings }))
+  const feedItems = await fetchEnabledJobFeedItems(settings);
+  const scored = feedItems
+    .map((item) => scoreJobLead({ item, settings }))
     .sort((left, right) => {
       if (right.score !== left.score) {
         return right.score - left.score;
@@ -841,19 +1068,20 @@ export async function refreshJobLeadsForOwner(ownerEmail: string) {
   const acceptedLinks = accepted.map((lead) => lead.link);
   const existing = acceptedLinks.length
     ? ((await sql`
-        SELECT link
+        SELECT source, link
         FROM job_leads
         WHERE owner_email = ${ownerEmail}
-          AND source = 'freelancehunt'
           AND link = ANY(${acceptedLinks})
-      `) as Array<{ link: string }>)
+      `) as Array<{ source: JobLeadSource; link: string }>)
     : [];
 
-  const existingLinks = new Set(existing.map((row) => row.link));
+  const existingKeys = new Set(
+    existing.map((row) => `${row.source}:${row.link}`),
+  );
   const insertedLeads: JobLead[] = [];
 
   for (const lead of accepted) {
-    if (existingLinks.has(lead.link)) {
+    if (existingKeys.has(`${lead.source}:${lead.link}`)) {
       continue;
     }
 
@@ -922,7 +1150,7 @@ export async function refreshJobLeadsForOwner(ownerEmail: string) {
   const alerted = await maybeSendTelegramLeadAlert(settings, insertedLeads);
 
   return {
-    scanned: rssItems.length,
+    scanned: feedItems.length,
     accepted: accepted.length,
     created: insertedLeads.length,
     alerted,
@@ -1064,6 +1292,8 @@ export async function listDueJobScanOwners() {
     SELECT
       owner_email,
       source_freelancehunt_enabled,
+      source_freelancer_enabled,
+      source_weworkremotely_enabled,
       auto_scan_enabled,
       scan_interval_minutes,
       max_leads_per_run,

@@ -73,6 +73,16 @@ function leadStatusClass(status: JobLeadStatus) {
   }
 }
 
+function sourceSummary(settings: JobHuntSettings) {
+  const sources = [
+    settings.sourceFreelancehuntEnabled ? "Freelancehunt" : null,
+    settings.sourceFreelancerEnabled ? "Freelancer.com" : null,
+    settings.sourceWeworkremotelyEnabled ? "WWR" : null,
+  ].filter(Boolean);
+
+  return sources.length ? sources.join(" + ") : "Джерела вимкнені";
+}
+
 function upsertLead(leads: JobLead[], nextLead: JobLead) {
   const next = [nextLead, ...leads.filter((lead) => lead.id !== nextLead.id)];
 
@@ -288,6 +298,10 @@ export function JobsWorkspace({
       const result = await saveJobHuntSettingsAction({
         sourceFreelancehuntEnabled:
           formData.get("sourceFreelancehuntEnabled") === "on",
+        sourceFreelancerEnabled:
+          formData.get("sourceFreelancerEnabled") === "on",
+        sourceWeworkremotelyEnabled:
+          formData.get("sourceWeworkremotelyEnabled") === "on",
         autoScanEnabled: formData.get("autoScanEnabled") === "on",
         scanIntervalMinutes: Number(formData.get("scanIntervalMinutes") || 5),
         maxLeadsPerRun: Number(formData.get("maxLeadsPerRun") || 8),
@@ -423,10 +437,10 @@ export function JobsWorkspace({
           <div className="grid gap-3 md:grid-cols-3">
             <div className="rounded-[1.4rem] border border-white/10 bg-[#08111e]/78 px-4 py-4">
               <p className="text-[0.68rem] uppercase tracking-[0.22em] text-white/34">
-                Джерело
+                Джерела
               </p>
               <p className="mt-3 text-lg font-medium text-white">
-                Freelancehunt RSS
+                {sourceSummary(settings)}
               </p>
             </div>
             <div className="rounded-[1.4rem] border border-white/10 bg-[#08111e]/78 px-4 py-4">
@@ -502,15 +516,58 @@ export function JobsWorkspace({
                 </div>
 
                 <div className="mt-5 space-y-4">
-                  <label className="flex items-center gap-3 rounded-[1.1rem] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/78">
-                    <input
-                      type="checkbox"
-                      name="sourceFreelancehuntEnabled"
-                      defaultChecked={settings.sourceFreelancehuntEnabled}
-                      className="h-4 w-4 rounded border-white/20 bg-transparent text-sky-400"
-                    />
-                    Увімкнути офіційний Freelancehunt RSS
-                  </label>
+                  <div className="space-y-3">
+                    <label className="flex items-start gap-3 rounded-[1.1rem] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/78">
+                      <input
+                        type="checkbox"
+                        name="sourceFreelancehuntEnabled"
+                        defaultChecked={settings.sourceFreelancehuntEnabled}
+                        className="mt-0.5 h-4 w-4 rounded border-white/20 bg-transparent text-sky-400"
+                      />
+                      <span>
+                        <span className="block font-medium text-white/86">
+                          Freelancehunt RSS
+                        </span>
+                        <span className="mt-1 block text-xs leading-5 text-white/42">
+                          Найкраще джерело для українських невеликих задач.
+                        </span>
+                      </span>
+                    </label>
+
+                    <label className="flex items-start gap-3 rounded-[1.1rem] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/78">
+                      <input
+                        type="checkbox"
+                        name="sourceFreelancerEnabled"
+                        defaultChecked={settings.sourceFreelancerEnabled}
+                        className="mt-0.5 h-4 w-4 rounded border-white/20 bg-transparent text-sky-400"
+                      />
+                      <span>
+                        <span className="block font-medium text-white/86">
+                          Freelancer.com API
+                        </span>
+                        <span className="mt-1 block text-xs leading-5 text-white/42">
+                          Багато дрібних задач, але більше шуму, тому пропускаємо через наш score-фільтр.
+                        </span>
+                      </span>
+                    </label>
+
+                    <label className="flex items-start gap-3 rounded-[1.1rem] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/78">
+                      <input
+                        type="checkbox"
+                        name="sourceWeworkremotelyEnabled"
+                        defaultChecked={settings.sourceWeworkremotelyEnabled}
+                        className="mt-0.5 h-4 w-4 rounded border-white/20 bg-transparent text-sky-400"
+                      />
+                      <span>
+                        <span className="block font-medium text-white/86">
+                          We Work Remotely RSS
+                        </span>
+                        <span className="mt-1 block text-xs leading-5 text-white/42">
+                          Це більше job board, тому тримаємо як додатковий канал для контрактів.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
 
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="space-y-2">
@@ -746,7 +803,7 @@ export function JobsWorkspace({
             </div>
           ) : (
             <div className="rounded-[1.6rem] border border-dashed border-white/10 bg-[#08111e]/78 px-6 py-14 text-center text-sm leading-7 text-white/40">
-              Поки що немає активних lead-ів. Натисни `Знайти нові задачі`, і ми підтягнемо свіжі замовлення з офіційного Freelancehunt RSS.
+              Поки що немає активних lead-ів. Натисни `Знайти нові задачі`, і ми підтягнемо свіжі замовлення з увімкнених джерел.
             </div>
           )}
         </div>

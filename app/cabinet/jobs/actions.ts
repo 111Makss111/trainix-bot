@@ -55,6 +55,8 @@ function invalid(error: string): { ok: false; error: string } {
 
 export async function saveJobHuntSettingsAction(input: {
   sourceFreelancehuntEnabled: boolean;
+  sourceFreelancerEnabled: boolean;
+  sourceWeworkremotelyEnabled: boolean;
   autoScanEnabled: boolean;
   scanIntervalMinutes: number;
   maxLeadsPerRun: number;
@@ -93,6 +95,8 @@ export async function refreshJobLeadsAction(): Promise<RefreshJobLeadsActionResu
       message:
         result.created > 0
           ? `Знайшов ${result.created} нових lead-ів.`
+          : result.scanned === 0
+            ? "Увімкнені джерела поки не повернули задач або тимчасово не відповіли."
           : "Нових релевантних задач поки немає, але стрічку оновлено.",
     };
   } catch (error) {
