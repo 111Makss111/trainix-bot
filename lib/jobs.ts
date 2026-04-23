@@ -7,6 +7,7 @@ export const jobLeadStatuses = [
   "reviewed",
   "applied",
   "ignored",
+  "hidden",
 ] as const;
 
 export type JobLeadStatus = (typeof jobLeadStatuses)[number];
@@ -1196,6 +1197,26 @@ export async function updateJobLeadStatus(input: {
   `) as JobLeadRow[];
 
   return rows[0] ? mapJobLead(rows[0]) : null;
+}
+
+export async function deleteJobLead(input: {
+  ownerEmail: string;
+  leadId: string;
+}) {
+  const sql = await ensureJobsTables();
+
+  if (!sql) {
+    return false;
+  }
+
+  const rows = (await sql`
+    DELETE FROM job_leads
+    WHERE id = ${input.leadId}
+      AND owner_email = ${input.ownerEmail}
+    RETURNING id
+  `) as Array<{ id: string }>;
+
+  return Boolean(rows[0]?.id);
 }
 
 export async function regenerateJobLeadProposal(input: {

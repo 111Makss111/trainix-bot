@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { requireOwnerEmail } from "@/lib/auth-guards";
 import {
+  deleteJobLead,
+  getJobHuntSettings,
   jobLeadStatuses,
+  listJobLeads,
   refreshJobLeadsForOwner,
   regenerateJobLeadProposal,
   saveJobHuntSettings,
@@ -34,6 +37,14 @@ export type RefreshJobLeadsActionResult =
 
 export type JobLeadMutationActionResult =
   | { ok: true; lead: JobLead; message?: string }
+  | { ok: false; error: string };
+
+export type JobLeadDeleteActionResult =
+  | { ok: true; deletedId: string; message?: string }
+  | { ok: false; error: string };
+
+export type JobsRuntimeActionResult =
+  | { ok: true; settings: JobHuntSettings; leads: JobLead[] }
   | { ok: false; error: string };
 
 export type JobTelegramTestActionResult =
@@ -132,6 +143,32 @@ export async function updateJobLeadStatusAction(input: {
   return {
     ok: true,
     lead,
+    message:
+      input.status === "hidden"
+        ? "Lead сховано. Він більше не з’являтиметься в списках, але лишиться в базі для антидубля."
+        : undefined,
+  };
+}
+
+export async function deleteJobLeadAction(input: {
+  leadId: string;
+}): Promise<JobLeadDeleteActionResult> {
+  const ownerEmail = await requireOwnerEmail();
+  const deleted = await deleteJobLead({
+    ownerEmail,
+    leadId: input.leadId,
+  });
+
+  if (!deleted) {
+    return invalid("Не вдалося видалити lead назавжди.");
+  }
+
+  revalidatePath("/cabinet/jobs");
+
+  return {
+    ok: true,
+    deletedId: input.leadId,
+    message: "Lead видалено назавжди.",
   };
 }
 
@@ -240,6 +277,29 @@ export async function verifyJobTelegramConnectionAction(input: {
       error instanceof Error
         ? error.message
         : "Не вдалося перевірити Telegram connection.",
+    );
+  }
+}
+
+export async function syncJobsRuntimeAction(): Promise<JobsRuntimeActionResult> {
+  const ownerEmail = await requireOwnerEmail();
+
+  try {
+    const [settings, leads] = await Promise.all([
+      getJobHuntSettings(ownerEmail),
+      listJobLeads(ownerEmail, 60),
+    ]);
+
+    return {
+      ok: true,
+      settings,
+      leads,
+    };
+  } catch (error) {
+    return invalid(
+      error instanceof Error
+        ? error.message
+        : "Не вдалося синхронізувати стан Jobs.",
     );
   }
 }

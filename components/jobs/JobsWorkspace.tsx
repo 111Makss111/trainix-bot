@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
+  deleteJobLeadAction,
   refreshJobLeadsAction,
   regenerateJobLeadProposalAction,
   saveJobHuntSettingsAction,
   sendJobTelegramTestAction,
+  syncJobsRuntimeAction,
   updateJobLeadStatusAction,
   verifyJobTelegramConnectionAction,
 } from "@/app/cabinet/jobs/actions";
@@ -68,6 +70,70 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatTime(value: number) {
+  return new Intl.DateTimeFormat("uk-UA", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatCountdown(ms: number) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function getNextScanMeta(input: {
+  settings: JobHuntSettings;
+  now: number;
+  cronSecretConfigured: boolean;
+}) {
+  const { settings, now, cronSecretConfigured } = input;
+
+  if (!settings.autoScanEnabled) {
+    return {
+      title: "Автоскан OFF",
+      detail: "Увімкни фоновий сканер через cron у налаштуваннях.",
+      tone: "neutral" as const,
+    };
+  }
+
+  if (!cronSecretConfigured) {
+    return {
+      title: "Немає CRON_SECRET",
+      detail: "Маршрут готовий, але захист cron ще не налаштовано.",
+      tone: "warning" as const,
+    };
+  }
+
+  const baseTime = settings.lastScanAt
+    ? new Date(settings.lastScanAt).getTime()
+    : now;
+  const nextScanAt = baseTime + settings.scanIntervalMinutes * 60_000;
+  const diff = nextScanAt - now;
+
+  if (diff > 0) {
+    return {
+      title: `Через ${formatCountdown(diff)}`,
+      detail: `Наступний цикл орієнтовно о ${formatTime(nextScanAt)}.`,
+      tone: "active" as const,
+    };
+  }
+
+  return {
+    title: "Мав би вже стартувати",
+    detail: "Якщо цей стан висить довго, перевір cron-job.org або логи деплою.",
+    tone: "warning" as const,
+  };
+}
+
 function leadStatusLabel(status: JobLeadStatus) {
   switch (status) {
     case "reviewed":
@@ -124,13 +190,17 @@ function replaceLeads(_current: JobLead[], nextLeads: JobLead[]) {
 
 function LeadCard({
   lead,
+  mode,
   isPending,
   onStatusChange,
+  onDelete,
   onRegenerateProposal,
 }: {
   lead: JobLead;
+  mode: "active" | "history";
   isPending: boolean;
   onStatusChange: (lead: JobLead, status: JobLeadStatus) => void;
+  onDelete: (lead: JobLead) => void;
   onRegenerateProposal: (lead: JobLead) => void;
 }) {
   return (
@@ -202,7 +272,7 @@ function LeadCard({
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            {lead.status !== "reviewed" ? (
+            {mode === "active" && lead.status !== "reviewed" ? (
               <button
                 type="button"
                 disabled={isPending}
@@ -212,7 +282,7 @@ function LeadCard({
                 Позначити як переглянуту
               </button>
             ) : null}
-            {lead.status !== "applied" ? (
+            {mode === "active" && lead.status !== "applied" ? (
               <button
                 type="button"
                 disabled={isPending}
@@ -222,16 +292,24 @@ function LeadCard({
                 Відгукнувся
               </button>
             ) : null}
-            {lead.status !== "ignored" ? (
+            {mode === "active" ? (
               <button
                 type="button"
                 disabled={isPending}
-                onClick={() => onStatusChange(lead, "ignored")}
+                onClick={() => onStatusChange(lead, "hidden")}
                 className="rounded-full border border-white/12 px-4 py-2 text-sm font-medium text-white/62 transition hover:border-red-300/20 hover:text-red-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Пропустити
+                Нецікаво
               </button>
             ) : null}
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => onDelete(lead)}
+              className="rounded-full border border-red-300/16 bg-red-300/[0.08] px-4 py-2 text-sm font-medium text-red-50 transition hover:bg-red-300/[0.14] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Видалити назавжди
+            </button>
           </div>
         </section>
 
@@ -281,6 +359,7 @@ export function JobsWorkspace({
   const [leads, setLeads] = useState(initialLeads);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [pendingLeadId, setPendingLeadId] = useState<string | null>(null);
+  const [nowTs, setNowTs] = useState(() => Date.now());
   const [telegramVerification, setTelegramVerification] =
     useState<TelegramVerificationState | null>(null);
   const [isRefreshing, startRefresh] = useTransition();
@@ -289,15 +368,62 @@ export function JobsWorkspace({
   const [isTestingTelegram, startTelegramTest] = useTransition();
   const [isVerifyingTelegram, startTelegramVerify] = useTransition();
   const activeSourceCards = useMemo(() => enabledSources(settings), [settings]);
+  const nextScanMeta = useMemo(
+    () =>
+      getNextScanMeta({
+        settings,
+        now: nowTs,
+        cronSecretConfigured,
+      }),
+    [cronSecretConfigured, nowTs, settings],
+  );
 
   const activeLeads = useMemo(
     () => leads.filter((lead) => lead.status === "new" || lead.status === "reviewed"),
     [leads],
   );
   const historyLeads = useMemo(
-    () => leads.filter((lead) => lead.status === "applied" || lead.status === "ignored"),
+    () => leads.filter((lead) => lead.status === "applied"),
     [leads],
   );
+
+  useEffect(() => {
+    const timerId = window.setInterval(() => {
+      setNowTs(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(timerId);
+  }, []);
+
+  useEffect(() => {
+    if (!settings.autoScanEnabled || !cronSecretConfigured) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const syncRuntime = async () => {
+      const result = await syncJobsRuntimeAction();
+
+      if (!result.ok || isCancelled) {
+        return;
+      }
+
+      setSettings(result.settings);
+      setLeads(replaceLeads([], result.leads));
+    };
+
+    void syncRuntime();
+
+    const syncId = window.setInterval(() => {
+      void syncRuntime();
+    }, 30_000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(syncId);
+    };
+  }, [cronSecretConfigured, settings.autoScanEnabled]);
 
   function handleRefresh() {
     setFeedback(null);
@@ -311,6 +437,7 @@ export function JobsWorkspace({
 
       setSettings(result.settings);
       setLeads(replaceLeads([], result.leads));
+      setNowTs(Date.now());
       setFeedback(result.message ?? null);
       setActiveTab("leads");
     });
@@ -342,6 +469,7 @@ export function JobsWorkspace({
       }
 
       setSettings(result.settings);
+      setNowTs(Date.now());
       setTelegramVerification(null);
       setFeedback(result.message ?? null);
     });
@@ -364,6 +492,35 @@ export function JobsWorkspace({
       }
 
       setLeads((current) => upsertLead(current, result.lead));
+      if (result.message) {
+        setFeedback(result.message);
+      }
+    });
+  }
+
+  function handleDeleteLead(lead: JobLead) {
+    if (!window.confirm(`Видалити "${lead.title}" назавжди?`)) {
+      return;
+    }
+
+    setFeedback(null);
+    setPendingLeadId(lead.id);
+    startLeadAction(async () => {
+      const result = await deleteJobLeadAction({
+        leadId: lead.id,
+      });
+
+      setPendingLeadId(null);
+
+      if (!result.ok) {
+        setFeedback(result.error);
+        return;
+      }
+
+      setLeads((current) =>
+        current.filter((currentLead) => currentLead.id !== result.deletedId),
+      );
+      setFeedback(result.message ?? null);
     });
   }
 
@@ -458,7 +615,7 @@ export function JobsWorkspace({
 
       <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-4">
             <div className="rounded-[1.4rem] border border-white/10 bg-[#08111e]/78 px-4 py-4">
               <p className="text-[0.68rem] uppercase tracking-[0.22em] text-white/34">
                 Скануються
@@ -496,6 +653,26 @@ export function JobsWorkspace({
                 Активні ліди
               </p>
               <p className="mt-3 text-lg font-medium text-white">{activeLeads.length}</p>
+            </div>
+            <div
+              className={[
+                "rounded-[1.4rem] border px-4 py-4",
+                nextScanMeta.tone === "active"
+                  ? "border-emerald-300/16 bg-emerald-300/[0.08]"
+                  : nextScanMeta.tone === "warning"
+                    ? "border-amber-300/14 bg-amber-300/[0.08]"
+                    : "border-white/10 bg-[#08111e]/78",
+              ].join(" ")}
+            >
+              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-white/34">
+                Наступний автоскан
+              </p>
+              <p className="mt-3 text-lg font-medium text-white">
+                {nextScanMeta.title}
+              </p>
+              <p className="mt-2 text-xs leading-5 text-white/44">
+                {nextScanMeta.detail}
+              </p>
             </div>
           </div>
 
@@ -847,8 +1024,10 @@ export function JobsWorkspace({
                   <LeadCard
                     key={lead.id}
                     lead={lead}
+                    mode="history"
                     isPending={isLeadActionPending && pendingLeadId === lead.id}
                     onStatusChange={handleStatusChange}
+                    onDelete={handleDeleteLead}
                     onRegenerateProposal={handleRegenerateProposal}
                   />
                 ))}
@@ -864,8 +1043,10 @@ export function JobsWorkspace({
                 <LeadCard
                   key={lead.id}
                   lead={lead}
+                  mode="active"
                   isPending={isLeadActionPending && pendingLeadId === lead.id}
                   onStatusChange={handleStatusChange}
+                  onDelete={handleDeleteLead}
                   onRegenerateProposal={handleRegenerateProposal}
                 />
               ))}
