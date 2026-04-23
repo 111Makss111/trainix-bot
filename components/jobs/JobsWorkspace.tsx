@@ -33,6 +33,27 @@ const jobsTabs: Array<{ value: JobsTab; label: string }> = [
   { value: "settings", label: "Налаштування" },
 ];
 
+const jobSourceCards = [
+  {
+    key: "freelancehunt",
+    field: "sourceFreelancehuntEnabled",
+    label: "Freelancehunt RSS",
+    hint: "Українські дрібні задачі та швидкі замовлення.",
+  },
+  {
+    key: "freelancer",
+    field: "sourceFreelancerEnabled",
+    label: "Freelancer.com API",
+    hint: "Широкий міжнародний потік, але більше шуму.",
+  },
+  {
+    key: "weworkremotely",
+    field: "sourceWeworkremotelyEnabled",
+    label: "We Work Remotely RSS",
+    hint: "Контракти й remote jobs як додатковий канал.",
+  },
+] as const;
+
 function formatDate(value: string | null) {
   if (!value) {
     return "Щойно";
@@ -74,13 +95,15 @@ function leadStatusClass(status: JobLeadStatus) {
 }
 
 function sourceSummary(settings: JobHuntSettings) {
-  const sources = [
-    settings.sourceFreelancehuntEnabled ? "Freelancehunt" : null,
-    settings.sourceFreelancerEnabled ? "Freelancer.com" : null,
-    settings.sourceWeworkremotelyEnabled ? "WWR" : null,
-  ].filter(Boolean);
+  const sources = jobSourceCards
+    .filter((source) => settings[source.field])
+    .map((source) => source.label);
 
   return sources.length ? sources.join(" + ") : "Джерела вимкнені";
+}
+
+function enabledSources(settings: JobHuntSettings) {
+  return jobSourceCards.filter((source) => settings[source.field]);
 }
 
 function upsertLead(leads: JobLead[], nextLead: JobLead) {
@@ -265,6 +288,7 @@ export function JobsWorkspace({
   const [isLeadActionPending, startLeadAction] = useTransition();
   const [isTestingTelegram, startTelegramTest] = useTransition();
   const [isVerifyingTelegram, startTelegramVerify] = useTransition();
+  const activeSourceCards = useMemo(() => enabledSources(settings), [settings]);
 
   const activeLeads = useMemo(
     () => leads.filter((lead) => lead.status === "new" || lead.status === "reviewed"),
@@ -437,9 +461,25 @@ export function JobsWorkspace({
           <div className="grid gap-3 md:grid-cols-3">
             <div className="rounded-[1.4rem] border border-white/10 bg-[#08111e]/78 px-4 py-4">
               <p className="text-[0.68rem] uppercase tracking-[0.22em] text-white/34">
-                Джерела
+                Скануються
               </p>
-              <p className="mt-3 text-lg font-medium text-white">
+              <div className="mt-3 flex flex-wrap gap-2">
+                {activeSourceCards.length ? (
+                  activeSourceCards.map((source) => (
+                    <span
+                      key={source.key}
+                      className="rounded-full border border-sky-300/18 bg-sky-300/[0.12] px-3 py-1 text-[0.68rem] uppercase tracking-[0.18em] text-sky-50"
+                    >
+                      {source.label}
+                    </span>
+                  ))
+                ) : (
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] uppercase tracking-[0.18em] text-white/48">
+                    Джерела вимкнені
+                  </span>
+                )}
+              </div>
+              <p className="mt-3 text-xs leading-5 text-white/42">
                 {sourceSummary(settings)}
               </p>
             </div>
@@ -467,6 +507,39 @@ export function JobsWorkspace({
           >
             {isRefreshing ? "Оновлюю стрічку..." : "Знайти нові задачі"}
           </button>
+        </div>
+
+        <div className="mt-5 grid gap-3 xl:grid-cols-3">
+          {jobSourceCards.map((source) => {
+            const isEnabled = settings[source.field];
+
+            return (
+              <div
+                key={source.key}
+                className={[
+                  "rounded-[1.25rem] border px-4 py-4 transition",
+                  isEnabled
+                    ? "border-emerald-300/18 bg-emerald-300/[0.08]"
+                    : "border-white/10 bg-[#08111e]/46",
+                ].join(" ")}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-white">{source.label}</p>
+                  <span
+                    className={[
+                      "rounded-full border px-2.5 py-1 text-[0.62rem] uppercase tracking-[0.22em]",
+                      isEnabled
+                        ? "border-emerald-300/18 bg-emerald-300/[0.12] text-emerald-50"
+                        : "border-white/10 bg-white/[0.04] text-white/44",
+                    ].join(" ")}
+                  >
+                    {isEnabled ? "ON" : "OFF"}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-white/46">{source.hint}</p>
+              </div>
+            );
+          })}
         </div>
 
         <div className="mt-5 grid gap-2 rounded-[1.2rem] border border-white/10 bg-[#091122]/64 p-2 md:grid-cols-3">
@@ -512,61 +585,57 @@ export function JobsWorkspace({
                     <h3 className="mt-3 text-xl font-medium text-white">
                       Налаштування пошуку
                     </h3>
+                    <p className="mt-2 text-sm leading-6 text-white/44">
+                      Обери біржі, які реально сканувати. Тут же керується інтервал і шум-фільтр.
+                    </p>
                   </div>
                 </div>
 
                 <div className="mt-5 space-y-4">
                   <div className="space-y-3">
-                    <label className="flex items-start gap-3 rounded-[1.1rem] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/78">
-                      <input
-                        type="checkbox"
-                        name="sourceFreelancehuntEnabled"
-                        defaultChecked={settings.sourceFreelancehuntEnabled}
-                        className="mt-0.5 h-4 w-4 rounded border-white/20 bg-transparent text-sky-400"
-                      />
-                      <span>
-                        <span className="block font-medium text-white/86">
-                          Freelancehunt RSS
-                        </span>
-                        <span className="mt-1 block text-xs leading-5 text-white/42">
-                          Найкраще джерело для українських невеликих задач.
-                        </span>
-                      </span>
-                    </label>
+                    {jobSourceCards.map((source) => {
+                      const isEnabled = settings[source.field];
 
-                    <label className="flex items-start gap-3 rounded-[1.1rem] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/78">
-                      <input
-                        type="checkbox"
-                        name="sourceFreelancerEnabled"
-                        defaultChecked={settings.sourceFreelancerEnabled}
-                        className="mt-0.5 h-4 w-4 rounded border-white/20 bg-transparent text-sky-400"
-                      />
-                      <span>
-                        <span className="block font-medium text-white/86">
-                          Freelancer.com API
-                        </span>
-                        <span className="mt-1 block text-xs leading-5 text-white/42">
-                          Багато дрібних задач, але більше шуму, тому пропускаємо через наш score-фільтр.
-                        </span>
-                      </span>
-                    </label>
+                      return (
+                        <label
+                          key={source.key}
+                          className={[
+                            "flex items-start justify-between gap-3 rounded-[1.1rem] border px-4 py-3 text-sm",
+                            isEnabled
+                              ? "border-sky-300/18 bg-sky-300/[0.08] text-white/86"
+                              : "border-white/10 bg-white/[0.03] text-white/78",
+                          ].join(" ")}
+                        >
+                          <span className="flex items-start gap-3">
+                            <input
+                              type="checkbox"
+                              name={source.field}
+                              defaultChecked={isEnabled}
+                              className="mt-0.5 h-4 w-4 rounded border-white/20 bg-transparent text-sky-400"
+                            />
+                            <span>
+                              <span className="block font-medium text-white/92">
+                                {source.label}
+                              </span>
+                              <span className="mt-1 block text-xs leading-5 text-white/42">
+                                {source.hint}
+                              </span>
+                            </span>
+                          </span>
 
-                    <label className="flex items-start gap-3 rounded-[1.1rem] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/78">
-                      <input
-                        type="checkbox"
-                        name="sourceWeworkremotelyEnabled"
-                        defaultChecked={settings.sourceWeworkremotelyEnabled}
-                        className="mt-0.5 h-4 w-4 rounded border-white/20 bg-transparent text-sky-400"
-                      />
-                      <span>
-                        <span className="block font-medium text-white/86">
-                          We Work Remotely RSS
-                        </span>
-                        <span className="mt-1 block text-xs leading-5 text-white/42">
-                          Це більше job board, тому тримаємо як додатковий канал для контрактів.
-                        </span>
-                      </span>
-                    </label>
+                          <span
+                            className={[
+                              "shrink-0 rounded-full border px-2.5 py-1 text-[0.62rem] uppercase tracking-[0.22em]",
+                              isEnabled
+                                ? "border-sky-300/18 bg-sky-300/[0.12] text-sky-50"
+                                : "border-white/10 bg-white/[0.04] text-white/44",
+                            ].join(" ")}
+                          >
+                            {isEnabled ? "Увімкнено" : "Вимкнено"}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
 
                   <div className="grid gap-3 md:grid-cols-2">
