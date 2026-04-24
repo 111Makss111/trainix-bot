@@ -27,10 +27,12 @@ type TelegramVerificationState = {
   chat: TelegramChatInfo;
 };
 
-type JobsTab = "leads" | "history" | "settings";
+type JobsTab = "leads" | "active" | "history" | "settings";
+type LeadCardMode = "leads" | "active" | "history";
 
 const jobsTabs: Array<{ value: JobsTab; label: string }> = [
   { value: "leads", label: "Ліди" },
+  { value: "active", label: "Активні" },
   { value: "history", label: "Історія" },
   { value: "settings", label: "Налаштування" },
 ];
@@ -139,11 +141,11 @@ function leadStatusLabel(status: JobLeadStatus) {
     case "reviewed":
       return "Переглянуто";
     case "applied":
-      return "Відгукнувся";
+      return "Очікує відповіді";
     case "hidden":
       return "Сховано";
     case "ignored":
-      return "Пропущено";
+      return "В історії";
     default:
       return "Нове";
   }
@@ -201,7 +203,7 @@ function LeadCard({
   onRegenerateProposal,
 }: {
   lead: JobLead;
-  mode: "active" | "history";
+  mode: LeadCardMode;
   isPending: boolean;
   onStatusChange: (lead: JobLead, status: JobLeadStatus) => void;
   onDelete: (lead: JobLead) => void;
@@ -276,7 +278,7 @@ function LeadCard({
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            {mode === "active" && lead.status !== "reviewed" ? (
+            {mode === "leads" && lead.status !== "reviewed" ? (
               <button
                 type="button"
                 disabled={isPending}
@@ -286,7 +288,7 @@ function LeadCard({
                 Позначити як переглянуту
               </button>
             ) : null}
-            {mode === "active" && lead.status !== "applied" ? (
+            {mode === "leads" && lead.status !== "applied" ? (
               <button
                 type="button"
                 disabled={isPending}
@@ -296,7 +298,7 @@ function LeadCard({
                 Відгукнувся
               </button>
             ) : null}
-            {mode === "active" ? (
+            {mode === "leads" ? (
               <button
                 type="button"
                 disabled={isPending}
@@ -304,6 +306,36 @@ function LeadCard({
                 className="rounded-full border border-white/12 px-4 py-2 text-sm font-medium text-white/62 transition hover:border-red-300/20 hover:text-red-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Нецікаво
+              </button>
+            ) : null}
+            {mode === "active" ? (
+              <>
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => onStatusChange(lead, "reviewed")}
+                  className="rounded-full border border-sky-300/16 bg-sky-300/10 px-4 py-2 text-sm font-medium text-sky-50 transition hover:bg-sky-300/16 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Повернути в ліди
+                </button>
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => onStatusChange(lead, "ignored")}
+                  className="rounded-full border border-white/12 px-4 py-2 text-sm font-medium text-white/62 transition hover:border-amber-300/20 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  В архів
+                </button>
+              </>
+            ) : null}
+            {mode === "history" ? (
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => onStatusChange(lead, "applied")}
+                className="rounded-full border border-emerald-300/16 bg-emerald-300/10 px-4 py-2 text-sm font-medium text-emerald-50 transition hover:bg-emerald-300/16 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Повернути в активні
               </button>
             ) : null}
             <button
@@ -382,13 +414,26 @@ export function JobsWorkspace({
     [cronSecretConfigured, nowTs, settings],
   );
 
-  const activeLeads = useMemo(
+  const inboxLeads = useMemo(
     () => leads.filter((lead) => lead.status === "new" || lead.status === "reviewed"),
     [leads],
   );
-  const historyLeads = useMemo(
+  const activeJobLeads = useMemo(
     () => leads.filter((lead) => lead.status === "applied"),
     [leads],
+  );
+  const historyLeads = useMemo(
+    () => leads.filter((lead) => lead.status === "ignored"),
+    [leads],
+  );
+  const tabCounters = useMemo<Record<JobsTab, number | null>>(
+    () => ({
+      leads: inboxLeads.length,
+      active: activeJobLeads.length,
+      history: historyLeads.length,
+      settings: null,
+    }),
+    [activeJobLeads.length, historyLeads.length, inboxLeads.length],
   );
 
   useEffect(() => {
@@ -654,9 +699,9 @@ export function JobsWorkspace({
             </div>
             <div className="rounded-[1.4rem] border border-white/10 bg-[#08111e]/78 px-4 py-4">
               <p className="text-[0.68rem] uppercase tracking-[0.22em] text-white/34">
-                Активні ліди
+                Нові ліди
               </p>
-              <p className="mt-3 text-lg font-medium text-white">{activeLeads.length}</p>
+              <p className="mt-3 text-lg font-medium text-white">{inboxLeads.length}</p>
             </div>
             <div
               className={[
@@ -723,22 +768,31 @@ export function JobsWorkspace({
           })}
         </div>
 
-        <div className="mt-5 grid gap-2 rounded-[1.2rem] border border-white/10 bg-[#091122]/64 p-2 md:grid-cols-3">
-          {jobsTabs.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => setActiveTab(tab.value)}
-              className={[
-                "rounded-[1rem] border px-4 py-3 text-sm transition",
-                activeTab === tab.value
-                  ? "border-sky-300/20 bg-sky-300/[0.12] text-white"
-                  : "border-white/8 bg-transparent text-white/58 hover:border-white/14 hover:text-white/88",
-              ].join(" ")}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="mt-5 grid gap-2 rounded-[1.2rem] border border-white/10 bg-[#091122]/64 p-2 md:grid-cols-4">
+          {jobsTabs.map((tab) => {
+            const counter = tabCounters[tab.value];
+
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => setActiveTab(tab.value)}
+                className={[
+                  "flex items-center justify-center gap-2 rounded-[1rem] border px-4 py-3 text-sm transition",
+                  activeTab === tab.value
+                    ? "border-sky-300/20 bg-sky-300/[0.12] text-white"
+                    : "border-white/8 bg-transparent text-white/58 hover:border-white/14 hover:text-white/88",
+                ].join(" ")}
+              >
+                <span>{tab.label}</span>
+                {counter !== null ? (
+                  <span className="rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[0.65rem] text-white/58">
+                    {counter}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
         </div>
 
         {feedback ? (
@@ -1021,6 +1075,26 @@ export function JobsWorkspace({
                 </div>
               </section>
             </form>
+          ) : activeTab === "active" ? (
+            activeJobLeads.length ? (
+              <div className="space-y-4">
+                {activeJobLeads.map((lead) => (
+                  <LeadCard
+                    key={lead.id}
+                    lead={lead}
+                    mode="active"
+                    isPending={isLeadActionPending && pendingLeadId === lead.id}
+                    onStatusChange={handleStatusChange}
+                    onDelete={handleDeleteLead}
+                    onRegenerateProposal={handleRegenerateProposal}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-[1.6rem] border border-dashed border-white/10 bg-[#08111e]/78 px-6 py-14 text-center text-sm leading-7 text-white/40">
+                Активних відгуків поки немає. Коли натиснеш `Відгукнувся`, задача переїде сюди як очікування відповіді від замовника.
+              </div>
+            )
           ) : activeTab === "history" ? (
             historyLeads.length ? (
               <div className="space-y-4">
@@ -1038,16 +1112,16 @@ export function JobsWorkspace({
               </div>
             ) : (
               <div className="rounded-[1.6rem] border border-dashed border-white/10 bg-[#08111e]/78 px-6 py-14 text-center text-sm leading-7 text-white/40">
-                Історія ще порожня. Коли почнеш відгукуватися або відмічати ліди як пропущені, тут з’явиться хронологія.
+                Історія ще порожня. Коли активний відгук стане неактуальним, натисни `В архів`, і він залишиться тут для пам’яті та антидубля.
               </div>
             )
-          ) : activeLeads.length ? (
+          ) : inboxLeads.length ? (
             <div className="space-y-4">
-              {activeLeads.map((lead) => (
+              {inboxLeads.map((lead) => (
                 <LeadCard
                   key={lead.id}
                   lead={lead}
-                  mode="active"
+                  mode="leads"
                   isPending={isLeadActionPending && pendingLeadId === lead.id}
                   onStatusChange={handleStatusChange}
                   onDelete={handleDeleteLead}
