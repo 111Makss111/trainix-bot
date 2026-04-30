@@ -82,6 +82,33 @@ function NotesIcon() {
   );
 }
 
+function RoutineIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+      <circle
+        cx="12"
+        cy="12"
+        r="8.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M12 7.5V12l3 2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5.8 5.8 4.5 4.5M18.2 5.8l1.3-1.3"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function PracticeIcon() {
   return (
     <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
@@ -246,6 +273,12 @@ const navItems: NavItem[] = [
     label: "Нотатки",
     description: "Ідеї та чернетки",
     icon: <NotesIcon />,
+  },
+  {
+    href: "/cabinet/routine",
+    label: "Routine",
+    description: "Графік і ритм",
+    icon: <RoutineIcon />,
   },
   {
     href: "/cabinet/practice",

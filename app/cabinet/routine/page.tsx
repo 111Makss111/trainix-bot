@@ -1,19 +1,30 @@
-import { CabinetCard, CabinetTopbar } from "@/components/cabinet";
+import { CabinetTopbar } from "@/components/cabinet";
+import { RoutineWorkspace } from "@/components/routine";
+import { requireOwnerEmail } from "@/lib/auth-guards";
+import { listRoutineShiftsForOwner } from "@/lib/routine";
+import {
+  getRoutineDateKeyWithOffset,
+  getRoutineTodayKey,
+} from "@/lib/routine-shared";
 
-export default function RoutinePage() {
+export default async function RoutinePage() {
+  const ownerEmail = await requireOwnerEmail();
+  const todayKey = getRoutineTodayKey();
+  const shifts = await listRoutineShiftsForOwner({
+    ownerEmail,
+    fromDate: getRoutineDateKeyWithOffset(-7),
+    toDate: getRoutineDateKeyWithOffset(45),
+  });
+
   return (
     <>
       <CabinetTopbar
         eyebrow="Routine"
         title="Ритм і рутина"
-        description="Тут зберемо твій щоденний робочий пульс: повторювані дії, фокус-блоки, звички та контроль виконання."
+        description="Адаптивний графік під твої зміни: зберігаємо робочі дні, автоматично збираємо план дня і готуємо основу для Telegram-нагадувань."
       />
 
-      <CabinetCard
-        eyebrow="Draft"
-        title="Сторінка готова для наповнення"
-        description="Зараз це базовий розділ-заглушка, але він уже бере участь у живій навігації. Наступним кроком можемо розкласти тут структуру під твою реальну рутину."
-      />
+      <RoutineWorkspace initialShifts={shifts} todayKey={todayKey} />
     </>
   );
 }
