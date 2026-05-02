@@ -108,7 +108,19 @@ const futuresPresetSymbols = [
 ] as const;
 const intervalOptions = ["1m", "5m", "15m", "1h", "4h"] as const;
 const largeTradeThresholds = [25000, 50000, 100000, 250000, 500000] as const;
+const klineHistoryLimit = 1000;
+const restBackupRefreshMs = 15_000;
+const staleStreamMs = 25_000;
+const wallSyncThrottleMs = 1_200;
+const bookTickerThrottleMs = 500;
 const maxTradeMarkers = 30;
+const visibleBarsByInterval: Record<(typeof intervalOptions)[number], number> = {
+  "1m": 360,
+  "5m": 420,
+  "15m": 420,
+  "1h": 360,
+  "4h": 240,
+};
 const marketOptions = [
   {
     value: "spot",
@@ -158,6 +170,40 @@ function formatPrice(value: number) {
     minimumFractionDigits: value < 1 ? 4 : 2,
     maximumFractionDigits: value < 1 ? 6 : 2,
   }).format(value);
+}
+
+function getPricePrecision(value: number | null) {
+  if (!value || value <= 0) {
+    return 2;
+  }
+
+  if (value < 0.0001) {
+    return 8;
+  }
+
+  if (value < 0.01) {
+    return 6;
+  }
+
+  if (value < 1) {
+    return 4;
+  }
+
+  if (value < 10) {
+    return 3;
+  }
+
+  return 2;
+}
+
+function getSeriesPriceFormat(value: number | null) {
+  const precision = getPricePrecision(value);
+
+  return {
+    type: "price" as const,
+    precision,
+    minMove: 1 / 10 ** precision,
+  };
 }
 
 function formatTime(value: number) {
@@ -601,6 +647,7 @@ export function CryptoWorkspace() {
       wickDownColor: "#f2555a",
       priceLineVisible: true,
       lastValueVisible: true,
+      priceFormat: getSeriesPriceFormat(null),
     });
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -623,14 +670,7 @@ export function CryptoWorkspace() {
     volumeSeriesRef.current = volumeSeries;
     markersRef.current = createSeriesMarkers(candleSeries, []);
 
-    const resizeObserver = new ResizeObserver(() => {
-      chart.timeScale().fitContent();
-    });
-
-    resizeObserver.observe(chartContainerRef.current);
-
     return () => {
-      resizeObserver.disconnect();
       wallLinesRef.current.forEach((line) => candleSeries.removePriceLine(line));
       wallLinesRef.current = [];
       zoneLinesRef.current.forEach((line) => candleSeries.removePriceLine(line));
@@ -658,6 +698,181 @@ export function CryptoWorkspace() {
 
     let cancelled = false;
     let socket: WebSocket | null = null;
+    let restBackupTimer: number | null = null;
+    let wallSyncTimer: number | null = null;
+    let bookTickerTimer: number | null = null;
+    let pendingTopBook: TopBook | null = null;
+    let lastWallSyncAt = 0;
+    let lastStreamKlineAt = Date.now();
+    let isRestBackupRunning = false;
+    const restBase = getRestBase(marketType);
+    const wsBase =
+      marketType === "spot"
+        ? "wss://stream.binance.com:9443/stream?streams="
+        : "wss://fstream.binance.com/stream?streams=";
+    const streamBase = symbol.toLowerCase();
+
+    function focusRecentRange(totalCandles: number) {
+      const chart = chartRef.current;
+
+      if (!chart || totalCandles <= 0) {
+        return;
+      }
+
+      const visibleBars = Math.min(
+        totalCandles,
+        visibleBarsByInterval[interval] ?? 360,
+      );
+
+      chart.timeScale().setVisibleLogicalRange({
+        from: Math.max(0, totalCandles - visibleBars),
+        to: totalCandles + 8,
+      });
+    }
+
+    function updateSeriesPriceFormat(price: number | null) {
+      candleSeriesInstance.applyOptions({
+        priceFormat: getSeriesPriceFormat(price),
+      });
+    }
+
+    function rememberCandle(nextRawCandle: Candle) {
+      const nextCandles = [...candlesRef.current];
+      const lastCandle = nextCandles[nextCandles.length - 1];
+
+      if (lastCandle?.openTime === nextRawCandle.openTime) {
+        nextCandles[nextCandles.length - 1] = nextRawCandle;
+      } else {
+        nextCandles.push(nextRawCandle);
+      }
+
+      candlesRef.current = nextCandles.slice(-klineHistoryLimit);
+    }
+
+    function updateLiveCandle(nextRawCandle: Candle) {
+      const candle = {
+        time: toChartTime(nextRawCandle.openTime),
+        open: nextRawCandle.open,
+        high: nextRawCandle.high,
+        low: nextRawCandle.low,
+        close: nextRawCandle.close,
+        volume: nextRawCandle.volume,
+      };
+
+      candleSeriesInstance.update(candle);
+      volumeSeriesInstance.update({
+        time: candle.time,
+        value: candle.volume,
+        color:
+          candle.close >= candle.open
+            ? "rgba(36,180,126,0.35)"
+            : "rgba(242,85,90,0.35)",
+      });
+      rememberCandle(nextRawCandle);
+      updateSeriesPriceFormat(nextRawCandle.close);
+      setCurrentPrice(nextRawCandle.close);
+    }
+
+    function scheduleTopBookUpdate(nextTopBook: TopBook) {
+      pendingTopBook = nextTopBook;
+
+      if (bookTickerTimer) {
+        return;
+      }
+
+      bookTickerTimer = window.setTimeout(() => {
+        bookTickerTimer = null;
+
+        if (cancelled || !pendingTopBook) {
+          return;
+        }
+
+        setTopBook(pendingTopBook);
+        pendingTopBook = null;
+      }, bookTickerThrottleMs);
+    }
+
+    function scheduleWallsSync() {
+      const now = Date.now();
+      const elapsed = now - lastWallSyncAt;
+
+      if (elapsed >= wallSyncThrottleMs) {
+        lastWallSyncAt = now;
+        syncWalls(candleSeriesInstance, symbol);
+        return;
+      }
+
+      if (wallSyncTimer) {
+        return;
+      }
+
+      wallSyncTimer = window.setTimeout(() => {
+        wallSyncTimer = null;
+
+        if (cancelled) {
+          return;
+        }
+
+        lastWallSyncAt = Date.now();
+        syncWalls(candleSeriesInstance, symbol);
+      }, wallSyncThrottleMs - elapsed);
+    }
+
+    async function refreshLatestMarketSnapshot(reason: "backup" | "stale") {
+      if (isRestBackupRunning) {
+        return;
+      }
+
+      isRestBackupRunning = true;
+
+      try {
+        const [latestKlinesResponse, bookTickerResponse] = await Promise.all([
+          fetch(`${restBase}/klines?symbol=${symbol}&interval=${interval}&limit=2`, {
+            cache: "no-store",
+          }),
+          fetch(`${restBase}/ticker/bookTicker?symbol=${symbol}`, {
+            cache: "no-store",
+          }),
+        ]);
+
+        if (!latestKlinesResponse.ok || !bookTickerResponse.ok) {
+          throw new Error("REST backup не отримав актуальні дані.");
+        }
+
+        const latestKlines = (await latestKlinesResponse.json()) as BinanceRestKline[];
+        const bookTicker = (await bookTickerResponse.json()) as {
+          bidPrice: string;
+          askPrice: string;
+        };
+        const latestRow = latestKlines[latestKlines.length - 1];
+
+        if (cancelled || !latestRow) {
+          return;
+        }
+
+        updateLiveCandle({
+          openTime: Number(latestRow[0]),
+          open: Number(latestRow[1]),
+          high: Number(latestRow[2]),
+          low: Number(latestRow[3]),
+          close: Number(latestRow[4]),
+          volume: Number(latestRow[5]),
+        });
+        setTopBook({
+          bid: Number(bookTicker.bidPrice),
+          ask: Number(bookTicker.askPrice),
+        });
+        setError(null);
+
+        if (reason === "stale") {
+          setStatus("WebSocket підвис. Останню ціну тримає REST backup.");
+        }
+      } catch (backupError) {
+        console.error(backupError);
+      } finally {
+        isRestBackupRunning = false;
+      }
+    }
 
     async function loadMarket() {
       setIsLoading(true);
@@ -677,19 +892,10 @@ export function CryptoWorkspace() {
       wallLinesRef.current = [];
 
       try {
-        const restBase =
-          marketType === "spot"
-            ? "https://api.binance.com/api/v3"
-            : "https://fapi.binance.com/fapi/v1";
-        const wsBase =
-          marketType === "spot"
-            ? "wss://stream.binance.com:9443/stream?streams="
-            : "wss://fstream.binance.com/stream?streams=";
-
         const [klinesResponse, depthResponse, tickerResponse, bookTickerResponse] =
           await Promise.all([
           fetch(
-            `${restBase}/klines?symbol=${symbol}&interval=${interval}&limit=250`,
+            `${restBase}/klines?symbol=${symbol}&interval=${interval}&limit=${klineHistoryLimit}`,
             { cache: "no-store" },
           ),
           fetch(
@@ -750,6 +956,9 @@ export function CryptoWorkspace() {
           volume: Number(item[5]),
         }));
 
+        const lastClose = candles[candles.length - 1]?.close ?? null;
+
+        updateSeriesPriceFormat(lastClose);
         candleSeriesInstance.setData(candles);
         volumeSeriesInstance.setData(
           candles.map((item) => ({
@@ -758,11 +967,11 @@ export function CryptoWorkspace() {
             color:
               item.close >= item.open
                 ? "rgba(36,180,126,0.35)"
-                : "rgba(242,85,90,0.35)",
+              : "rgba(242,85,90,0.35)",
           })),
         );
-        chartRef.current?.timeScale().fitContent();
-        setCurrentPrice(candles[candles.length - 1]?.close ?? null);
+        focusRecentRange(candles.length);
+        setCurrentPrice(lastClose);
         setDayStats({
           priceChangePercent: Number(ticker.priceChangePercent),
           quoteVolume: Number(ticker.quoteVolume),
@@ -786,10 +995,16 @@ export function CryptoWorkspace() {
         setStatus("Потік підключений. Дані оновлюються в реальному часі.");
         setIsLoading(false);
 
-        const streamBase = symbol.toLowerCase();
         socket = new WebSocket(
           `${wsBase}${streamBase}@kline_${interval}/${streamBase}@aggTrade/${streamBase}@depth@100ms/${streamBase}@bookTicker`,
         );
+
+        socket.onopen = () => {
+          if (!cancelled) {
+            lastStreamKlineAt = Date.now();
+            setStatus("Live-потік підключений. Графік оновлюється.");
+          }
+        };
 
         socket.onmessage = (event) => {
           const payload = JSON.parse(event.data) as {
@@ -803,43 +1018,15 @@ export function CryptoWorkspace() {
 
           if (payload.stream.includes("@kline_")) {
             const kline = payload.data.k as Record<string, unknown>;
-            const candle = {
-              time: toChartTime(Number(kline.t)),
-              open: Number(kline.o),
-              high: Number(kline.h),
-              low: Number(kline.l),
-              close: Number(kline.c),
-              volume: Number(kline.v),
-            };
-
-            candleSeriesInstance.update(candle);
-            const nextRawCandle: Candle = {
+            lastStreamKlineAt = Date.now();
+            updateLiveCandle({
               openTime: Number(kline.t),
               open: Number(kline.o),
               high: Number(kline.h),
               low: Number(kline.l),
               close: Number(kline.c),
               volume: Number(kline.v),
-            };
-            const nextCandles = [...candlesRef.current];
-            const lastCandle = nextCandles[nextCandles.length - 1];
-
-            if (lastCandle?.openTime === nextRawCandle.openTime) {
-              nextCandles[nextCandles.length - 1] = nextRawCandle;
-            } else {
-              nextCandles.push(nextRawCandle);
-            }
-
-            candlesRef.current = nextCandles.slice(-250);
-            volumeSeriesInstance.update({
-              time: candle.time,
-              value: candle.volume,
-              color:
-                candle.close >= candle.open
-                  ? "rgba(36,180,126,0.35)"
-                  : "rgba(242,85,90,0.35)",
             });
-            setCurrentPrice(candle.close);
             return;
           }
 
@@ -904,12 +1091,12 @@ export function CryptoWorkspace() {
               }
             }
 
-            syncWalls(candleSeriesInstance, symbol);
+            scheduleWallsSync();
             return;
           }
 
           if (payload.stream.includes("@bookTicker")) {
-            setTopBook({
+            scheduleTopBookUpdate({
               bid: Number(payload.data.b),
               ask: Number(payload.data.a),
             });
@@ -918,10 +1105,22 @@ export function CryptoWorkspace() {
 
         socket.onerror = () => {
           if (!cancelled) {
-            setError("Потік Binance тимчасово недоступний. Спробуй ще раз трохи пізніше.");
-            setStatus("Помилка підключення до live-потоку.");
+            setStatus("Live-потік дав збій. Вмикаю REST backup для останньої ціни.");
           }
         };
+
+        socket.onclose = () => {
+          if (!cancelled) {
+            setStatus("Live-потік відключився. Тримаю графік через REST backup.");
+            void refreshLatestMarketSnapshot("stale");
+          }
+        };
+
+        restBackupTimer = window.setInterval(() => {
+          if (Date.now() - lastStreamKlineAt > staleStreamMs) {
+            void refreshLatestMarketSnapshot("stale");
+          }
+        }, restBackupRefreshMs);
       } catch (loadError) {
         console.error(loadError);
         if (!cancelled) {
@@ -982,6 +1181,15 @@ export function CryptoWorkspace() {
 
     return () => {
       cancelled = true;
+      if (restBackupTimer) {
+        window.clearInterval(restBackupTimer);
+      }
+      if (wallSyncTimer) {
+        window.clearTimeout(wallSyncTimer);
+      }
+      if (bookTickerTimer) {
+        window.clearTimeout(bookTickerTimer);
+      }
       if (socket && socket.readyState < 2) {
         socket.close();
       }
