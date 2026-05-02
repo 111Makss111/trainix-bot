@@ -14,6 +14,11 @@ type NavItem = {
   icon: ReactNode;
 };
 
+type CabinetSidebarProps = {
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
+};
+
 function OverviewIcon() {
   return (
     <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
@@ -260,6 +265,31 @@ function SettingsIcon() {
   );
 }
 
+function SidebarToggleIcon({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <path
+        d={collapsed ? "m9 5 7 7-7 7" : "m15 5-7 7 7 7"}
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d={collapsed ? "M5 5v14" : "M19 5v14"}
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 const navItems: NavItem[] = [
   {
     href: "/cabinet",
@@ -344,7 +374,10 @@ function isActivePath(pathname: string, href: string) {
   return pathname.startsWith(href);
 }
 
-export function CabinetSidebar() {
+export function CabinetSidebar({
+  collapsed = false,
+  onToggleCollapsed,
+}: CabinetSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -355,10 +388,41 @@ export function CabinetSidebar() {
   }, [router]);
 
   return (
-    <aside className="flex h-full flex-col rounded-[2rem] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-xl">
-      <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.03] px-4 py-4">
-        <HeaderLogo />
+    <aside
+      className={[
+        "flex h-full flex-col rounded-[2rem] border border-white/10 bg-white/[0.03] backdrop-blur-xl transition-all duration-300",
+        collapsed ? "p-3" : "p-4",
+      ].join(" ")}
+    >
+      <div
+        className={[
+          "rounded-[1.5rem] border border-white/8 bg-white/[0.03] transition-all",
+          collapsed ? "px-2 py-3" : "px-4 py-4",
+        ].join(" ")}
+      >
+        {collapsed ? (
+          <div className="flex items-center justify-center">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full border border-white/14 bg-white/6 shadow-[0_0_24px_rgba(117,143,255,0.12)] backdrop-blur-md">
+              <span className="h-2.5 w-2.5 rounded-full bg-white shadow-[0_0_18px_rgba(255,255,255,0.85)]" />
+            </span>
+          </div>
+        ) : (
+          <HeaderLogo />
+        )}
       </div>
+
+      <button
+        type="button"
+        onClick={onToggleCollapsed}
+        aria-label={collapsed ? "Розгорнути sidebar" : "Згорнути sidebar"}
+        className={[
+          "mt-3 flex items-center rounded-[1.15rem] border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm font-medium text-white/68 transition hover:border-white/16 hover:bg-white/[0.07] hover:text-white",
+          collapsed ? "justify-center" : "justify-between gap-3",
+        ].join(" ")}
+      >
+        {collapsed ? null : <span>Згорнути меню</span>}
+        <SidebarToggleIcon collapsed={collapsed} />
+      </button>
 
       <nav className="mt-5 flex flex-col gap-2">
         {navItems.map((item) => {
@@ -375,8 +439,10 @@ export function CabinetSidebar() {
               onFocus={() => {
                 router.prefetch(item.href);
               }}
+              title={collapsed ? `${item.label} — ${item.description}` : undefined}
               className={[
-                "group flex items-center gap-3 rounded-[1.4rem] border px-3 py-3 transition",
+                "group flex items-center rounded-[1.4rem] border transition",
+                collapsed ? "justify-center px-2 py-3" : "gap-3 px-3 py-3",
                 active
                   ? "border-white/16 bg-[linear-gradient(135deg,rgba(124,150,255,0.22),rgba(255,255,255,0.08))] text-white shadow-[0_0_28px_rgba(91,119,230,0.16)]"
                   : "border-transparent bg-transparent text-white/58 hover:border-white/10 hover:bg-white/[0.04] hover:text-white/86",
@@ -393,7 +459,14 @@ export function CabinetSidebar() {
                 {item.icon}
               </span>
 
-              <span className="min-w-0">
+              <span
+                className={[
+                  "min-w-0 transition-all duration-200",
+                  collapsed
+                    ? "pointer-events-none hidden opacity-0"
+                    : "block opacity-100",
+                ].join(" ")}
+              >
                 <span className="block text-sm font-medium">{item.label}</span>
                 <span className="mt-1 block text-xs text-white/42">
                   {item.description}
@@ -404,17 +477,23 @@ export function CabinetSidebar() {
         })}
       </nav>
 
-      <div className="mt-auto rounded-[1.5rem] border border-white/8 bg-white/[0.03] px-4 py-4">
-        <p className="text-[0.7rem] uppercase tracking-[0.3em] text-white/38">
-          Session
-        </p>
-        <p className="mt-3 text-sm text-white/64">
-          Ти в приватному просторі. Активний розділ завжди підсвічений.
-        </p>
-        <div className="mt-4">
-          <SignOutButton />
+      {collapsed ? (
+        <div className="mt-auto flex justify-center">
+          <SignOutButton compact />
         </div>
-      </div>
+      ) : (
+        <div className="mt-auto rounded-[1.5rem] border border-white/8 bg-white/[0.03] px-4 py-4">
+          <p className="text-[0.7rem] uppercase tracking-[0.3em] text-white/38">
+            Session
+          </p>
+          <p className="mt-3 text-sm text-white/64">
+            Ти в приватному просторі. Активний розділ завжди підсвічений.
+          </p>
+          <div className="mt-4">
+            <SignOutButton />
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

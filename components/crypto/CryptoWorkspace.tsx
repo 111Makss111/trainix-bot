@@ -1025,10 +1025,10 @@ export function CryptoWorkspace() {
   }, [weeklyZones]);
 
   return (
-    <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
-      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.25fr)_24rem]">
+    <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md sm:p-5">
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="rounded-[1.7rem] border border-white/10 bg-[#08101d]/82 p-4">
-          <div className="grid gap-4 2xl:grid-cols-[minmax(0,17rem)_minmax(0,1fr)] 2xl:items-start">
+          <div className="grid gap-4 2xl:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] 2xl:items-start">
             <div className="min-w-0 rounded-[1.3rem] border border-white/8 bg-black/10 p-4">
               <p className="text-[0.72rem] uppercase tracking-[0.28em] text-white/38">
                 {marketType === "spot" ? "Binance Spot" : "Binance Futures"}
@@ -1223,7 +1223,7 @@ export function CryptoWorkspace() {
           ) : null}
 
           <div className="mt-5 overflow-hidden rounded-[1.6rem] border border-white/10 bg-[#050b16]">
-            <div ref={chartContainerRef} className="h-[32rem] w-full" />
+            <div ref={chartContainerRef} className="h-[34rem] w-full 2xl:h-[38rem]" />
           </div>
 
           <p className="mt-4 text-xs leading-6 text-white/34">
