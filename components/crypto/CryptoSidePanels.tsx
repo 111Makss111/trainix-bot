@@ -1,142 +1,17 @@
-import type { CryptoWeeklyZone } from "@/lib/crypto-zones";
 import type { LargeTrade, OrderWall } from "./types";
-import {
-  formatCompactNumber,
-  formatDistancePercent,
-  formatPrice,
-  formatTime,
-} from "./format";
-import {
-  getZoneColor,
-  getZoneStatusLabel,
-} from "./weekly-zones";
+import { formatCompactNumber, formatPrice, formatTime } from "./format";
 
 type CryptoSidePanelsProps = {
-  weeklyZones: CryptoWeeklyZone[];
-  weeklyZonesWeekKey: string | null;
-  weeklyZonesGeneratedAt: string | null;
-  weeklyZonesStatus: string;
-  weeklyZonesError: string | null;
   largeTrades: LargeTrade[];
   walls: OrderWall[];
 };
 
 export function CryptoSidePanels({
-  weeklyZones,
-  weeklyZonesWeekKey,
-  weeklyZonesGeneratedAt,
-  weeklyZonesStatus,
-  weeklyZonesError,
   largeTrades,
   walls,
 }: CryptoSidePanelsProps) {
   return (
     <div className="space-y-4">
-      <div className="rounded-[1.7rem] border border-white/10 bg-[#08101d]/82 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[0.72rem] uppercase tracking-[0.24em] text-white/38">
-              Weekly zones
-            </p>
-            <h3 className="mt-2 text-lg font-medium text-white">
-              Тижневі зони
-            </h3>
-            <p className="mt-1 text-sm leading-6 text-white/40">
-              Frozen-рівні на тиждень, які не рухаються щохвилини.
-            </p>
-          </div>
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] uppercase tracking-[0.22em] text-white/58">
-            {weeklyZones.length}
-          </span>
-        </div>
-
-        <div className="mt-4 rounded-[1.2rem] border border-white/8 bg-black/10 px-4 py-3">
-          <p className="text-xs leading-6 text-white/46">
-            {weeklyZonesStatus}
-          </p>
-          {weeklyZonesWeekKey ? (
-            <p className="mt-2 text-[0.72rem] uppercase tracking-[0.18em] text-white/32">
-              {weeklyZonesWeekKey}
-              {weeklyZonesGeneratedAt
-                ? ` · snapshot ${new Date(weeklyZonesGeneratedAt).toLocaleDateString("uk-UA")}`
-                : ""}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="mt-4 space-y-3">
-          {weeklyZones.length ? (
-            weeklyZones.map((zone) => (
-              <div
-                key={zone.id}
-                className="rounded-[1.2rem] border border-white/8 bg-black/10 px-4 py-3"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className="inline-flex h-2.5 w-2.5 rounded-full"
-                        style={{ backgroundColor: getZoneColor(zone) }}
-                      />
-                      <span className="text-sm font-medium text-white">
-                        {zone.label}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-xs leading-6 text-white/44">
-                      {zone.zoneKind === "interest"
-                        ? "Зона інтересу, де ринок уже реагував."
-                        : zone.zoneKind === "zero_trend"
-                          ? "Боковик або слабкий тренд без чіткого напрямку."
-                          : "Тригерна зона для можливого імпульсного виходу."}
-                    </p>
-                  </div>
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[0.64rem] uppercase tracking-[0.18em] text-white/64">
-                    {getZoneStatusLabel(zone.status)}
-                  </span>
-                </div>
-
-                <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                  <div>
-                    <p className="text-[0.64rem] uppercase tracking-[0.18em] text-white/30">
-                      Діапазон
-                    </p>
-                    <p className="mt-1 text-sm text-white/72">
-                      {formatPrice(zone.priceFrom)} -{" "}
-                      {formatPrice(zone.priceTo)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[0.64rem] uppercase tracking-[0.18em] text-white/30">
-                      Distance
-                    </p>
-                    <p className="mt-1 text-sm text-white/72">
-                      {formatDistancePercent(zone.distancePercent)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[0.64rem] uppercase tracking-[0.18em] text-white/30">
-                      Confidence
-                    </p>
-                    <p className="mt-1 text-sm text-white/72">
-                      {zone.confidence}/100
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))
-          ) : weeklyZonesError ? (
-            <div className="rounded-[1.2rem] border border-red-300/14 bg-red-300/[0.08] px-4 py-6 text-sm leading-7 text-red-50/88">
-              {weeklyZonesError}
-            </div>
-          ) : (
-            <div className="rounded-[1.2rem] border border-dashed border-white/10 bg-black/10 px-4 py-6 text-sm leading-7 text-white/38">
-              Після побудови тижневого snapshot тут з’являться frozen zones зі
-              статусами.
-            </div>
-          )}
-        </div>
-      </div>
-
       <div className="rounded-[1.7rem] border border-white/10 bg-[#08101d]/82 p-4">
         <div className="flex items-center justify-between gap-3">
           <div>

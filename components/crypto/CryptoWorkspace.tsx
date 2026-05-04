@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CryptoSidePanels } from "./CryptoSidePanels";
 import { CryptoStatsGrid } from "./CryptoStatsGrid";
+import { CryptoWeeklyZonesBrief } from "./CryptoWeeklyZonesBrief";
 import {
   futuresPresetSymbols,
   intervalOptions,
@@ -81,9 +82,20 @@ export function CryptoWorkspace() {
   }
 
   return (
-    <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md sm:p-5">
-      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="rounded-[1.7rem] border border-white/10 bg-[#08101d]/82 p-4">
+    <div className="space-y-4">
+      <CryptoWeeklyZonesBrief
+        marketType={marketType}
+        symbol={symbol}
+        weeklyZones={weeklyZonesState.weeklyZones}
+        weeklyZonesWeekKey={weeklyZonesState.weeklyZonesWeekKey}
+        weeklyZonesGeneratedAt={weeklyZonesState.weeklyZonesGeneratedAt}
+        weeklyZonesStatus={weeklyZonesState.weeklyZonesStatus}
+        weeklyZonesError={weeklyZonesState.weeklyZonesError}
+      />
+
+      <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md sm:p-5">
+        <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="rounded-[1.7rem] border border-white/10 bg-[#08101d]/82 p-4">
           <div className="grid gap-4 2xl:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] 2xl:items-start">
             <div className="min-w-0 rounded-[1.3rem] border border-white/8 bg-black/10 p-4">
               <p className="text-[0.72rem] uppercase tracking-[0.28em] text-white/38">
@@ -244,24 +256,17 @@ export function CryptoWorkspace() {
             WebSocket та REST snapshot, а weekly zones фіксуються окремим
             тижневим snapshot.
           </p>
+          </div>
+
+          <CryptoSidePanels largeTrades={largeTrades} walls={walls} />
         </div>
 
-        <CryptoSidePanels
-          weeklyZones={weeklyZonesState.weeklyZones}
-          weeklyZonesWeekKey={weeklyZonesState.weeklyZonesWeekKey}
-          weeklyZonesGeneratedAt={weeklyZonesState.weeklyZonesGeneratedAt}
-          weeklyZonesStatus={weeklyZonesState.weeklyZonesStatus}
-          weeklyZonesError={weeklyZonesState.weeklyZonesError}
-          largeTrades={largeTrades}
-          walls={walls}
-        />
-      </div>
-
-      {isLoading ? (
-        <div className="mt-4 rounded-[1.3rem] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/58">
-          Завантажую стартові свічки і стакан...
-        </div>
-      ) : null}
-    </section>
+        {isLoading ? (
+          <div className="mt-4 rounded-[1.3rem] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/58">
+            Завантажую стартові свічки і стакан...
+          </div>
+        ) : null}
+      </section>
+    </div>
   );
 }
