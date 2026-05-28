@@ -7,10 +7,10 @@ export function HeaderLogo() {
 
       <div className="flex flex-col">
         <span className="text-[0.68rem] uppercase tracking-[0.42em] text-white/50">
-          Private Space
+          Private Finance
         </span>
         <span className="text-lg font-medium tracking-[0.28em] text-white/92">
-          NOCTIS
+          TRAINIX
         </span>
       </div>
     </div>

@@ -1,7 +1,5 @@
 import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
-import { isOwnerAuthDatabaseFallbackEnabled } from "@/lib/owner-auth-fallback";
-import { ensureOwnerProfile } from "@/lib/owner-profile";
 
 function getOwnerEmail() {
   return process.env.OWNER_EMAIL?.trim().toLowerCase() ?? null;
@@ -36,29 +34,11 @@ export const authOptions: NextAuthOptions = {
       const email = user.email?.trim().toLowerCase();
       const googleSub = typeof profile?.sub === "string" ? profile.sub : null;
 
-      // This app is private: only the configured owner can sign in.
       if (!isOwnerEmail(email)) {
         return false;
       }
 
-      if (email && googleSub) {
-        try {
-          await ensureOwnerProfile({
-            email,
-            googleSub,
-            name: user.name,
-            image: user.image,
-          });
-        } catch (error) {
-          console.error("Failed to sync owner profile during sign-in", error);
-
-          if (!isOwnerAuthDatabaseFallbackEnabled()) {
-            return "/?error=DatabaseUnavailable";
-          }
-        }
-      }
-
-      return true;
+      return Boolean(email && googleSub);
     },
     async jwt({ token, user, profile }) {
       if (user?.email) {

@@ -15,14 +15,7 @@ export function SignOutButton({ compact = false }: SignOutButtonProps) {
       type="button"
       onClick={() => {
         startTransition(() => {
-          void fetch("/api/security/two-factor/session", {
-            method: "POST",
-            cache: "no-store",
-          })
-            .catch(() => null)
-            .finally(() => {
-              void signOut({ callbackUrl: "/" });
-            });
+          void signOut({ callbackUrl: "/" });
         });
       }}
       disabled={isPending}

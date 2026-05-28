@@ -1,21 +1,27 @@
-import { CabinetTopbar } from "@/components/cabinet";
-import { SettingsWorkspace } from "@/components/settings/SettingsWorkspace";
-import { requireOwnerEmail } from "@/lib/auth-guards";
-import { getTwoFactorSettingsState } from "@/lib/security/two-factor";
+import { CabinetCard, CabinetTopbar } from "@/components/cabinet";
 
-export default async function SettingsPage() {
-  const ownerEmail = await requireOwnerEmail();
-  const twoFactorState = await getTwoFactorSettingsState(ownerEmail);
-
+export default function SettingsPage() {
   return (
     <>
       <CabinetTopbar
         eyebrow="Settings"
         title="Налаштування кабінету"
-        description="Тут живе весь контроль над приватним простором: безпека входу, доступ до інтеграцій і ті налаштування, які реально впливають на твій робочий контур."
+        description="Цю вкладку залишаємо під майбутній захист фінансового кабінету. Стару 2FA-реалізацію прибрано, щоб не залежати від старої бази і зробити безпеку заново чисто."
       />
 
-      <SettingsWorkspace twoFactorState={twoFactorState} />
+      <div className="grid gap-4 xl:grid-cols-2">
+        <CabinetCard
+          eyebrow="Security"
+          title="Новий захист буде окремим етапом"
+          description="Для фінансів потрібна сильна охорона: повернемо 2FA або кращу схему після того, як спроєктуємо нову базу та правила доступу без старих залежностей."
+        />
+
+        <CabinetCard
+          eyebrow="Access"
+          title="Google owner-only лишається"
+          description="Зараз вхід тримається на одному дозволеному Google-акаунті через OWNER_EMAIL. Це простий стабільний контур для періоду перезбірки."
+        />
+      </div>
     </>
   );
 }

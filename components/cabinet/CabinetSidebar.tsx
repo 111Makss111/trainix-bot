@@ -19,125 +19,6 @@ type CabinetSidebarProps = {
   onToggleCollapsed?: () => void;
 };
 
-function OverviewIcon() {
-  return (
-    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
-      <rect
-        x="3.5"
-        y="3.5"
-        width="7"
-        height="7"
-        rx="2"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      />
-      <rect
-        x="13.5"
-        y="3.5"
-        width="7"
-        height="4.5"
-        rx="2"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      />
-      <rect
-        x="13.5"
-        y="11"
-        width="7"
-        height="9.5"
-        rx="2"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      />
-      <rect
-        x="3.5"
-        y="13.5"
-        width="7"
-        height="7"
-        rx="2"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      />
-    </svg>
-  );
-}
-
-function NotesIcon() {
-  return (
-    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M7 4.5h7.5L18 8v11a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19V6A1.5 1.5 0 0 1 7.5 4.5Z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M14.5 4.5V8H18"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M9 12h6M9 15.5h6"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function RoutineIcon() {
-  return (
-    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
-      <circle
-        cx="12"
-        cy="12"
-        r="8.5"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M12 7.5V12l3 2"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M5.8 5.8 4.5 4.5M18.2 5.8l1.3-1.3"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function JobsIcon() {
-  return (
-    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M8 6.5V5.8A2.3 2.3 0 0 1 10.3 3.5h3.4A2.3 2.3 0 0 1 16 5.8v.7"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-      <path
-        d="M5.5 7.5h13a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2V9.5a2 2 0 0 1 2-2Z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M3.5 12h17"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 function CryptoIcon() {
   return (
     <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
@@ -146,82 +27,6 @@ function CryptoIcon() {
         stroke="currentColor"
         strokeWidth="1.5"
         strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function WebIcon() {
-  return (
-    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.5" />
-      <path
-        d="M3.5 12h17M12 3.5c2.8 2.5 4.2 5.34 4.2 8.5S14.8 18 12 20.5M12 3.5c-2.8 2.5-4.2 5.34-4.2 8.5S9.2 18 12 20.5"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function FacebookIcon() {
-  return (
-    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M13.2 7H15V4.5h-2c-2.4 0-4 1.6-4 4v2H7v2.6h2V19h2.9v-5.9h2.6l.4-2.6h-3V8.9c0-1.1.4-1.9 1.3-1.9Z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function InstagramIcon() {
-  return (
-    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
-      <rect
-        x="4.5"
-        y="4.5"
-        width="15"
-        height="15"
-        rx="4.5"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      />
-      <circle cx="12" cy="12" r="3.5" stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="17" cy="7.2" r="1" fill="currentColor" />
-    </svg>
-  );
-}
-
-function YouTubeIcon() {
-  return (
-    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M20 8.5c-.2-1.5-1.3-2.6-2.8-2.8C15.9 5.5 14 5.5 12 5.5s-3.9 0-5.2.2A3.2 3.2 0 0 0 4 8.5c-.2 1.3-.2 2.4-.2 3.5s0 2.2.2 3.5c.2 1.5 1.3 2.6 2.8 2.8 1.3.2 3.2.2 5.2.2s3.9 0 5.2-.2a3.2 3.2 0 0 0 2.8-2.8c.2-1.3.2-2.4.2-3.5s0-2.2-.2-3.5Z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      />
-      <path
-        d="m10 9.5 4.5 2.5L10 14.5v-5Z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function TikTokIcon() {
-  return (
-    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M14.5 5.5c.4 1.5 1.5 2.7 3 3.3v2.5a6.2 6.2 0 0 1-3-.9v4.9a4.6 4.6 0 1 1-4.6-4.6c.2 0 .4 0 .6.1v2.6a2 2 0 1 0 1.4 1.9V5.5h2.6Z"
-        stroke="currentColor"
-        strokeWidth="1.5"
         strokeLinejoin="round"
       />
     </svg>
@@ -273,70 +78,15 @@ function SidebarToggleIcon({ collapsed }: { collapsed: boolean }) {
 
 const navItems: NavItem[] = [
   {
-    href: "/cabinet",
-    label: "Огляд",
-    description: "Головна сторінка",
-    icon: <OverviewIcon />,
-  },
-
-  {
-    href: "/cabinet/notes",
-    label: "Нотатки",
-    description: "Ідеї та чернетки",
-    icon: <NotesIcon />,
-  },
-  {
-    href: "/cabinet/routine",
-    label: "Routine",
-    description: "Графік і ритм",
-    icon: <RoutineIcon />,
-  },
-  {
-    href: "/cabinet/jobs",
-    label: "Jobs",
-    description: "Пошук замовлень",
-    icon: <JobsIcon />,
-  },
-  {
     href: "/cabinet/crypto",
     label: "Crypto",
-    description: "Графік і ордери",
+    description: "Інвестиційний центр",
     icon: <CryptoIcon />,
-  },
-  {
-    href: "/cabinet/web",
-    label: "Web",
-    description: "Сайти та боти",
-    icon: <WebIcon />,
-  },
-  {
-    href: "/cabinet/facebook",
-    label: "Facebook",
-    description: "Окремий модуль",
-    icon: <FacebookIcon />,
-  },
-  {
-    href: "/cabinet/instagram",
-    label: "Instagram",
-    description: "Окремий модуль",
-    icon: <InstagramIcon />,
-  },
-  {
-    href: "/cabinet/youtube",
-    label: "YouTube",
-    description: "Відеомодуль",
-    icon: <YouTubeIcon />,
-  },
-  {
-    href: "/cabinet/tiktok",
-    label: "TikTok",
-    description: "Short video модуль",
-    icon: <TikTokIcon />,
   },
   {
     href: "/cabinet/settings",
     label: "Налаштування",
-    description: "Безпека та доступ",
+    description: "Майбутній захист",
     icon: <SettingsIcon />,
   },
 ];

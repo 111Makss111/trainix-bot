@@ -7,8 +7,6 @@ import { signIn } from "next-auth/react";
 const authErrorMessages: Record<string, string> = {
   AccessDenied: "Доступ дозволений лише власнику цього кабінету.",
   Configuration: "Вхід поки не налаштований. Перевір Google та env-змінні.",
-  DatabaseUnavailable:
-    "База даних зараз недоступна, тому кабінет не може підтягнути профіль власника.",
   OAuthSignin: "Не вдалося почати вхід через Google. Спробуй ще раз.",
   OAuthCallback: "Google не підтвердив вхід. Спробуй ще раз.",
   Default: "Не вдалося виконати вхід. Спробуй ще раз.",

@@ -14,9 +14,5 @@ export default async function CabinetLayout({
     redirect("/");
   }
 
-  if (!access.twoFactorVerified) {
-    redirect("/verify-2fa");
-  }
-
   return <CabinetShell>{children}</CabinetShell>;
 }
