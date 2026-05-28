@@ -1,5 +1,6 @@
 import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
+import { isOwnerAuthDatabaseFallbackEnabled } from "@/lib/owner-auth-fallback";
 import { ensureOwnerProfile } from "@/lib/owner-profile";
 
 function getOwnerEmail() {
@@ -41,12 +42,20 @@ export const authOptions: NextAuthOptions = {
       }
 
       if (email && googleSub) {
-        await ensureOwnerProfile({
-          email,
-          googleSub,
-          name: user.name,
-          image: user.image,
-        });
+        try {
+          await ensureOwnerProfile({
+            email,
+            googleSub,
+            name: user.name,
+            image: user.image,
+          });
+        } catch (error) {
+          console.error("Failed to sync owner profile during sign-in", error);
+
+          if (!isOwnerAuthDatabaseFallbackEnabled()) {
+            return "/?error=DatabaseUnavailable";
+          }
+        }
       }
 
       return true;

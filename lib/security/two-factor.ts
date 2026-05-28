@@ -9,6 +9,7 @@ import {
 } from "crypto";
 import { cookies } from "next/headers";
 import { getSql } from "@/lib/neon";
+import { isOwnerAuthDatabaseFallbackEnabled } from "@/lib/owner-auth-fallback";
 import {
   buildTotpUri,
   generateBackupCodes,
@@ -171,27 +172,37 @@ async function ensureTwoFactorColumns() {
 }
 
 async function getTwoFactorRow(ownerEmail: string) {
-  await ensureTwoFactorColumns();
+  try {
+    await ensureTwoFactorColumns();
 
-  const sql = getSql();
+    const sql = getSql();
 
-  if (!sql) {
-    return null;
+    if (!sql) {
+      return null;
+    }
+
+    const [row] = (await sql`
+      SELECT
+        two_factor_enabled,
+        two_factor_secret_encrypted,
+        two_factor_setup_secret_encrypted,
+        two_factor_backup_codes_json,
+        two_factor_enabled_at
+      FROM profiles
+      WHERE email = ${ownerEmail}
+      LIMIT 1
+    `) as TwoFactorProfileRow[];
+
+    return row ?? null;
+  } catch (error) {
+    console.error("Failed to read two-factor state", error);
+
+    if (isOwnerAuthDatabaseFallbackEnabled()) {
+      return null;
+    }
+
+    throw error;
   }
-
-  const [row] = (await sql`
-    SELECT
-      two_factor_enabled,
-      two_factor_secret_encrypted,
-      two_factor_setup_secret_encrypted,
-      two_factor_backup_codes_json,
-      two_factor_enabled_at
-    FROM profiles
-    WHERE email = ${ownerEmail}
-    LIMIT 1
-  `) as TwoFactorProfileRow[];
-
-  return row ?? null;
 }
 
 export async function getTwoFactorSettingsState(
