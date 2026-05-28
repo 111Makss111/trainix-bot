@@ -23,23 +23,15 @@ const foundationItems = [
 
 export function CryptoWorkspace() {
   return (
-    <div className="space-y-4">
-      <CabinetTopbar
-        eyebrow="Crypto / Investments"
-        title="Новий фінансовий центр"
-        description="Старий crypto-модуль прибрано. Тут залишився чистий старт для інвестиційного кабінету, який будемо збирати під твої реальні рішення, портфель і щоденний ритм."
-      />
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        {foundationItems.map((item) => (
-          <CabinetCard
-            key={item.eyebrow}
-            eyebrow={item.eyebrow}
-            title={item.title}
-            description={item.description}
-          />
-        ))}
-      </div>
+    <div className="grid gap-4 xl:grid-cols-3">
+      {foundationItems.map((item) => (
+        <CabinetCard
+          key={item.eyebrow}
+          eyebrow={item.eyebrow}
+          title={item.title}
+          description={item.description}
+        />
+      ))}
     </div>
   );
 }
