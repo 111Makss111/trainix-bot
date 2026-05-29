@@ -19,11 +19,39 @@ type CabinetSidebarProps = {
   onToggleCollapsed?: () => void;
 };
 
-function CryptoIcon() {
+function BtcRadarIcon() {
   return (
     <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
       <path
-        d="M12 3.5v17M8.5 6.5h4.3a2.6 2.6 0 1 1 0 5.2H9.7a2.8 2.8 0 1 0 0 5.6H16"
+        d="M4 17.5 8.5 13l3 3 7-8.5M5 6.5h4.5M5 10h2.5M18.5 15v3.5H15"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function RangeTouchIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M5 6.5h14M5 17.5h14M7.5 12h9M9 9.5l-2 2.5 2 2.5M15 9.5l2 2.5-2 2.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function TradePlanIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M8 6.5h10M8 12h10M8 17.5h7M4.8 6.5h.4M4.8 12h.4M4.8 17.5h.4"
         stroke="currentColor"
         strokeWidth="1.5"
         strokeLinecap="round"
@@ -78,10 +106,22 @@ function SidebarToggleIcon({ collapsed }: { collapsed: boolean }) {
 
 const navItems: NavItem[] = [
   {
-    href: "/cabinet/crypto",
-    label: "Crypto",
-    description: "Інвестиційний центр",
-    icon: <CryptoIcon />,
+    href: "/cabinet/btc-decoupling",
+    label: "BTC Radar",
+    description: "Відрив монет",
+    icon: <BtcRadarIcon />,
+  },
+  {
+    href: "/cabinet/range-touch",
+    label: "Range Touch",
+    description: "Боковик і зони",
+    icon: <RangeTouchIcon />,
+  },
+  {
+    href: "/cabinet/trade-plan-reviewer",
+    label: "Plan Reviewer",
+    description: "Перевірка угоди",
+    icon: <TradePlanIcon />,
   },
   {
     href: "/cabinet/settings",
@@ -164,7 +204,7 @@ export function CabinetSidebar({
               onFocus={() => {
                 router.prefetch(item.href);
               }}
-              title={collapsed ? `${item.label} — ${item.description}` : undefined}
+              title={collapsed ? `${item.label} - ${item.description}` : undefined}
               className={[
                 "group flex items-center rounded-[1.4rem] border transition",
                 collapsed ? "justify-center px-2 py-3" : "gap-3 px-3 py-3",
