@@ -34,9 +34,12 @@ export function DecisionPanel({ review }: DecisionPanelProps) {
           <h2 className="mt-3 text-3xl font-semibold text-white">
             {gradeLabel[review.grade]}
           </h2>
+          <p className="mt-2 text-sm font-medium text-white/72">
+            {review.title}
+          </p>
         </div>
         <span className="rounded-full border border-current/20 bg-black/12 px-3 py-1.5 text-sm">
-          Live
+          Auto
         </span>
       </div>
 

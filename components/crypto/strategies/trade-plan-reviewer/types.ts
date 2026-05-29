@@ -1,24 +1,52 @@
 export type TradeDirection = "long" | "short";
 
-export type TradeSetup = "btc-decoupling" | "range-touch" | "manual";
+export type TradeTimeframe = "5m" | "15m" | "1h" | "4h";
+
+export type TrendDirection = "up" | "down" | "sideways";
+
+export type BtcBias = "bullish" | "bearish" | "neutral";
+
+export type ReviewGrade = "ready" | "review" | "weak" | "no-trade";
+
+export type ReviewStatus = "pass" | "warning" | "fail";
+
+export type ZoneKind = "support" | "resistance";
 
 export type TradePlan = {
   symbol: string;
   direction: TradeDirection;
-  setup: TradeSetup;
+  timeframe: TradeTimeframe;
   accountBalance: string;
   positionSize: string;
   entryPrice: string;
   stopLoss: string;
   takeProfit: string;
-  entryReason: string;
-  marketContext: string;
-  invalidation: string;
 };
 
-export type ReviewGrade = "ready" | "review" | "weak" | "no-trade";
+export type MarketZone = {
+  kind: ZoneKind;
+  label: string;
+  price: number;
+  strength: number;
+};
 
-export type ReviewStatus = "pass" | "warning" | "fail";
+export type MarketSource = "live" | "fallback";
+
+export type MarketSnapshot = {
+  symbol: string;
+  timeframe: TradeTimeframe;
+  currentPrice: number;
+  trend: TrendDirection;
+  trendStrength: number;
+  btcBias: BtcBias;
+  volumeState: string;
+  nearestSupport: MarketZone;
+  nearestResistance: MarketZone;
+  zones: MarketZone[];
+  updatedAt: string;
+  source: MarketSource;
+  candleCount: number;
+};
 
 export type ReviewMetric = {
   label: string;
@@ -39,8 +67,6 @@ export type ReviewResult = {
   title: string;
   summary: string;
   metrics: ReviewMetric[];
-  checklist: ReviewItem[];
-  positives: string[];
-  warnings: string[];
+  signals: ReviewItem[];
   nextActions: string[];
 };

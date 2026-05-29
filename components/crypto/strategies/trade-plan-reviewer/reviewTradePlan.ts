@@ -1,4 +1,5 @@
 import type {
+  MarketSnapshot,
   ReviewGrade,
   ReviewItem,
   ReviewMetric,
@@ -16,31 +17,53 @@ function toNumber(value: string) {
 }
 
 function formatPercent(value: number | null) {
-  if (value === null || !Number.isFinite(value)) {
-    return "Не рах.";
-  }
-
-  return `${value.toFixed(2)}%`;
+  return value === null ? "auto" : `${value.toFixed(2)}%`;
 }
 
 function formatRatio(value: number | null) {
-  if (value === null || !Number.isFinite(value)) {
-    return "Не рах.";
+  return value === null ? "auto" : `${value.toFixed(2)}R`;
+}
+
+function formatPrice(value: number) {
+  return value.toLocaleString("en-US", {
+    maximumFractionDigits: value >= 1000 ? 0 : 2,
+  });
+}
+
+function getEffectiveEntry(plan: TradePlan, market: MarketSnapshot) {
+  return toNumber(plan.entryPrice) ?? market.currentPrice;
+}
+
+function getEffectiveStop(plan: TradePlan, market: MarketSnapshot) {
+  const customStop = toNumber(plan.stopLoss);
+
+  if (customStop !== null) {
+    return customStop;
   }
 
-  return `${value.toFixed(2)}R`;
+  return plan.direction === "long"
+    ? market.nearestSupport.price
+    : market.nearestResistance.price;
+}
+
+function getEffectiveTarget(plan: TradePlan, market: MarketSnapshot) {
+  const customTarget = toNumber(plan.takeProfit);
+
+  if (customTarget !== null) {
+    return customTarget;
+  }
+
+  return plan.direction === "long"
+    ? market.nearestResistance.price
+    : market.nearestSupport.price;
 }
 
 function getPriceSideStatus(
   direction: TradeDirection,
-  entryPrice: number | null,
-  stopLoss: number | null,
-  takeProfit: number | null,
+  entryPrice: number,
+  stopLoss: number,
+  takeProfit: number,
 ): ReviewStatus {
-  if (entryPrice === null || stopLoss === null || takeProfit === null) {
-    return "fail";
-  }
-
   if (direction === "long") {
     return stopLoss < entryPrice && takeProfit > entryPrice ? "pass" : "fail";
   }
@@ -48,8 +71,36 @@ function getPriceSideStatus(
   return stopLoss > entryPrice && takeProfit < entryPrice ? "pass" : "fail";
 }
 
-function getTextStatus(value: string, minLength: number): ReviewStatus {
-  return value.trim().length >= minLength ? "pass" : "warning";
+function getTrendStatus(direction: TradeDirection, market: MarketSnapshot) {
+  if (market.trend === "sideways") {
+    return "warning";
+  }
+
+  if (direction === "long" && market.trend === "up") {
+    return "pass";
+  }
+
+  if (direction === "short" && market.trend === "down") {
+    return "pass";
+  }
+
+  return "fail";
+}
+
+function getBtcStatus(direction: TradeDirection, market: MarketSnapshot) {
+  if (market.btcBias === "neutral") {
+    return "warning";
+  }
+
+  if (direction === "long" && market.btcBias === "bullish") {
+    return "pass";
+  }
+
+  if (direction === "short" && market.btcBias === "bearish") {
+    return "pass";
+  }
+
+  return "fail";
 }
 
 function getRiskStatus(accountRiskPercent: number | null): ReviewStatus {
@@ -93,7 +144,7 @@ function buildMetric(
   return { label, value, detail, status };
 }
 
-function buildItem(
+function buildSignal(
   id: string,
   label: string,
   detail: string,
@@ -102,15 +153,15 @@ function buildItem(
   return { id, label, detail, status };
 }
 
-function getGrade(items: ReviewItem[], accountRiskPercent: number | null) {
-  const failCount = items.filter((item) => item.status === "fail").length;
-  const warningCount = items.filter((item) => item.status === "warning").length;
+function getGrade(signals: ReviewItem[], accountRiskPercent: number | null) {
+  const failCount = signals.filter((item) => item.status === "fail").length;
+  const warningCount = signals.filter((item) => item.status === "warning").length;
 
   if (failCount > 0 || (accountRiskPercent !== null && accountRiskPercent > 3)) {
     return "no-trade";
   }
 
-  if (warningCount >= 4) {
+  if (warningCount >= 3) {
     return "weak";
   }
 
@@ -124,62 +175,55 @@ function getGrade(items: ReviewItem[], accountRiskPercent: number | null) {
 function getGradeCopy(grade: ReviewGrade) {
   if (grade === "ready") {
     return {
-      title: "План виглядає готовим",
-      summary: "Базові ризики, стоп, ціль і логіка плану зараз виглядають зібрано.",
+      title: "Setup aligned",
+      summary: "Напрямок, BTC-контекст, зона і ризик не конфліктують між собою.",
     };
   }
 
   if (grade === "review") {
     return {
-      title: "План треба допрацювати",
-      summary: "Є слабкі місця, але вони виглядають виправними до входу.",
+      title: "Needs review",
+      summary: "Є попередження. Вхід можливий тільки після перевірки слабких місць.",
     };
   }
 
   if (grade === "weak") {
     return {
-      title: "План слабкий",
-      summary: "Забагато невизначеності. Такий план краще не використовувати без правок.",
+      title: "Weak setup",
+      summary: "Ринок не дає достатньо підтверджень. Ідею краще не поспішати брати.",
     };
   }
 
   return {
     title: "No-trade",
-    summary: "Є критична проблема: без її виправлення вхід не має проходити перевірку.",
+    summary: "Є конфлікт із трендом, BTC або базовою логікою рівнів.",
   };
 }
 
-export function reviewTradePlan(plan: TradePlan): ReviewResult {
+export function reviewTradePlan(
+  plan: TradePlan,
+  market: MarketSnapshot,
+): ReviewResult {
   const accountBalance = toNumber(plan.accountBalance);
   const positionSize = toNumber(plan.positionSize);
-  const entryPrice = toNumber(plan.entryPrice);
-  const stopLoss = toNumber(plan.stopLoss);
-  const takeProfit = toNumber(plan.takeProfit);
+  const entryPrice = getEffectiveEntry(plan, market);
+  const stopLoss = getEffectiveStop(plan, market);
+  const takeProfit = getEffectiveTarget(plan, market);
 
-  const riskDistancePercent =
-    entryPrice !== null && stopLoss !== null
-      ? (Math.abs(entryPrice - stopLoss) / entryPrice) * 100
-      : null;
-
+  const riskDistancePercent = (Math.abs(entryPrice - stopLoss) / entryPrice) * 100;
   const rewardDistancePercent =
-    entryPrice !== null && takeProfit !== null
-      ? (Math.abs(takeProfit - entryPrice) / entryPrice) * 100
-      : null;
+    (Math.abs(takeProfit - entryPrice) / entryPrice) * 100;
 
   const accountRiskPercent =
-    accountBalance !== null &&
-    positionSize !== null &&
-    riskDistancePercent !== null
+    accountBalance !== null && positionSize !== null
       ? ((positionSize * riskDistancePercent) / 100 / accountBalance) * 100
       : null;
 
   const rewardToRisk =
-    riskDistancePercent !== null &&
-    rewardDistancePercent !== null &&
-    riskDistancePercent > 0
-      ? rewardDistancePercent / riskDistancePercent
-      : null;
+    riskDistancePercent > 0 ? rewardDistancePercent / riskDistancePercent : null;
 
+  const trendStatus = getTrendStatus(plan.direction, market);
+  const btcStatus = getBtcStatus(plan.direction, market);
   const priceSideStatus = getPriceSideStatus(
     plan.direction,
     entryPrice,
@@ -188,86 +232,78 @@ export function reviewTradePlan(plan: TradePlan): ReviewResult {
   );
   const riskStatus = getRiskStatus(accountRiskPercent);
   const rewardStatus = getRewardStatus(rewardToRisk);
-  const reasonStatus = getTextStatus(plan.entryReason, 24);
-  const contextStatus = getTextStatus(plan.marketContext, 18);
-  const invalidationStatus = getTextStatus(plan.invalidation, 18);
 
-  const priceDetail =
-    entryPrice === null || stopLoss === null || takeProfit === null
-      ? "Заповни вхід, стоп і ціль."
-      : priceSideStatus === "pass"
-        ? "Стоп і ціль стоять логічно для обраного напрямку."
-        : "Стоп або ціль стоять не з того боку від входу.";
+  const setupZone =
+    plan.direction === "long"
+      ? market.nearestSupport
+      : market.nearestResistance;
 
-  const riskDetail =
-    accountRiskPercent === null
-      ? "Не можу порахувати ризик без балансу, позиції, входу і стопа."
-      : accountRiskPercent > 3
-        ? "Ризик вище 3% акаунту. Це no-trade."
-        : accountRiskPercent > 1.5
-          ? "Ризик вище 1.5%. Треба зменшити позицію або стоп."
-          : "Ризик у нормальній зоні.";
+  const zoneDistancePercent =
+    (Math.abs(entryPrice - setupZone.price) / entryPrice) * 100;
+  const zoneStatus =
+    zoneDistancePercent <= 1 ? "pass" : zoneDistancePercent <= 2.5 ? "warning" : "fail";
 
-  const rewardDetail =
-    rewardToRisk === null
-      ? "Не можу порахувати R/R без входу, стопа і цілі."
-      : rewardToRisk < 1.2
-        ? "Ціль занадто слабка відносно стопа."
-        : rewardToRisk < 2
-          ? "R/R прийнятний, але не сильний."
-          : "Потенціал виглядає сильнішим за ризик.";
-
-  const checklist = [
-    buildItem(
-      "prices",
-      "Ціни",
-      priceDetail,
+  const signals = [
+    buildSignal(
+      "trend",
+      "Trend",
+      market.trend === "sideways"
+        ? `Ринок у боковику, сила ${market.trendStrength}/100.`
+        : `Тренд ${market.trend === "up" ? "вгору" : "вниз"}, сила ${market.trendStrength}/100.`,
+      trendStatus,
+    ),
+    buildSignal(
+      "btc",
+      "BTC",
+      `BTC bias: ${market.btcBias}.`,
+      btcStatus,
+    ),
+    buildSignal(
+      "zone",
+      "Zone",
+      `Вхід на ${zoneDistancePercent.toFixed(2)}% від зони ${setupZone.label} (${formatPrice(setupZone.price)}).`,
+      zoneStatus,
+    ),
+    buildSignal(
+      "levels",
+      "Levels",
+      priceSideStatus === "pass"
+        ? `Entry ${formatPrice(entryPrice)}, stop ${formatPrice(stopLoss)}, target ${formatPrice(takeProfit)}.`
+        : "Стоп або ціль стоять не з того боку від входу.",
       priceSideStatus,
     ),
-    buildItem(
+    buildSignal(
       "risk",
-      "Ризик",
-      riskDetail,
+      "Risk",
+      accountRiskPercent === null
+        ? "Додай баланс і позицію, щоб порахувати ризик."
+        : accountRiskPercent > 3
+          ? `Ризик ${accountRiskPercent.toFixed(2)}% вище ліміту.`
+          : `Ризик ${accountRiskPercent.toFixed(2)}% акаунту.`,
       riskStatus,
     ),
-    buildItem(
+    buildSignal(
       "reward",
-      "Ціль",
-      rewardDetail,
+      "R/R",
+      rewardToRisk === null
+        ? "Не можу порахувати reward/risk."
+        : `Потенціал ${rewardToRisk.toFixed(2)}R.`,
       rewardStatus,
-    ),
-    buildItem(
-      "reason",
-      "Причина",
-      reasonStatus === "pass" ? "Причина входу є." : "Додай конкретну причину входу.",
-      reasonStatus,
-    ),
-    buildItem(
-      "context",
-      "Контекст",
-      contextStatus === "pass" ? "Контекст ринку записаний." : "Додай що зараз робить BTC або ринок.",
-      contextStatus,
-    ),
-    buildItem(
-      "invalidation",
-      "Скасування",
-      invalidationStatus === "pass" ? "Умова скасування є." : "Напиши, що саме ламає ідею.",
-      invalidationStatus,
     ),
   ];
 
   const metrics = [
     buildMetric(
+      "Market Trend",
+      market.trend === "up" ? "UP" : market.trend === "down" ? "DOWN" : "RANGE",
+      `${market.trendStrength}/100 strength`,
+      trendStatus,
+    ),
+    buildMetric(
       "Account Risk",
       formatPercent(accountRiskPercent),
       "ризик акаунту",
       riskStatus,
-    ),
-    buildMetric(
-      "Stop Distance",
-      formatPercent(riskDistancePercent),
-      "до стопа",
-      riskDistancePercent === null ? "warning" : "pass",
     ),
     buildMetric(
       "Reward / Risk",
@@ -277,22 +313,14 @@ export function reviewTradePlan(plan: TradePlan): ReviewResult {
     ),
   ];
 
-  const positives = checklist
-    .filter((item) => item.status === "pass")
-    .map((item) => item.label);
-
-  const warnings = checklist
-    .filter((item) => item.status !== "pass")
-    .map((item) => item.label);
-
   const nextActions =
-    warnings.length > 0
-      ? checklist
+    signals.filter((item) => item.status !== "pass").length > 0
+      ? signals
           .filter((item) => item.status !== "pass")
           .map((item) => item.detail)
-      : ["План можна зберегти як кандидат на угоду."];
+      : ["Setup можна розглядати, але без автоторгівлі."];
 
-  const grade = getGrade(checklist, accountRiskPercent);
+  const grade = getGrade(signals, accountRiskPercent);
   const gradeCopy = getGradeCopy(grade);
 
   return {
@@ -300,9 +328,7 @@ export function reviewTradePlan(plan: TradePlan): ReviewResult {
     title: gradeCopy.title,
     summary: gradeCopy.summary,
     metrics,
-    checklist,
-    positives,
-    warnings,
+    signals,
     nextActions,
   };
 }

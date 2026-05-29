@@ -1,17 +1,14 @@
-import type { TradeDirection, TradePlan, TradeSetup } from "./types";
+import type { TradeDirection, TradePlan, TradeTimeframe } from "./types";
 
 export const initialTradePlan: TradePlan = {
   symbol: "BTCUSDT",
   direction: "long",
-  setup: "manual",
+  timeframe: "15m",
   accountBalance: "1000",
   positionSize: "100",
   entryPrice: "",
   stopLoss: "",
   takeProfit: "",
-  entryReason: "",
-  marketContext: "",
-  invalidation: "",
 };
 
 export const directionOptions: Array<{
@@ -22,11 +19,12 @@ export const directionOptions: Array<{
   { label: "Short", value: "short" },
 ];
 
-export const setupOptions: Array<{
+export const timeframeOptions: Array<{
   label: string;
-  value: TradeSetup;
+  value: TradeTimeframe;
 }> = [
-  { label: "Manual idea", value: "manual" },
-  { label: "BTC Decoupling", value: "btc-decoupling" },
-  { label: "Range Touch", value: "range-touch" },
+  { label: "5m", value: "5m" },
+  { label: "15m", value: "15m" },
+  { label: "1h", value: "1h" },
+  { label: "4h", value: "4h" },
 ];

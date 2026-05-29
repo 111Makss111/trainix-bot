@@ -1,5 +1,5 @@
-import { directionOptions, setupOptions } from "../constants";
-import type { TradeDirection, TradePlan, TradeSetup } from "../types";
+import { directionOptions, timeframeOptions } from "../constants";
+import type { TradeDirection, TradePlan, TradeTimeframe } from "../types";
 import { FieldShell } from "./FieldShell";
 import { NumberInput } from "./NumberInput";
 import { SelectInput } from "./SelectInput";
@@ -30,11 +30,11 @@ export function QuickTradeForm({ plan, onChange }: QuickTradeFormProps) {
           />
         </FieldShell>
 
-        <FieldShell label="Стратегія">
-          <SelectInput<TradeSetup>
-            value={plan.setup}
-            options={setupOptions}
-            onChange={(setup) => onChange({ setup })}
+        <FieldShell label="Таймфрейм">
+          <SelectInput<TradeTimeframe>
+            value={plan.timeframe}
+            options={timeframeOptions}
+            onChange={(timeframe) => onChange({ timeframe })}
           />
         </FieldShell>
       </div>
@@ -56,7 +56,7 @@ export function QuickTradeForm({ plan, onChange }: QuickTradeFormProps) {
           />
         </FieldShell>
 
-        <FieldShell label="Вхід">
+        <FieldShell label="Вхід" hint="Порожньо = поточна ціна">
           <NumberInput
             value={plan.entryPrice}
             placeholder="65000"
@@ -64,7 +64,7 @@ export function QuickTradeForm({ plan, onChange }: QuickTradeFormProps) {
           />
         </FieldShell>
 
-        <FieldShell label="Стоп">
+        <FieldShell label="Стоп" hint="Порожньо = зона">
           <NumberInput
             value={plan.stopLoss}
             placeholder="64000"
@@ -72,7 +72,7 @@ export function QuickTradeForm({ plan, onChange }: QuickTradeFormProps) {
           />
         </FieldShell>
 
-        <FieldShell label="Ціль">
+        <FieldShell label="Ціль" hint="Порожньо = зона">
           <NumberInput
             value={plan.takeProfit}
             placeholder="68000"

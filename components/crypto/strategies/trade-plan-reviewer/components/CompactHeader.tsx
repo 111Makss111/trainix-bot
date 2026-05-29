@@ -10,7 +10,7 @@ export function CompactHeader() {
         </h1>
       </div>
       <p className="max-w-xl text-sm leading-6 text-white/50">
-        Швидка перевірка плану: ризик, стоп, ціль і причина входу.
+        Автоматична перевірка: тренд, BTC, зони, ризик і ціль.
       </p>
     </header>
   );
