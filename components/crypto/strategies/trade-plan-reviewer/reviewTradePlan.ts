@@ -16,10 +16,6 @@ function toNumber(value: string) {
   return Number.isFinite(numberValue) ? numberValue : null;
 }
 
-function formatPercent(value: number | null) {
-  return value === null ? "auto" : `${value.toFixed(2)}%`;
-}
-
 function formatRatio(value: number | null) {
   return value === null ? "auto" : `${value.toFixed(2)}R`;
 }
@@ -135,6 +131,57 @@ function getRewardStatus(rewardToRisk: number | null): ReviewStatus {
   return "pass";
 }
 
+function getSpaceStatus(targetSpacePercent: number, market: MarketSnapshot) {
+  if (targetSpacePercent < 0.6 || market.rangeToNoiseRatio < 2) {
+    return "fail";
+  }
+
+  if (targetSpacePercent < 1.2 || market.rangeToNoiseRatio < 3.5) {
+    return "warning";
+  }
+
+  return "pass";
+}
+
+function getPositionStatus(
+  direction: TradeDirection,
+  pricePositionPercent: number,
+): ReviewStatus {
+  if (direction === "long") {
+    if (pricePositionPercent <= 35) {
+      return "pass";
+    }
+
+    if (pricePositionPercent <= 55) {
+      return "warning";
+    }
+
+    return "fail";
+  }
+
+  if (pricePositionPercent >= 65) {
+    return "pass";
+  }
+
+  if (pricePositionPercent >= 45) {
+    return "warning";
+  }
+
+  return "fail";
+}
+
+function getVolatilityStatus(market: MarketSnapshot): ReviewStatus {
+  if (market.volatilityState === "extreme") {
+    return "fail";
+  }
+
+  if (market.volatilityState === "high" || market.volatilityState === "quiet") {
+    return "warning";
+  }
+
+  return "pass";
+}
+
 function buildMetric(
   label: string,
   value: string,
@@ -242,6 +289,26 @@ export function reviewTradePlan(
     (Math.abs(entryPrice - setupZone.price) / entryPrice) * 100;
   const zoneStatus =
     zoneDistancePercent <= 1 ? "pass" : zoneDistancePercent <= 2.5 ? "warning" : "fail";
+  const targetZone =
+    plan.direction === "long"
+      ? market.nearestResistance
+      : market.nearestSupport;
+  const targetSpacePercent =
+    (Math.abs(targetZone.price - entryPrice) / entryPrice) * 100;
+  const rangeWidth = market.nearestResistance.price - market.nearestSupport.price;
+  const pricePositionPercent =
+    rangeWidth > 0
+      ? Math.min(
+          Math.max(
+            ((entryPrice - market.nearestSupport.price) / rangeWidth) * 100,
+            0,
+          ),
+          100,
+        )
+      : 50;
+  const spaceStatus = getSpaceStatus(targetSpacePercent, market);
+  const positionStatus = getPositionStatus(plan.direction, pricePositionPercent);
+  const volatilityStatus = getVolatilityStatus(market);
 
   const signals = [
     buildSignal(
@@ -259,10 +326,30 @@ export function reviewTradePlan(
       btcStatus,
     ),
     buildSignal(
+      "space",
+      "Space",
+      `До ${targetZone.label} ${targetSpacePercent.toFixed(2)}%. Діапазон ${market.rangeWidthPercent.toFixed(2)}%, шум ${market.averageRangePercent.toFixed(2)}%.`,
+      spaceStatus,
+    ),
+    buildSignal(
+      "position",
+      "Position",
+      plan.direction === "long"
+        ? `Ціна на ${pricePositionPercent.toFixed(0)}% діапазону. Для Long краще нижня третина.`
+        : `Ціна на ${pricePositionPercent.toFixed(0)}% діапазону. Для Short краще верхня третина.`,
+      positionStatus,
+    ),
+    buildSignal(
       "zone",
-      "Zone",
-      `Вхід на ${zoneDistancePercent.toFixed(2)}% від зони ${setupZone.label} (${formatPrice(setupZone.price)}).`,
+      "Entry Zone",
+      `Вхід на ${zoneDistancePercent.toFixed(2)}% від ${setupZone.label} (${formatPrice(setupZone.price)}).`,
       zoneStatus,
+    ),
+    buildSignal(
+      "noise",
+      "Noise",
+      `Волатильність ${market.volatilityState}, середній шум свічки ${market.averageRangePercent.toFixed(2)}%.`,
+      volatilityStatus,
     ),
     buildSignal(
       "levels",
@@ -300,10 +387,10 @@ export function reviewTradePlan(
       trendStatus,
     ),
     buildMetric(
-      "Account Risk",
-      formatPercent(accountRiskPercent),
-      "ризик акаунту",
-      riskStatus,
+      "Trade Space",
+      `${targetSpacePercent.toFixed(2)}%`,
+      `${market.rangeToNoiseRatio.toFixed(1)}x шум`,
+      spaceStatus,
     ),
     buildMetric(
       "Reward / Risk",

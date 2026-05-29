@@ -4,6 +4,7 @@ import type {
   MarketZone,
   TradeTimeframe,
   TrendDirection,
+  VolatilityState,
 } from "./types";
 
 export type Candle = {
@@ -109,6 +110,35 @@ function getVolumeState(candles: Candle[]) {
   }
 
   return "volume normal";
+}
+
+function getAverageRangePercent(candles: Candle[]) {
+  const recentCandles = getRecentCandles(candles, 20);
+  const ranges = recentCandles.map((candle) => {
+    if (candle.close === 0) {
+      return 0;
+    }
+
+    return ((candle.high - candle.low) / candle.close) * 100;
+  });
+
+  return average(ranges);
+}
+
+function getVolatilityState(averageRangePercent: number): VolatilityState {
+  if (averageRangePercent >= 1.2) {
+    return "extreme";
+  }
+
+  if (averageRangePercent >= 0.7) {
+    return "high";
+  }
+
+  if (averageRangePercent <= 0.18) {
+    return "quiet";
+  }
+
+  return "normal";
 }
 
 function dedupeZones(zones: MarketZone[]) {
@@ -245,6 +275,13 @@ export function buildMarketSnapshotFromCandles({
   const currentPrice = currentCandle.close;
   const trend = getTrend(candles);
   const zones = buildZones(candles, currentPrice);
+  const averageRangePercent = getAverageRangePercent(candles);
+  const rangeWidthPercent =
+    ((zones.nearestResistance.price - zones.nearestSupport.price) /
+      currentPrice) *
+    100;
+  const rangeToNoiseRatio =
+    averageRangePercent > 0 ? rangeWidthPercent / averageRangePercent : 0;
 
   return {
     symbol,
@@ -253,6 +290,10 @@ export function buildMarketSnapshotFromCandles({
     trend: trend.trend,
     trendStrength: trend.trendStrength,
     btcBias: getBtcBias(btcCandles),
+    averageRangePercent,
+    rangeWidthPercent,
+    rangeToNoiseRatio,
+    volatilityState: getVolatilityState(averageRangePercent),
     volumeState: getVolumeState(candles),
     nearestSupport: zones.nearestSupport,
     nearestResistance: zones.nearestResistance,
@@ -277,6 +318,10 @@ export function getFallbackMarketSnapshot(
     trend: "sideways",
     trendStrength: 42,
     btcBias: "neutral",
+    averageRangePercent: 0,
+    rangeWidthPercent: 4,
+    rangeToNoiseRatio: 0,
+    volatilityState: "normal",
     volumeState: "waiting for live data",
     nearestSupport: {
       kind: "support",

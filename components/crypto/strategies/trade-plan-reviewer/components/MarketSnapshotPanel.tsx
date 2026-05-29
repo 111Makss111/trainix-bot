@@ -68,6 +68,24 @@ export function MarketSnapshotPanel({
         />
       </div>
 
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <SnapshotStat
+          label="Range"
+          value={`${market.rangeWidthPercent.toFixed(2)}%`}
+          detail="між підтримкою й опором"
+        />
+        <SnapshotStat
+          label="Noise"
+          value={`${market.averageRangePercent.toFixed(2)}%`}
+          detail={market.volatilityState}
+        />
+        <SnapshotStat
+          label="Space/Noise"
+          value={`${market.rangeToNoiseRatio.toFixed(1)}x`}
+          detail="ширина проти шуму"
+        />
+      </div>
+
       {error ? (
         <div className="mt-4 rounded-[1.1rem] border border-amber-300/18 bg-amber-300/8 px-4 py-3 text-sm leading-6 text-amber-100">
           {error}

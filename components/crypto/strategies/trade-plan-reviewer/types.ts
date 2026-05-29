@@ -6,6 +6,8 @@ export type TrendDirection = "up" | "down" | "sideways";
 
 export type BtcBias = "bullish" | "bearish" | "neutral";
 
+export type VolatilityState = "quiet" | "normal" | "high" | "extreme";
+
 export type ReviewGrade = "ready" | "review" | "weak" | "no-trade";
 
 export type ReviewStatus = "pass" | "warning" | "fail";
@@ -39,6 +41,10 @@ export type MarketSnapshot = {
   trend: TrendDirection;
   trendStrength: number;
   btcBias: BtcBias;
+  averageRangePercent: number;
+  rangeWidthPercent: number;
+  rangeToNoiseRatio: number;
+  volatilityState: VolatilityState;
   volumeState: string;
   nearestSupport: MarketZone;
   nearestResistance: MarketZone;
