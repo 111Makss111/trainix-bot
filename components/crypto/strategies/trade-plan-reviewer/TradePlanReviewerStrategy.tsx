@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { ChecklistPanel } from "./components/ChecklistPanel";
-import { ReviewResultPanel } from "./components/ReviewResultPanel";
+import { CollapsibleSection } from "./components/CollapsibleSection";
+import { CompactHeader } from "./components/CompactHeader";
+import { DecisionPanel } from "./components/DecisionPanel";
+import { HiddenPlanDetails } from "./components/HiddenPlanDetails";
+import { QuickTradeForm } from "./components/QuickTradeForm";
 import { RiskSummary } from "./components/RiskSummary";
-import { StrategyHeader } from "./components/StrategyHeader";
-import { TradePlanForm } from "./components/TradePlanForm";
 import { initialTradePlan } from "./constants";
 import { reviewTradePlan } from "./reviewTradePlan";
 import type { TradePlan } from "./types";
@@ -26,15 +28,22 @@ export function TradePlanReviewerStrategy() {
 
   return (
     <>
-      <StrategyHeader />
+      <CompactHeader />
 
-      <TradePlanForm plan={plan} onChange={updatePlan} />
-
-      <ReviewResultPanel review={review} />
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <QuickTradeForm plan={plan} onChange={updatePlan} />
+        <DecisionPanel review={review} />
+      </div>
 
       <RiskSummary metrics={review.metrics} />
 
-      <ChecklistPanel items={review.checklist} />
+      <CollapsibleSection title="Деталі плану" badge="приховано">
+        <HiddenPlanDetails plan={plan} onChange={updatePlan} />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Правила перевірки" badge={`${review.warnings.length} правок`}>
+        <ChecklistPanel items={review.checklist} />
+      </CollapsibleSection>
     </>
   );
 }

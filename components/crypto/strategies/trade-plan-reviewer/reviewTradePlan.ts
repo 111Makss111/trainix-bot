@@ -186,43 +186,73 @@ export function reviewTradePlan(plan: TradePlan): ReviewResult {
     stopLoss,
     takeProfit,
   );
+  const riskStatus = getRiskStatus(accountRiskPercent);
+  const rewardStatus = getRewardStatus(rewardToRisk);
+  const reasonStatus = getTextStatus(plan.entryReason, 24);
+  const contextStatus = getTextStatus(plan.marketContext, 18);
+  const invalidationStatus = getTextStatus(plan.invalidation, 18);
+
+  const priceDetail =
+    entryPrice === null || stopLoss === null || takeProfit === null
+      ? "Заповни вхід, стоп і ціль."
+      : priceSideStatus === "pass"
+        ? "Стоп і ціль стоять логічно для обраного напрямку."
+        : "Стоп або ціль стоять не з того боку від входу.";
+
+  const riskDetail =
+    accountRiskPercent === null
+      ? "Не можу порахувати ризик без балансу, позиції, входу і стопа."
+      : accountRiskPercent > 3
+        ? "Ризик вище 3% акаунту. Це no-trade."
+        : accountRiskPercent > 1.5
+          ? "Ризик вище 1.5%. Треба зменшити позицію або стоп."
+          : "Ризик у нормальній зоні.";
+
+  const rewardDetail =
+    rewardToRisk === null
+      ? "Не можу порахувати R/R без входу, стопа і цілі."
+      : rewardToRisk < 1.2
+        ? "Ціль занадто слабка відносно стопа."
+        : rewardToRisk < 2
+          ? "R/R прийнятний, але не сильний."
+          : "Потенціал виглядає сильнішим за ризик.";
 
   const checklist = [
     buildItem(
       "prices",
-      "Ціни стоять з правильного боку",
-      "Для Long стоп має бути нижче входу, ціль вище. Для Short навпаки.",
+      "Ціни",
+      priceDetail,
       priceSideStatus,
     ),
     buildItem(
       "risk",
-      "Ризик по акаунту контрольований",
-      "Поки мʼякий ліміт: до 1.5% добре, 1.5-3% треба переглянути, вище 3% no-trade.",
-      getRiskStatus(accountRiskPercent),
+      "Ризик",
+      riskDetail,
+      riskStatus,
     ),
     buildItem(
       "reward",
-      "Потенціал вартий ризику",
-      "Мінімум 1.2R, комфортніше 2R і вище.",
-      getRewardStatus(rewardToRisk),
+      "Ціль",
+      rewardDetail,
+      rewardStatus,
     ),
     buildItem(
       "reason",
-      "Причина входу достатньо конкретна",
-      "Не просто відчуття, а чіткий аргумент: структура, зона, обʼєм, BTC-контекст.",
-      getTextStatus(plan.entryReason, 24),
+      "Причина",
+      reasonStatus === "pass" ? "Причина входу є." : "Додай конкретну причину входу.",
+      reasonStatus,
     ),
     buildItem(
       "context",
-      "Контекст ринку записаний",
-      "План має пояснювати, що зараз з BTC, волатильністю або режимом ринку.",
-      getTextStatus(plan.marketContext, 18),
+      "Контекст",
+      contextStatus === "pass" ? "Контекст ринку записаний." : "Додай що зараз робить BTC або ринок.",
+      contextStatus,
     ),
     buildItem(
       "invalidation",
-      "Є умова скасування ідеї",
-      "Треба знати не тільки де стоп, а чому саме там ідея стає неправильною.",
-      getTextStatus(plan.invalidation, 18),
+      "Скасування",
+      invalidationStatus === "pass" ? "Умова скасування є." : "Напиши, що саме ламає ідею.",
+      invalidationStatus,
     ),
   ];
 
@@ -230,20 +260,20 @@ export function reviewTradePlan(plan: TradePlan): ReviewResult {
     buildMetric(
       "Account Risk",
       formatPercent(accountRiskPercent),
-      "Скільки акаунту ризикує ця позиція.",
-      getRiskStatus(accountRiskPercent),
+      "ризик акаунту",
+      riskStatus,
     ),
     buildMetric(
       "Stop Distance",
       formatPercent(riskDistancePercent),
-      "Відстань від входу до стопа.",
+      "до стопа",
       riskDistancePercent === null ? "warning" : "pass",
     ),
     buildMetric(
       "Reward / Risk",
       formatRatio(rewardToRisk),
-      "Потенціал цілі відносно стопа.",
-      getRewardStatus(rewardToRisk),
+      "потенціал",
+      rewardStatus,
     ),
   ];
 
@@ -257,7 +287,9 @@ export function reviewTradePlan(plan: TradePlan): ReviewResult {
 
   const nextActions =
     warnings.length > 0
-      ? warnings.map((warning) => `Виправити: ${warning}.`)
+      ? checklist
+          .filter((item) => item.status !== "pass")
+          .map((item) => item.detail)
       : ["План можна зберегти як кандидат на угоду."];
 
   const grade = getGrade(checklist, accountRiskPercent);

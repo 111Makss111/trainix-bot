@@ -18,19 +18,11 @@ const statusClassName: Record<ReviewStatus, string> = {
 
 export function ChecklistPanel({ items }: ChecklistPanelProps) {
   return (
-    <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] px-6 py-6 backdrop-blur-md">
-      <p className="text-[0.72rem] uppercase tracking-[0.3em] text-white/38">
-        Discipline Checklist
-      </p>
-      <h2 className="mt-3 text-2xl font-medium text-white">
-        Правила, які зараз перевіряються
-      </h2>
-
-      <div className="mt-6 grid gap-3 xl:grid-cols-2">
+    <div className="grid gap-3 xl:grid-cols-2">
         {items.map((item) => (
           <div
             key={item.id}
-            className="rounded-[1.4rem] border border-white/10 bg-white/[0.03] px-5 py-4"
+            className="rounded-[1.2rem] border border-white/10 bg-white/[0.03] px-4 py-4"
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="font-medium text-white">{item.label}</p>
@@ -46,7 +38,6 @@ export function ChecklistPanel({ items }: ChecklistPanelProps) {
             <p className="mt-3 text-sm leading-6 text-white/54">{item.detail}</p>
           </div>
         ))}
-      </div>
-    </section>
+    </div>
   );
 }

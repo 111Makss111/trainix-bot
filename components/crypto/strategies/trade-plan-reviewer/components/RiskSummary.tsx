@@ -12,20 +12,20 @@ const statusClassName: Record<ReviewStatus, string> = {
 
 export function RiskSummary({ metrics }: RiskSummaryProps) {
   return (
-    <section className="grid gap-3 md:grid-cols-3">
+    <section className="grid gap-3 sm:grid-cols-3">
       {metrics.map((metric) => (
         <div
           key={metric.label}
           className={[
-            "rounded-[1.4rem] border px-5 py-5",
+            "rounded-[1.25rem] border px-4 py-4",
             statusClassName[metric.status],
           ].join(" ")}
         >
-          <p className="text-[0.68rem] uppercase tracking-[0.26em] opacity-70">
+          <p className="text-[0.62rem] uppercase tracking-[0.22em] opacity-70">
             {metric.label}
           </p>
-          <p className="mt-3 text-2xl font-medium">{metric.value}</p>
-          <p className="mt-2 text-xs leading-5 opacity-70">{metric.detail}</p>
+          <p className="mt-2 text-xl font-medium">{metric.value}</p>
+          <p className="mt-1 text-xs leading-5 opacity-70">{metric.detail}</p>
         </div>
       ))}
     </section>
