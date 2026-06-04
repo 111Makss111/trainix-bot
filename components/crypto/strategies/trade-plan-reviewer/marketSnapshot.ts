@@ -96,20 +96,20 @@ function getVolumeState(candles: Candle[]) {
   const averageVolume = average(previousVolumes);
 
   if (averageVolume === 0) {
-    return "volume unknown";
+    return "обсяг невідомий";
   }
 
   const volumeRatio = lastVolume / averageVolume;
 
   if (volumeRatio >= 1.5) {
-    return "volume above average";
+    return "обсяг вище норми";
   }
 
   if (volumeRatio <= 0.65) {
-    return "volume below average";
+    return "обсяг нижче норми";
   }
 
-  return "volume normal";
+  return "обсяг у нормі";
 }
 
 function getAverageRangePercent(candles: Candle[]) {
@@ -158,9 +158,36 @@ function dedupeZones(zones: MarketZone[]) {
   return result;
 }
 
+function createZone({
+  kind,
+  label,
+  low,
+  high,
+  strength,
+}: {
+  kind: MarketZone["kind"];
+  label: string;
+  low: number;
+  high: number;
+  strength: number;
+}): MarketZone {
+  const safeLow = Math.min(low, high);
+  const safeHigh = Math.max(low, high);
+
+  return {
+    kind,
+    label,
+    low: safeLow,
+    high: safeHigh,
+    price: (safeLow + safeHigh) / 2,
+    strength,
+  };
+}
+
 function buildZones(candles: Candle[], currentPrice: number) {
   const recentCandles = getRecentCandles(candles, 80);
   const pivotZones: MarketZone[] = [];
+  const averageRangePercent = getAverageRangePercent(candles);
 
   for (let index = 2; index < recentCandles.length - 2; index += 1) {
     const candle = recentCandles[index];
@@ -173,23 +200,26 @@ function buildZones(candles: Candle[], currentPrice: number) {
       (nearbyCandle) => candle.high >= nearbyCandle.high,
     );
     const recencyScore = (index / recentCandles.length) * 25;
+    const zonePadding = candle.close * Math.max(averageRangePercent / 100, 0.0025);
 
     if (isPivotLow && candle.low < currentPrice) {
-      pivotZones.push({
+      pivotZones.push(createZone({
         kind: "support",
-        label: "Pivot support",
-        price: candle.low,
+        label: "Локальна підтримка",
+        low: candle.low - zonePadding * 0.4,
+        high: candle.low + zonePadding,
         strength: Math.round(clamp(55 + recencyScore, 45, 92)),
-      });
+      }));
     }
 
     if (isPivotHigh && candle.high > currentPrice) {
-      pivotZones.push({
+      pivotZones.push(createZone({
         kind: "resistance",
-        label: "Pivot resistance",
-        price: candle.high,
+        label: "Локальний опір",
+        low: candle.high - zonePadding,
+        high: candle.high + zonePadding * 0.4,
         strength: Math.round(clamp(55 + recencyScore, 45, 92)),
-      });
+      }));
     }
   }
 
@@ -205,18 +235,20 @@ function buildZones(candles: Candle[], currentPrice: number) {
 
   const allZones = dedupeZones([
     ...pivotZones,
-    {
+    createZone({
       kind: "support",
-      label: "Recent low",
-      price: lowest.low,
+      label: "Широка підтримка",
+      low: lowest.low - currentPrice * 0.003,
+      high: lowest.low + currentPrice * 0.004,
       strength: 72,
-    },
-    {
+    }),
+    createZone({
       kind: "resistance",
-      label: "Recent high",
-      price: highest.high,
+      label: "Широкий опір",
+      low: highest.high - currentPrice * 0.004,
+      high: highest.high + currentPrice * 0.003,
       strength: 72,
-    },
+    }),
   ]);
 
   const supports = allZones
@@ -228,20 +260,22 @@ function buildZones(candles: Candle[], currentPrice: number) {
 
   const nearestSupport =
     supports[0] ??
-    ({
+    createZone({
       kind: "support",
-      label: "Estimated support",
-      price: currentPrice * 0.985,
+      label: "Орієнтовна підтримка",
+      low: currentPrice * 0.98,
+      high: currentPrice * 0.988,
       strength: 45,
-    } satisfies MarketZone);
+    });
   const nearestResistance =
     resistances[0] ??
-    ({
+    createZone({
       kind: "resistance",
-      label: "Estimated resistance",
-      price: currentPrice * 1.015,
+      label: "Орієнтовний опір",
+      low: currentPrice * 1.012,
+      high: currentPrice * 1.02,
       strength: 45,
-    } satisfies MarketZone);
+    });
 
   const visibleZones = [
     ...supports.slice(0, 2),
@@ -322,29 +356,37 @@ export function getFallbackMarketSnapshot(
     rangeWidthPercent: 4,
     rangeToNoiseRatio: 0,
     volatilityState: "normal",
-    volumeState: "waiting for live data",
+    volumeState: "очікуємо живі дані",
     nearestSupport: {
       kind: "support",
-      label: "Estimated support",
+      label: "Орієнтовна підтримка",
+      low: currentPrice * 0.976,
+      high: currentPrice * 0.984,
       price: currentPrice * 0.98,
       strength: 45,
     },
     nearestResistance: {
       kind: "resistance",
-      label: "Estimated resistance",
+      label: "Орієнтовний опір",
+      low: currentPrice * 1.016,
+      high: currentPrice * 1.024,
       price: currentPrice * 1.02,
       strength: 45,
     },
     zones: [
       {
         kind: "support",
-        label: "Estimated support",
+        label: "Орієнтовна підтримка",
+        low: currentPrice * 0.976,
+        high: currentPrice * 0.984,
         price: currentPrice * 0.98,
         strength: 45,
       },
       {
         kind: "resistance",
-        label: "Estimated resistance",
+        label: "Орієнтовний опір",
+        low: currentPrice * 1.016,
+        high: currentPrice * 1.024,
         price: currentPrice * 1.02,
         strength: 45,
       },

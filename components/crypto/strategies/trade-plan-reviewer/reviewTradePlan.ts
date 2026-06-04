@@ -17,7 +17,7 @@ function toNumber(value: string) {
 }
 
 function formatRatio(value: number | null) {
-  return value === null ? "auto" : `${value.toFixed(2)}R`;
+  return value === null ? "авто" : `${value.toFixed(2)}R`;
 }
 
 function formatPrice(value: number) {
@@ -222,27 +222,27 @@ function getGrade(signals: ReviewItem[], accountRiskPercent: number | null) {
 function getGradeCopy(grade: ReviewGrade) {
   if (grade === "ready") {
     return {
-      title: "Setup aligned",
+      title: "Ідея виглядає зібрано",
       summary: "Напрямок, BTC-контекст, зона і ризик не конфліктують між собою.",
     };
   }
 
   if (grade === "review") {
     return {
-      title: "Needs review",
+      title: "Є речі для перевірки",
       summary: "Є попередження. Вхід можливий тільки після перевірки слабких місць.",
     };
   }
 
   if (grade === "weak") {
     return {
-      title: "Weak setup",
+      title: "Ідея поки слабка",
       summary: "Ринок не дає достатньо підтверджень. Ідею краще не поспішати брати.",
     };
   }
 
   return {
-    title: "No-trade",
+    title: "Угода зараз неякісна",
     summary: "Є конфлікт із трендом, BTC або базовою логікою рівнів.",
   };
 }
@@ -313,7 +313,7 @@ export function reviewTradePlan(
   const signals = [
     buildSignal(
       "trend",
-      "Trend",
+      "Тренд",
       market.trend === "sideways"
         ? `Ринок у боковику, сила ${market.trendStrength}/100.`
         : `Тренд ${market.trend === "up" ? "вгору" : "вниз"}, сила ${market.trendStrength}/100.`,
@@ -322,18 +322,18 @@ export function reviewTradePlan(
     buildSignal(
       "btc",
       "BTC",
-      `BTC bias: ${market.btcBias}.`,
+      `BTC зараз ${market.btcBias === "bullish" ? "підтримує ріст" : market.btcBias === "bearish" ? "тисне вниз" : "нейтральний"}.`,
       btcStatus,
     ),
     buildSignal(
       "space",
-      "Space",
+      "Простір до цілі",
       `До ${targetZone.label} ${targetSpacePercent.toFixed(2)}%. Діапазон ${market.rangeWidthPercent.toFixed(2)}%, шум ${market.averageRangePercent.toFixed(2)}%.`,
       spaceStatus,
     ),
     buildSignal(
       "position",
-      "Position",
+      "Позиція в діапазоні",
       plan.direction === "long"
         ? `Ціна на ${pricePositionPercent.toFixed(0)}% діапазону. Для Long краще нижня третина.`
         : `Ціна на ${pricePositionPercent.toFixed(0)}% діапазону. Для Short краще верхня третина.`,
@@ -341,27 +341,27 @@ export function reviewTradePlan(
     ),
     buildSignal(
       "zone",
-      "Entry Zone",
-      `Вхід на ${zoneDistancePercent.toFixed(2)}% від ${setupZone.label} (${formatPrice(setupZone.price)}).`,
+      "Близькість до зони",
+      `Вхід на ${zoneDistancePercent.toFixed(2)}% від зони ${setupZone.label} (${formatPrice(setupZone.low)} - ${formatPrice(setupZone.high)}).`,
       zoneStatus,
     ),
     buildSignal(
       "noise",
-      "Noise",
-      `Волатильність ${market.volatilityState}, середній шум свічки ${market.averageRangePercent.toFixed(2)}%.`,
+      "Ринковий шум",
+      `Волатильність ${market.volatilityState === "extreme" ? "екстремальна" : market.volatilityState === "high" ? "висока" : market.volatilityState === "quiet" ? "тиха" : "нормальна"}, середній шум свічки ${market.averageRangePercent.toFixed(2)}%.`,
       volatilityStatus,
     ),
     buildSignal(
       "levels",
-      "Levels",
+      "Рівні угоди",
       priceSideStatus === "pass"
-        ? `Entry ${formatPrice(entryPrice)}, stop ${formatPrice(stopLoss)}, target ${formatPrice(takeProfit)}.`
+        ? `Вхід ${formatPrice(entryPrice)}, стоп ${formatPrice(stopLoss)}, ціль ${formatPrice(takeProfit)}.`
         : "Стоп або ціль стоять не з того боку від входу.",
       priceSideStatus,
     ),
     buildSignal(
       "risk",
-      "Risk",
+      "Ризик",
       accountRiskPercent === null
         ? "Додай баланс і позицію, щоб порахувати ризик."
         : accountRiskPercent > 3
@@ -371,9 +371,9 @@ export function reviewTradePlan(
     ),
     buildSignal(
       "reward",
-      "R/R",
+      "Потенціал",
       rewardToRisk === null
-        ? "Не можу порахувати reward/risk."
+        ? "Не можу порахувати співвідношення потенціалу до ризику."
         : `Потенціал ${rewardToRisk.toFixed(2)}R.`,
       rewardStatus,
     ),
@@ -381,19 +381,19 @@ export function reviewTradePlan(
 
   const metrics = [
     buildMetric(
-      "Market Trend",
-      market.trend === "up" ? "UP" : market.trend === "down" ? "DOWN" : "RANGE",
-      `${market.trendStrength}/100 strength`,
+      "Тренд ринку",
+      market.trend === "up" ? "ВГОРУ" : market.trend === "down" ? "ВНИЗ" : "БОКОВИК",
+      `сила ${market.trendStrength}/100`,
       trendStatus,
     ),
     buildMetric(
-      "Trade Space",
+      "Простір до цілі",
       `${targetSpacePercent.toFixed(2)}%`,
       `${market.rangeToNoiseRatio.toFixed(1)}x шум`,
       spaceStatus,
     ),
     buildMetric(
-      "Reward / Risk",
+      "Потенціал / ризик",
       formatRatio(rewardToRisk),
       "потенціал",
       rewardStatus,
@@ -405,7 +405,7 @@ export function reviewTradePlan(
       ? signals
           .filter((item) => item.status !== "pass")
           .map((item) => item.detail)
-      : ["Setup можна розглядати, але без автоторгівлі."];
+      : ["Ідею можна розглядати, але без автоторгівлі."];
 
   const grade = getGrade(signals, accountRiskPercent);
   const gradeCopy = getGradeCopy(grade);

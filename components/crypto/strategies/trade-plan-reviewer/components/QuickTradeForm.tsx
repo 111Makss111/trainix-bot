@@ -59,7 +59,7 @@ export function QuickTradeForm({ plan, onChange }: QuickTradeFormProps) {
         <FieldShell label="Вхід" hint="Порожньо = поточна ціна">
           <NumberInput
             value={plan.entryPrice}
-            placeholder="65000"
+            placeholder="авто"
             onChange={(entryPrice) => onChange({ entryPrice })}
           />
         </FieldShell>
@@ -67,7 +67,7 @@ export function QuickTradeForm({ plan, onChange }: QuickTradeFormProps) {
         <FieldShell label="Стоп" hint="Порожньо = зона">
           <NumberInput
             value={plan.stopLoss}
-            placeholder="64000"
+            placeholder="авто"
             onChange={(stopLoss) => onChange({ stopLoss })}
           />
         </FieldShell>
@@ -75,7 +75,7 @@ export function QuickTradeForm({ plan, onChange }: QuickTradeFormProps) {
         <FieldShell label="Ціль" hint="Порожньо = зона">
           <NumberInput
             value={plan.takeProfit}
-            placeholder="68000"
+            placeholder="авто"
             onChange={(takeProfit) => onChange({ takeProfit })}
           />
         </FieldShell>

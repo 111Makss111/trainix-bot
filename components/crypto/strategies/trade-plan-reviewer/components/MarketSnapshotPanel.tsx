@@ -7,9 +7,9 @@ type MarketSnapshotPanelProps = {
 };
 
 const trendLabel: Record<TrendDirection, string> = {
-  up: "UP",
-  down: "DOWN",
-  sideways: "RANGE",
+  up: "ВГОРУ",
+  down: "ВНИЗ",
+  sideways: "БОКОВИК",
 };
 
 const zoneClassName: Record<ZoneKind, string> = {
@@ -28,14 +28,14 @@ export function MarketSnapshotPanel({
   isLoading,
   error,
 }: MarketSnapshotPanelProps) {
-  const sourceLabel = market.source === "live" ? "LIVE" : "LOCAL";
+  const sourceLabel = market.source === "live" ? "ЖИВІ ДАНІ" : "РЕЗЕРВ";
 
   return (
     <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[0.68rem] uppercase tracking-[0.28em] text-white/34">
-            Market Snapshot
+            Стан ринку
           </p>
           <h2 className="mt-2 text-xl font-medium text-white">
             {market.symbol} · {formatPrice(market.currentPrice)}
@@ -53,16 +53,24 @@ export function MarketSnapshotPanel({
                 : "border-amber-300/18 bg-amber-300/8 text-amber-100",
             ].join(" ")}
           >
-            {isLoading ? "LOADING" : sourceLabel}
+            {isLoading ? "ОНОВЛЕННЯ" : sourceLabel}
           </span>
         </div>
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
-        <SnapshotStat label="Trend" value={trendLabel[market.trend]} detail={`${market.trendStrength}/100`} />
-        <SnapshotStat label="BTC Bias" value={market.btcBias.toUpperCase()} detail={market.volumeState} />
         <SnapshotStat
-          label="Candles"
+          label="Тренд"
+          value={trendLabel[market.trend]}
+          detail={`сила ${market.trendStrength}/100`}
+        />
+        <SnapshotStat
+          label="Настрій BTC"
+          value={market.btcBias === "bullish" ? "СИЛА" : market.btcBias === "bearish" ? "СЛАБКІСТЬ" : "НЕЙТРАЛЬНО"}
+          detail={market.volumeState}
+        />
+        <SnapshotStat
+          label="Свічки"
           value={String(market.candleCount)}
           detail={market.updatedAt}
         />
@@ -70,17 +78,25 @@ export function MarketSnapshotPanel({
 
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
         <SnapshotStat
-          label="Range"
+          label="Діапазон"
           value={`${market.rangeWidthPercent.toFixed(2)}%`}
           detail="між підтримкою й опором"
         />
         <SnapshotStat
-          label="Noise"
+          label="Шум"
           value={`${market.averageRangePercent.toFixed(2)}%`}
-          detail={market.volatilityState}
+          detail={
+            market.volatilityState === "extreme"
+              ? "екстремальний"
+              : market.volatilityState === "high"
+                ? "високий"
+                : market.volatilityState === "quiet"
+                  ? "тихий"
+                  : "нормальний"
+          }
         />
         <SnapshotStat
-          label="Space/Noise"
+          label="Простір / шум"
           value={`${market.rangeToNoiseRatio.toFixed(1)}x`}
           detail="ширина проти шуму"
         />
@@ -102,11 +118,16 @@ export function MarketSnapshotPanel({
             ].join(" ")}
           >
             <p className="text-xs uppercase tracking-[0.18em] opacity-70">
-              {zone.kind}
+              {zone.kind === "support" ? "ПІДТРИМКА" : "ОПІР"}
             </p>
             <p className="mt-2 font-medium text-white">{zone.label}</p>
-            <p className="mt-1 text-sm opacity-80">{formatPrice(zone.price)}</p>
-            <p className="mt-1 text-xs opacity-60">strength {zone.strength}/100</p>
+            <p className="mt-1 text-sm opacity-80">
+              {formatPrice(zone.low)} - {formatPrice(zone.high)}
+            </p>
+            <p className="mt-1 text-xs opacity-60">
+              центр {formatPrice(zone.price)}
+            </p>
+            <p className="mt-1 text-xs opacity-60">міцність {zone.strength}/100</p>
           </div>
         ))}
       </div>

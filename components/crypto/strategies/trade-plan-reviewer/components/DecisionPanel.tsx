@@ -12,10 +12,10 @@ const gradeClassName: Record<ReviewGrade, string> = {
 };
 
 const gradeLabel: Record<ReviewGrade, string> = {
-  ready: "READY",
-  review: "REVIEW",
-  weak: "WEAK",
-  "no-trade": "NO-TRADE",
+  ready: "ГОТОВО",
+  review: "ПЕРЕВІРИТИ",
+  weak: "СЛАБКО",
+  "no-trade": "НЕ ВХОДИТИ",
 };
 
 export function DecisionPanel({ review }: DecisionPanelProps) {
@@ -29,7 +29,7 @@ export function DecisionPanel({ review }: DecisionPanelProps) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[0.68rem] uppercase tracking-[0.28em] opacity-70">
-            Decision
+            Рішення
           </p>
           <h2 className="mt-3 text-3xl font-semibold text-white">
             {gradeLabel[review.grade]}
@@ -39,7 +39,7 @@ export function DecisionPanel({ review }: DecisionPanelProps) {
           </p>
         </div>
         <span className="rounded-full border border-current/20 bg-black/12 px-3 py-1.5 text-sm">
-          Auto
+          Авто
         </span>
       </div>
 

@@ -28,6 +28,8 @@ export type TradePlan = {
 export type MarketZone = {
   kind: ZoneKind;
   label: string;
+  low: number;
+  high: number;
   price: number;
   strength: number;
 };

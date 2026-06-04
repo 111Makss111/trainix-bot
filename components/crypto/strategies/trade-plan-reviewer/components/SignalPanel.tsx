@@ -5,9 +5,9 @@ type SignalPanelProps = {
 };
 
 const statusLabel: Record<ReviewStatus, string> = {
-  pass: "OK",
-  warning: "WATCH",
-  fail: "STOP",
+  pass: "ОК",
+  warning: "УВАГА",
+  fail: "СТОП",
 };
 
 const statusClassName: Record<ReviewStatus, string> = {
@@ -20,7 +20,7 @@ export function SignalPanel({ signals }: SignalPanelProps) {
   return (
     <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
       <p className="text-[0.68rem] uppercase tracking-[0.28em] text-white/34">
-        Auto Checks
+        Автоматична перевірка
       </p>
       <div className="mt-4 grid gap-3 xl:grid-cols-2">
         {signals.map((signal) => (
