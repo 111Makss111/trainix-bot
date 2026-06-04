@@ -70,10 +70,24 @@ export type ReviewItem = {
   status: ReviewStatus;
 };
 
+export type ReviewLevels = {
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit: number;
+  riskDistancePercent: number;
+  rewardDistancePercent: number;
+  targetSpacePercent: number;
+  zoneDistancePercent: number;
+  pricePositionPercent: number;
+  accountRiskPercent: number | null;
+  rewardToRisk: number | null;
+};
+
 export type ReviewResult = {
   grade: ReviewGrade;
   title: string;
   summary: string;
+  levels: ReviewLevels;
   metrics: ReviewMetric[];
   signals: ReviewItem[];
   nextActions: string[];

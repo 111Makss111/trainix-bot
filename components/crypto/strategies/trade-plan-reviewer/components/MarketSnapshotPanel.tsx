@@ -1,4 +1,5 @@
 import type { MarketSnapshot, TrendDirection, ZoneKind } from "../types";
+import { formatTradingViewPrice } from "../formatters";
 
 type MarketSnapshotPanelProps = {
   market: MarketSnapshot;
@@ -17,12 +18,6 @@ const zoneClassName: Record<ZoneKind, string> = {
   resistance: "border-rose-300/18 bg-rose-300/8 text-rose-100",
 };
 
-function formatPrice(value: number) {
-  return value.toLocaleString("en-US", {
-    maximumFractionDigits: value >= 1000 ? 0 : 2,
-  });
-}
-
 export function MarketSnapshotPanel({
   market,
   isLoading,
@@ -38,7 +33,7 @@ export function MarketSnapshotPanel({
             Стан ринку
           </p>
           <h2 className="mt-2 text-xl font-medium text-white">
-            {market.symbol} · {formatPrice(market.currentPrice)}
+            {market.symbol} · {formatTradingViewPrice(market.currentPrice)}
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -122,10 +117,10 @@ export function MarketSnapshotPanel({
             </p>
             <p className="mt-2 font-medium text-white">{zone.label}</p>
             <p className="mt-1 text-sm opacity-80">
-              {formatPrice(zone.low)} - {formatPrice(zone.high)}
+              {formatTradingViewPrice(zone.low)} - {formatTradingViewPrice(zone.high)}
             </p>
             <p className="mt-1 text-xs opacity-60">
-              центр {formatPrice(zone.price)}
+              центр {formatTradingViewPrice(zone.price)}
             </p>
             <p className="mt-1 text-xs opacity-60">міцність {zone.strength}/100</p>
           </div>

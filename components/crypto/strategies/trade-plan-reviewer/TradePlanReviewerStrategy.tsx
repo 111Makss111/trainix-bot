@@ -7,6 +7,7 @@ import { MarketSnapshotPanel } from "./components/MarketSnapshotPanel";
 import { QuickTradeForm } from "./components/QuickTradeForm";
 import { RiskSummary } from "./components/RiskSummary";
 import { SignalPanel } from "./components/SignalPanel";
+import { TradeLevelsPanel } from "./components/TradeLevelsPanel";
 import { initialTradePlan } from "./constants";
 import { getFallbackMarketSnapshot } from "./marketSnapshot";
 import { reviewTradePlan } from "./reviewTradePlan";
@@ -98,6 +99,8 @@ export function TradePlanReviewerStrategy() {
       </div>
 
       <RiskSummary metrics={review.metrics} />
+
+      <TradeLevelsPanel levels={review.levels} />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(26rem,0.8fr)]">
         <MarketSnapshotPanel

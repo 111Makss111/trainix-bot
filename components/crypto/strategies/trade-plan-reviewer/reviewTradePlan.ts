@@ -8,6 +8,7 @@ import type {
   TradeDirection,
   TradePlan,
 } from "./types";
+import { formatTradingViewPrice } from "./formatters";
 
 function toNumber(value: string) {
   const normalizedValue = value.replace(",", ".").trim();
@@ -18,12 +19,6 @@ function toNumber(value: string) {
 
 function formatRatio(value: number | null) {
   return value === null ? "авто" : `${value.toFixed(2)}R`;
-}
-
-function formatPrice(value: number) {
-  return value.toLocaleString("en-US", {
-    maximumFractionDigits: value >= 1000 ? 0 : 2,
-  });
 }
 
 function getEffectiveEntry(plan: TradePlan, market: MarketSnapshot) {
@@ -243,7 +238,7 @@ function getGradeCopy(grade: ReviewGrade) {
 
   return {
     title: "Угода зараз неякісна",
-    summary: "Є конфлікт із трендом, BTC або базовою логікою рівнів.",
+    summary: "Є конфлікт із трендом, BTC, простором до цілі або базовою логікою рівнів.",
   };
 }
 
@@ -328,21 +323,27 @@ export function reviewTradePlan(
     buildSignal(
       "space",
       "Простір до цілі",
-      `До ${targetZone.label} ${targetSpacePercent.toFixed(2)}%. Діапазон ${market.rangeWidthPercent.toFixed(2)}%, шум ${market.averageRangePercent.toFixed(2)}%.`,
+      targetSpacePercent <= market.averageRangePercent
+        ? `Ціль занадто близько: ${targetSpacePercent.toFixed(2)}%, а середній шум свічки ${market.averageRangePercent.toFixed(2)}%. Рух менший за шум.`
+        : `До ${targetZone.label} ${targetSpacePercent.toFixed(2)}%. Діапазон ${market.rangeWidthPercent.toFixed(2)}%, шум ${market.averageRangePercent.toFixed(2)}%.`,
       spaceStatus,
     ),
     buildSignal(
       "position",
       "Позиція в діапазоні",
       plan.direction === "long"
-        ? `Ціна на ${pricePositionPercent.toFixed(0)}% діапазону. Для Long краще нижня третина.`
-        : `Ціна на ${pricePositionPercent.toFixed(0)}% діапазону. Для Short краще верхня третина.`,
+        ? pricePositionPercent > 55
+          ? `Ціна вже на ${pricePositionPercent.toFixed(0)}% діапазону. Для Long краще чекати ближче до підтримки.`
+          : `Ціна на ${pricePositionPercent.toFixed(0)}% діапазону. Для Long краще нижня третина.`
+        : pricePositionPercent < 45
+          ? `Ціна лише на ${pricePositionPercent.toFixed(0)}% діапазону. Для Short краще чекати ближче до опору.`
+          : `Ціна на ${pricePositionPercent.toFixed(0)}% діапазону. Для Short краще верхня третина.`,
       positionStatus,
     ),
     buildSignal(
       "zone",
       "Близькість до зони",
-      `Вхід на ${zoneDistancePercent.toFixed(2)}% від зони ${setupZone.label} (${formatPrice(setupZone.low)} - ${formatPrice(setupZone.high)}).`,
+      `Вхід на ${zoneDistancePercent.toFixed(2)}% від зони ${setupZone.label} (${formatTradingViewPrice(setupZone.low)} - ${formatTradingViewPrice(setupZone.high)}).`,
       zoneStatus,
     ),
     buildSignal(
@@ -355,7 +356,7 @@ export function reviewTradePlan(
       "levels",
       "Рівні угоди",
       priceSideStatus === "pass"
-        ? `Вхід ${formatPrice(entryPrice)}, стоп ${formatPrice(stopLoss)}, ціль ${formatPrice(takeProfit)}.`
+        ? `Вхід ${formatTradingViewPrice(entryPrice)}, стоп ${formatTradingViewPrice(stopLoss)}, ціль ${formatTradingViewPrice(takeProfit)}.`
         : "Стоп або ціль стоять не з того боку від входу.",
       priceSideStatus,
     ),
@@ -374,7 +375,9 @@ export function reviewTradePlan(
       "Потенціал",
       rewardToRisk === null
         ? "Не можу порахувати співвідношення потенціалу до ризику."
-        : `Потенціал ${rewardToRisk.toFixed(2)}R.`,
+        : rewardToRisk < 1.2
+          ? `Потенціал ${rewardToRisk.toFixed(2)}R. Ризик більший за потенціал, угоду краще не брати.`
+          : `Потенціал ${rewardToRisk.toFixed(2)}R.`,
       rewardStatus,
     ),
   ];
@@ -414,6 +417,18 @@ export function reviewTradePlan(
     grade,
     title: gradeCopy.title,
     summary: gradeCopy.summary,
+    levels: {
+      entryPrice,
+      stopLoss,
+      takeProfit,
+      riskDistancePercent,
+      rewardDistancePercent,
+      targetSpacePercent,
+      zoneDistancePercent,
+      pricePositionPercent,
+      accountRiskPercent,
+      rewardToRisk,
+    },
     metrics,
     signals,
     nextActions,
