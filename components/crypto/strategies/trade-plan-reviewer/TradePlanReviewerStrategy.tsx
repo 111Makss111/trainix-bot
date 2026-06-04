@@ -3,15 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { CompactHeader } from "./components/CompactHeader";
 import { DecisionPanel } from "./components/DecisionPanel";
+import { DirectionPriorityPanel } from "./components/DirectionPriorityPanel";
 import { MarketSnapshotPanel } from "./components/MarketSnapshotPanel";
 import { QuickTradeForm } from "./components/QuickTradeForm";
 import { RiskSummary } from "./components/RiskSummary";
 import { SignalPanel } from "./components/SignalPanel";
 import { TradeLevelsPanel } from "./components/TradeLevelsPanel";
 import { initialTradePlan } from "./constants";
+import { getDirectionPriority } from "./directionPriority";
 import { getFallbackMarketSnapshot } from "./marketSnapshot";
 import { reviewTradePlan } from "./reviewTradePlan";
-import type { MarketSnapshot, TradePlan } from "./types";
+import type { MarketSnapshot, TradeDirection, TradePlan } from "./types";
 
 export function TradePlanReviewerStrategy() {
   // Тут живе тільки стан форми. Самі правила оцінки винесені в reviewTradePlan.ts.
@@ -24,6 +26,10 @@ export function TradePlanReviewerStrategy() {
 
   // Review вже спирається не на твої пояснення, а на market snapshot + рівні угоди.
   const review = useMemo(() => reviewTradePlan(plan, market), [plan, market]);
+  const directionPriority = useMemo(
+    () => getDirectionPriority(plan, market),
+    [plan, market],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -89,6 +95,16 @@ export function TradePlanReviewerStrategy() {
     }));
   }
 
+  function useAutoDirection(direction: TradeDirection) {
+    setPlan((currentPlan) => ({
+      ...currentPlan,
+      direction,
+      entryPrice: "",
+      stopLoss: "",
+      takeProfit: "",
+    }));
+  }
+
   return (
     <>
       <CompactHeader />
@@ -100,7 +116,12 @@ export function TradePlanReviewerStrategy() {
 
       <RiskSummary metrics={review.metrics} />
 
-      <TradeLevelsPanel levels={review.levels} />
+      <DirectionPriorityPanel
+        priority={directionPriority}
+        onUseDirection={useAutoDirection}
+      />
+
+      <TradeLevelsPanel levels={review.levels} direction={plan.direction} />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(26rem,0.8fr)]">
         <MarketSnapshotPanel

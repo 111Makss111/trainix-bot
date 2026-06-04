@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { formatTradingViewPrice } from "../formatters";
-import type { ReviewLevels } from "../types";
+import type { ReviewLevels, TradeDirection } from "../types";
 
 type TradeLevelsPanelProps = {
   levels: ReviewLevels;
+  direction: TradeDirection;
 };
 
-export function TradeLevelsPanel({ levels }: TradeLevelsPanelProps) {
+export function TradeLevelsPanel({ levels, direction }: TradeLevelsPanelProps) {
   const [copiedValue, setCopiedValue] = useState<string | null>(null);
   const rewardToRisk = levels.rewardToRisk;
   const isWeakPotential = rewardToRisk !== null && rewardToRisk < 1.2;
@@ -53,7 +54,7 @@ export function TradeLevelsPanel({ levels }: TradeLevelsPanelProps) {
             Рівні для TradingView
           </p>
           <h2 className="mt-2 text-xl font-medium text-white">
-            Чисті числа для угоди
+            {direction === "long" ? "Вибраний Long" : "Вибраний Short"}
           </h2>
         </div>
         <span

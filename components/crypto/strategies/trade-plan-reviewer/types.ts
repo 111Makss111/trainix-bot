@@ -92,3 +92,19 @@ export type ReviewResult = {
   signals: ReviewItem[];
   nextActions: string[];
 };
+
+export type DirectionCandidate = {
+  direction: TradeDirection;
+  label: string;
+  score: number;
+  status: ReviewStatus;
+  review: ReviewResult;
+  reasons: string[];
+};
+
+export type DirectionPriority = {
+  preferredDirection: TradeDirection | "wait";
+  title: string;
+  summary: string;
+  candidates: DirectionCandidate[];
+};
