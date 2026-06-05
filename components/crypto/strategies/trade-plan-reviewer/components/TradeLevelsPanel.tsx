@@ -19,6 +19,7 @@ export function TradeLevelsPanel({
   const rewardToRisk = levels.rewardToRisk;
   const isWeakPotential = rewardToRisk !== null && rewardToRisk < 1.2;
   const isMediumPotential = rewardToRisk !== null && rewardToRisk < 2;
+  const isWaitingEntry = levels.entryMode === "limit";
   const isStopTooClose =
     levels.stopAtrMultiple !== null && levels.stopAtrMultiple < 0.7;
   const isTargetTooClose =
@@ -29,7 +30,7 @@ export function TradeLevelsPanel({
     levels.stopAtrMultiple !== null && levels.stopAtrMultiple > 3;
   const levelStatus = isStopTooClose || isTargetTooClose || isWeakPotential
     ? "danger"
-    : isStopTooWide || isTargetThin || isMediumPotential
+    : isWaitingEntry || isStopTooWide || isTargetThin || isMediumPotential
       ? "warning"
       : "ready";
   const statusLabel =
@@ -43,9 +44,23 @@ export function TradeLevelsPanel({
             ? "слабкий R/R"
             : isStopTooWide
               ? "широкий стоп"
-              : isTargetThin
-                ? "ціль слабка"
-                : "R/R середній";
+              : isWaitingEntry
+                ? "чекати вхід"
+                : isTargetThin
+                  ? "ціль слабка"
+                  : "R/R середній";
+  const entryDirectionText =
+    direction === "long" ? "нижче поточної" : "вище поточної";
+  const entryAtrDetail =
+    levels.entryDistanceFromMarketAtr === null
+      ? ""
+      : ` · ${levels.entryDistanceFromMarketAtr.toFixed(1)} ATR`;
+  const entryDetail =
+    levels.entryMode === "market"
+      ? "market-вхід"
+      : levels.entryMode === "custom"
+        ? "ручний вхід"
+        : `очікуваний вхід · ${entryDirectionText} на ${levels.entryDistanceFromMarketPercent.toFixed(2)}%${entryAtrDetail}`;
   const stopAtrDetail =
     levels.stopAtrMultiple === null
       ? ""
@@ -58,7 +73,7 @@ export function TradeLevelsPanel({
     {
       label: "Вхід",
       value: formatTradingViewPrice(levels.entryPrice),
-      detail: "ціна входу",
+      detail: entryDetail,
     },
     {
       label: "Стоп",
@@ -148,9 +163,11 @@ export function TradeLevelsPanel({
                 ? "Потенціал менший за ризик. Для якіснішого входу треба ближчий стоп, дальша ціль або вхід ближче до підтримки."
                 : isStopTooWide
                   ? "Стоп занадто широкий відносно ATR. Рівень може бути логічним, але ризик уже важкий."
-                  : isTargetThin
-                    ? "Ціль ще слабка відносно ATR. Для волатильної монети потрібен більший простір до цілі."
-                    : "R/R нижче 2. Рівні вже не провальні, але запас по потенціалу ще середній."}
+                  : isWaitingEntry
+                    ? "Ціна ще не в зоні входу. Система показує очікуваний вхід, а не угоду по поточній ціні."
+                    : isTargetThin
+                      ? "Ціль ще слабка відносно ATR. Для волатильної монети потрібен більший простір до цілі."
+                      : "R/R нижче 2. Рівні вже не провальні, але запас по потенціалу ще середній."}
         </p>
       ) : null}
     </section>

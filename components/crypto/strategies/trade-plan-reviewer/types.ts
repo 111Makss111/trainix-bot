@@ -14,6 +14,8 @@ export type ReviewStatus = "pass" | "warning" | "fail";
 
 export type ZoneKind = "support" | "resistance";
 
+export type EntryMode = "market" | "limit" | "custom";
+
 export type TradePlan = {
   symbol: string;
   direction: TradeDirection;
@@ -73,7 +75,11 @@ export type ReviewItem = {
 };
 
 export type ReviewLevels = {
+  currentPrice: number;
   entryPrice: number;
+  entryMode: EntryMode;
+  entryDistanceFromMarketPercent: number;
+  entryDistanceFromMarketAtr: number | null;
   stopLoss: number;
   takeProfit: number;
   riskDistancePercent: number;

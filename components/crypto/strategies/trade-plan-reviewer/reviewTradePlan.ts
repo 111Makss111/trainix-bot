@@ -1,4 +1,5 @@
 import type {
+  EntryMode,
   MarketSnapshot,
   ReviewGrade,
   ReviewItem,
@@ -13,6 +14,7 @@ import { formatTradingViewPrice } from "./formatters";
 const minimumAutoStopAtr = 0.75;
 const minimumAutoTargetAtr = 1.5;
 const minimumAutoRewardRatio = 1.5;
+const marketEntryMaxAtrDistance = 0.35;
 const zoneStopBufferAtr = 0.15;
 
 function toNumber(value: string) {
@@ -26,10 +28,6 @@ function formatRatio(value: number | null) {
   return value === null ? "авто" : `${value.toFixed(2)}R`;
 }
 
-function getEffectiveEntry(plan: TradePlan, market: MarketSnapshot) {
-  return toNumber(plan.entryPrice) ?? market.currentPrice;
-}
-
 function getAtrPriceDistance(
   market: MarketSnapshot,
   multiple: number,
@@ -40,6 +38,73 @@ function getAtrPriceDistance(
   }
 
   return market.currentPrice * fallbackPercent;
+}
+
+function getAtrMultipleByPriceDistance(priceDistance: number, market: MarketSnapshot) {
+  if (market.atr <= 0) {
+    return null;
+  }
+
+  return priceDistance / market.atr;
+}
+
+function getEntryDistanceFromMarket(entryPrice: number, market: MarketSnapshot) {
+  const priceDistance = Math.abs(entryPrice - market.currentPrice);
+
+  return {
+    percent:
+      market.currentPrice > 0 ? (priceDistance / market.currentPrice) * 100 : 0,
+    atr: getAtrMultipleByPriceDistance(priceDistance, market),
+  };
+}
+
+function buildEntryResult(price: number, mode: EntryMode, market: MarketSnapshot) {
+  const distance = getEntryDistanceFromMarket(price, market);
+
+  return {
+    price,
+    mode,
+    distanceFromMarketPercent: distance.percent,
+    distanceFromMarketAtr: distance.atr,
+  };
+}
+
+function getAutoEntry(direction: TradeDirection, market: MarketSnapshot) {
+  const allowedDistance = getAtrPriceDistance(
+    market,
+    marketEntryMaxAtrDistance,
+    0.002,
+  );
+
+  if (direction === "long") {
+    const zoneEntry = market.nearestSupport.high;
+    const isPriceNearEntryZone = market.currentPrice <= zoneEntry + allowedDistance;
+
+    return buildEntryResult(
+      isPriceNearEntryZone ? market.currentPrice : zoneEntry,
+      isPriceNearEntryZone ? "market" : "limit",
+      market,
+    );
+  }
+
+  const zoneEntry = market.nearestResistance.low;
+  const isPriceNearEntryZone = market.currentPrice >= zoneEntry - allowedDistance;
+
+  return buildEntryResult(
+    isPriceNearEntryZone ? market.currentPrice : zoneEntry,
+    isPriceNearEntryZone ? "market" : "limit",
+    market,
+  );
+}
+
+function getEffectiveEntry(plan: TradePlan, market: MarketSnapshot) {
+  const customEntry = toNumber(plan.entryPrice);
+
+  if (customEntry !== null) {
+    return buildEntryResult(customEntry, "custom", market);
+  }
+
+  return getAutoEntry(plan.direction, market);
 }
 
 function getAutoStopLoss(
@@ -225,6 +290,38 @@ function getAtrStatus(
   return "pass";
 }
 
+function getEntryStatus(entryMode: EntryMode): ReviewStatus {
+  return entryMode === "limit" ? "warning" : "pass";
+}
+
+function getEntrySignalDetail({
+  direction,
+  entryMode,
+  entryDistanceFromMarketPercent,
+  entryDistanceFromMarketAtr,
+}: {
+  direction: TradeDirection;
+  entryMode: EntryMode;
+  entryDistanceFromMarketPercent: number;
+  entryDistanceFromMarketAtr: number | null;
+}) {
+  if (entryMode === "custom") {
+    return "Використовується ручна ціна входу.";
+  }
+
+  if (entryMode === "market") {
+    return "Поточна ціна вже достатньо близько до ATR-зони входу.";
+  }
+
+  const sideText = direction === "long" ? "нижче" : "вище";
+  const atrText =
+    entryDistanceFromMarketAtr === null
+      ? ""
+      : `, ${entryDistanceFromMarketAtr.toFixed(1)} ATR`;
+
+  return `Ціна відійшла від нормальної зони. Вхід краще чекати ${sideText} поточної на ${entryDistanceFromMarketPercent.toFixed(2)}%${atrText}.`;
+}
+
 function getAtrSignalDetail(
   stopAtrMultiple: number | null,
   targetAtrMultiple: number | null,
@@ -375,7 +472,8 @@ export function reviewTradePlan(
 ): ReviewResult {
   const accountBalance = toNumber(plan.accountBalance);
   const positionSize = toNumber(plan.positionSize);
-  const entryPrice = getEffectiveEntry(plan, market);
+  const entry = getEffectiveEntry(plan, market);
+  const entryPrice = entry.price;
   const stopLoss = getEffectiveStop(plan, market, entryPrice);
   const takeProfit = getEffectiveTarget(plan, market, entryPrice, stopLoss);
 
@@ -404,6 +502,7 @@ export function reviewTradePlan(
   const riskStatus = getRiskStatus(accountRiskPercent);
   const rewardStatus = getRewardStatus(rewardToRisk);
   const atrStatus = getAtrStatus(stopAtrMultiple, targetAtrMultiple);
+  const entryStatus = getEntryStatus(entry.mode);
 
   const setupZone =
     plan.direction === "long"
@@ -450,6 +549,17 @@ export function reviewTradePlan(
       "BTC",
       `BTC зараз ${market.btcBias === "bullish" ? "підтримує ріст" : market.btcBias === "bearish" ? "тисне вниз" : "нейтральний"}.`,
       btcStatus,
+    ),
+    buildSignal(
+      "entry",
+      "Вхід",
+      getEntrySignalDetail({
+        direction: plan.direction,
+        entryMode: entry.mode,
+        entryDistanceFromMarketPercent: entry.distanceFromMarketPercent,
+        entryDistanceFromMarketAtr: entry.distanceFromMarketAtr,
+      }),
+      entryStatus,
     ),
     buildSignal(
       "space",
@@ -555,7 +665,11 @@ export function reviewTradePlan(
     title: gradeCopy.title,
     summary: gradeCopy.summary,
     levels: {
+      currentPrice: market.currentPrice,
       entryPrice,
+      entryMode: entry.mode,
+      entryDistanceFromMarketPercent: entry.distanceFromMarketPercent,
+      entryDistanceFromMarketAtr: entry.distanceFromMarketAtr,
       stopLoss,
       takeProfit,
       riskDistancePercent,

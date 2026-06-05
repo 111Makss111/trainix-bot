@@ -69,6 +69,13 @@ function DirectionCard({
         <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
           діапазон {levels.pricePositionPercent.toFixed(0)}%
         </span>
+        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+          {levels.entryMode === "limit"
+            ? "чекати вхід"
+            : levels.entryMode === "custom"
+              ? "ручний вхід"
+              : "market-вхід"}
+        </span>
         {levels.targetAtrMultiple !== null ? (
           <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
             ціль {levels.targetAtrMultiple.toFixed(1)} ATR
