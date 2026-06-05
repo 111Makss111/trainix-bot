@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 const binanceMarketDataBaseUrl = "https://data-api.binance.vision";
+const binanceFuturesBaseUrl = "https://fapi.binance.com";
 const popularSymbols = [
   "BTCUSDT",
   "ETHUSDT",
@@ -22,6 +23,9 @@ const popularSymbols = [
   "ARBUSDT",
   "OPUSDT",
   "SUIUSDT",
+  "POPCATUSDT",
+  "WIFUSDT",
+  "1000PEPEUSDT",
 ];
 
 type BinanceSymbol = {
@@ -30,6 +34,7 @@ type BinanceSymbol = {
   baseAsset: string;
   quoteAsset: string;
   isSpotTradingAllowed?: boolean;
+  contractType?: string;
 };
 
 type BinanceExchangeInfo = {
@@ -40,6 +45,7 @@ type CryptoAsset = {
   symbol: string;
   baseAsset: string;
   quoteAsset: string;
+  marketTypes: Array<"spot" | "futures">;
 };
 
 function normalizeQuery(value: string | null) {
@@ -53,6 +59,9 @@ function toFallbackAsset(symbol: string): CryptoAsset {
     symbol,
     baseAsset: quoteAsset ? symbol.slice(0, -quoteAsset.length) : symbol,
     quoteAsset,
+    marketTypes: symbol === "POPCATUSDT" || symbol.startsWith("1000")
+      ? ["futures"]
+      : ["spot", "futures"],
   };
 }
 
@@ -62,6 +71,38 @@ function isTradableSpotSymbol(symbol: BinanceSymbol) {
     symbol.isSpotTradingAllowed !== false &&
     /^[A-Z0-9]{5,24}$/u.test(symbol.symbol)
   );
+}
+
+function isTradableFuturesSymbol(symbol: BinanceSymbol) {
+  return (
+    symbol.status === "TRADING" &&
+    symbol.contractType === "PERPETUAL" &&
+    /^[A-Z0-9]{5,24}$/u.test(symbol.symbol)
+  );
+}
+
+function mergeAssets(assetGroups: CryptoAsset[][]) {
+  const mergedAssets = new Map<string, CryptoAsset>();
+
+  for (const assets of assetGroups) {
+    for (const asset of assets) {
+      const currentAsset = mergedAssets.get(asset.symbol);
+
+      if (!currentAsset) {
+        mergedAssets.set(asset.symbol, asset);
+        continue;
+      }
+
+      mergedAssets.set(asset.symbol, {
+        ...currentAsset,
+        marketTypes: Array.from(
+          new Set([...currentAsset.marketTypes, ...asset.marketTypes]),
+        ),
+      });
+    }
+  }
+
+  return Array.from(mergedAssets.values());
 }
 
 function getRank(asset: CryptoAsset, query: string) {
@@ -106,7 +147,7 @@ function filterAssets(assets: CryptoAsset[], query: string) {
     .map((item) => item.asset);
 }
 
-async function fetchBinanceAssets() {
+async function fetchSpotAssets() {
   const url = new URL("/api/v3/exchangeInfo", binanceMarketDataBaseUrl);
   const response = await fetch(url, {
     next: { revalidate: 60 * 60 },
@@ -127,7 +168,50 @@ async function fetchBinanceAssets() {
       symbol: symbol.symbol,
       baseAsset: symbol.baseAsset,
       quoteAsset: symbol.quoteAsset,
+      marketTypes: ["spot"] as Array<"spot" | "futures">,
     }));
+}
+
+async function fetchFuturesAssets() {
+  const url = new URL("/fapi/v1/exchangeInfo", binanceFuturesBaseUrl);
+  const response = await fetch(url, {
+    next: { revalidate: 60 * 60 },
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Binance Futures returned ${response.status}.`);
+  }
+
+  const exchangeInfo = (await response.json()) as BinanceExchangeInfo;
+
+  return (exchangeInfo.symbols ?? [])
+    .filter(isTradableFuturesSymbol)
+    .map((symbol) => ({
+      symbol: symbol.symbol,
+      baseAsset: symbol.baseAsset,
+      quoteAsset: symbol.quoteAsset,
+      marketTypes: ["futures"] as Array<"spot" | "futures">,
+    }));
+}
+
+async function fetchBinanceAssets() {
+  const [spotResult, futuresResult] = await Promise.allSettled([
+    fetchSpotAssets(),
+    fetchFuturesAssets(),
+  ]);
+  const spotAssets = spotResult.status === "fulfilled" ? spotResult.value : [];
+  const futuresAssets =
+    futuresResult.status === "fulfilled" ? futuresResult.value : [];
+  const assets = mergeAssets([spotAssets, futuresAssets]);
+
+  if (assets.length === 0) {
+    throw new Error("No Binance symbols available.");
+  }
+
+  return assets;
 }
 
 export async function GET(request: Request) {

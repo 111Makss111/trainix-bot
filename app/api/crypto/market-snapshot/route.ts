@@ -6,6 +6,7 @@ import {
 import type { TradeTimeframe } from "@/components/crypto/strategies/trade-plan-reviewer/types";
 
 const binanceMarketDataBaseUrl = "https://data-api.binance.vision";
+const binanceFuturesBaseUrl = "https://fapi.binance.com";
 const allowedTimeframes = new Set<TradeTimeframe>(["5m", "15m", "1h", "4h"]);
 
 type BinanceKline = [
@@ -51,8 +52,13 @@ function toCandle(kline: BinanceKline): Candle {
   };
 }
 
-async function fetchKlines(symbol: string, interval: TradeTimeframe) {
-  const url = new URL("/api/v3/klines", binanceMarketDataBaseUrl);
+async function fetchKlinesFromUrl(
+  baseUrl: string,
+  path: string,
+  symbol: string,
+  interval: TradeTimeframe,
+) {
+  const url = new URL(path, baseUrl);
   url.searchParams.set("symbol", symbol);
   url.searchParams.set("interval", interval);
   url.searchParams.set("limit", "120");
@@ -82,6 +88,35 @@ async function fetchKlines(symbol: string, interval: TradeTimeframe) {
       Number.isFinite(candle.volume)
     );
   });
+}
+
+async function fetchKlines(symbol: string, interval: TradeTimeframe) {
+  try {
+    return await fetchKlinesFromUrl(
+      binanceMarketDataBaseUrl,
+      "/api/v3/klines",
+      symbol,
+      interval,
+    );
+  } catch (spotError) {
+    try {
+      return await fetchKlinesFromUrl(
+        binanceFuturesBaseUrl,
+        "/fapi/v1/klines",
+        symbol,
+        interval,
+      );
+    } catch (futuresError) {
+      const spotMessage =
+        spotError instanceof Error ? spotError.message : "spot data unavailable";
+      const futuresMessage =
+        futuresError instanceof Error
+          ? futuresError.message
+          : "futures data unavailable";
+
+      throw new Error(`${spotMessage}; ${futuresMessage}`);
+    }
+  }
 }
 
 export async function GET(request: Request) {

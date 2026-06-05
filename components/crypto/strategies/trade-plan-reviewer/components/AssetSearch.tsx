@@ -6,6 +6,7 @@ type CryptoAsset = {
   symbol: string;
   baseAsset: string;
   quoteAsset: string;
+  marketTypes?: Array<"spot" | "futures">;
 };
 
 type AssetSearchProps = {
@@ -14,16 +15,16 @@ type AssetSearchProps = {
 };
 
 const fallbackAssets: CryptoAsset[] = [
-  { symbol: "BTCUSDT", baseAsset: "BTC", quoteAsset: "USDT" },
-  { symbol: "ETHUSDT", baseAsset: "ETH", quoteAsset: "USDT" },
-  { symbol: "SOLUSDT", baseAsset: "SOL", quoteAsset: "USDT" },
-  { symbol: "BNBUSDT", baseAsset: "BNB", quoteAsset: "USDT" },
-  { symbol: "XRPUSDT", baseAsset: "XRP", quoteAsset: "USDT" },
-  { symbol: "DOGEUSDT", baseAsset: "DOGE", quoteAsset: "USDT" },
-  { symbol: "ADAUSDT", baseAsset: "ADA", quoteAsset: "USDT" },
-  { symbol: "AVAXUSDT", baseAsset: "AVAX", quoteAsset: "USDT" },
-  { symbol: "LINKUSDT", baseAsset: "LINK", quoteAsset: "USDT" },
-  { symbol: "TONUSDT", baseAsset: "TON", quoteAsset: "USDT" },
+  { symbol: "BTCUSDT", baseAsset: "BTC", quoteAsset: "USDT", marketTypes: ["spot", "futures"] },
+  { symbol: "ETHUSDT", baseAsset: "ETH", quoteAsset: "USDT", marketTypes: ["spot", "futures"] },
+  { symbol: "SOLUSDT", baseAsset: "SOL", quoteAsset: "USDT", marketTypes: ["spot", "futures"] },
+  { symbol: "BNBUSDT", baseAsset: "BNB", quoteAsset: "USDT", marketTypes: ["spot", "futures"] },
+  { symbol: "XRPUSDT", baseAsset: "XRP", quoteAsset: "USDT", marketTypes: ["spot", "futures"] },
+  { symbol: "DOGEUSDT", baseAsset: "DOGE", quoteAsset: "USDT", marketTypes: ["spot", "futures"] },
+  { symbol: "ADAUSDT", baseAsset: "ADA", quoteAsset: "USDT", marketTypes: ["spot", "futures"] },
+  { symbol: "AVAXUSDT", baseAsset: "AVAX", quoteAsset: "USDT", marketTypes: ["spot", "futures"] },
+  { symbol: "LINKUSDT", baseAsset: "LINK", quoteAsset: "USDT", marketTypes: ["spot", "futures"] },
+  { symbol: "POPCATUSDT", baseAsset: "POPCAT", quoteAsset: "USDT", marketTypes: ["futures"] },
 ];
 
 function normalizeSymbol(value: string) {
@@ -45,6 +46,16 @@ function filterLocalAssets(assets: CryptoAsset[], query: string) {
       );
     })
     .slice(0, 12);
+}
+
+function getMarketLabel(asset: CryptoAsset) {
+  const marketTypes = asset.marketTypes ?? ["spot"];
+
+  if (marketTypes.includes("spot") && marketTypes.includes("futures")) {
+    return "Spot + Futures";
+  }
+
+  return marketTypes.includes("futures") ? "Futures" : "Spot";
 }
 
 export function AssetSearch({ value, onChange }: AssetSearchProps) {
@@ -195,7 +206,7 @@ export function AssetSearch({ value, onChange }: AssetSearchProps) {
                       {asset.symbol}
                     </span>
                     <span className="mt-0.5 block text-xs text-white/38">
-                      {asset.baseAsset} / {asset.quoteAsset}
+                      {asset.baseAsset} / {asset.quoteAsset} · {getMarketLabel(asset)}
                     </span>
                   </span>
                   {asset.symbol === value ? (
