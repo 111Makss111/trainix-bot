@@ -1,8 +1,8 @@
 import { timeframeOptions } from "../constants";
 import type { TradeTimeframe } from "../types";
+import { AssetSearch } from "./AssetSearch";
 import { FieldShell } from "./FieldShell";
 import { SelectInput } from "./SelectInput";
-import { TextInput } from "./TextInput";
 
 type MarketControlsProps = {
   symbol: string;
@@ -19,9 +19,8 @@ export function MarketControls({
     <section className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md">
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
         <FieldShell label="Монета">
-          <TextInput
+          <AssetSearch
             value={symbol}
-            placeholder="BTCUSDT"
             onChange={(nextSymbol) => onChange({ symbol: nextSymbol.toUpperCase() })}
           />
         </FieldShell>
