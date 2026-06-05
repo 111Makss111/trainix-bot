@@ -8,10 +8,10 @@ type FieldShellProps = {
 
 export function FieldShell({ label, hint, children }: FieldShellProps) {
   return (
-    <label className="block">
+    <div className="block">
       <span className="text-sm font-medium text-white/78">{label}</span>
       {children}
       {hint ? <span className="mt-2 block text-xs text-white/40">{hint}</span> : null}
-    </label>
+    </div>
   );
 }

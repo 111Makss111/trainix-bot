@@ -133,7 +133,7 @@ export function AssetSearch({ value, onChange }: AssetSearchProps) {
   }
 
   return (
-    <div ref={wrapperRef} className="relative mt-2">
+    <div ref={wrapperRef} className="relative z-50 mt-2">
       <div className="flex h-11 items-center rounded-[1rem] border border-white/10 bg-white/[0.04] transition focus-within:border-white/24 focus-within:bg-white/[0.06]">
         <input
           value={query}
@@ -172,7 +172,7 @@ export function AssetSearch({ value, onChange }: AssetSearchProps) {
         <div
           id={listboxId}
           role="listbox"
-          className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-30 overflow-hidden rounded-[1rem] border border-white/12 bg-[#11131c] shadow-2xl shadow-black/35"
+          className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-[80] overflow-hidden rounded-[1rem] border border-white/12 bg-[#11131c] shadow-2xl shadow-black/35"
         >
           <div className="flex items-center justify-between border-b border-white/8 px-3 py-2 text-xs text-white/42">
             <span>{isLoading ? "Оновлення активів" : "Активні пари"}</span>

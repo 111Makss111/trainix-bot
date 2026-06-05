@@ -16,7 +16,7 @@ export function MarketControls({
   onChange,
 }: MarketControlsProps) {
   return (
-    <section className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md">
+    <section className="relative z-50 rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md">
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
         <FieldShell label="Монета">
           <AssetSearch
