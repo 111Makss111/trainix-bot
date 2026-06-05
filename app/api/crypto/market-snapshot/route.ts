@@ -3,7 +3,10 @@ import {
   buildMarketSnapshotFromCandles,
   type Candle,
 } from "@/components/crypto/strategies/trade-plan-reviewer/marketSnapshot";
-import type { TradeTimeframe } from "@/components/crypto/strategies/trade-plan-reviewer/types";
+import type {
+  MarketAnalysisTimeframe,
+  TradeTimeframe,
+} from "@/components/crypto/strategies/trade-plan-reviewer/types";
 
 const binanceMarketDataBaseUrl = "https://data-api.binance.vision";
 const binanceSpotBaseUrls = [
@@ -24,17 +27,33 @@ const binanceFuturesBaseUrls = [
 const bybitBaseUrl = "https://api.bybit.com";
 const okxBaseUrl = "https://www.okx.com";
 const allowedTimeframes = new Set<TradeTimeframe>(["5m", "15m", "1h", "4h"]);
-const bybitIntervalByTimeframe: Record<TradeTimeframe, string> = {
+const analysisTimeframes: MarketAnalysisTimeframe[] = [
+  "5m",
+  "15m",
+  "1h",
+  "4h",
+  "1d",
+];
+const bybitIntervalByTimeframe: Record<MarketAnalysisTimeframe, string> = {
   "5m": "5",
   "15m": "15",
   "1h": "60",
   "4h": "240",
+  "1d": "D",
 };
-const okxBarByTimeframe: Record<TradeTimeframe, string> = {
+const okxBarByTimeframe: Record<MarketAnalysisTimeframe, string> = {
   "5m": "5m",
   "15m": "15m",
   "1h": "1H",
   "4h": "4H",
+  "1d": "1D",
+};
+const candleLimitByTimeframe: Record<MarketAnalysisTimeframe, string> = {
+  "5m": "180",
+  "15m": "180",
+  "1h": "220",
+  "4h": "260",
+  "1d": "300",
 };
 
 type KlineSource = {
@@ -176,7 +195,7 @@ async function readJsonResponse<T>(response: Response, source: KlineSource) {
 async function fetchKlinesFromSource(
   source: KlineSource,
   symbol: string,
-  interval: TradeTimeframe,
+  interval: MarketAnalysisTimeframe,
 ) {
   const url = new URL(source.path, source.baseUrl);
 
@@ -198,7 +217,7 @@ async function fetchKlinesFromSource(
     url.searchParams.set("interval", interval);
   }
 
-  url.searchParams.set("limit", "120");
+  url.searchParams.set("limit", candleLimitByTimeframe[interval]);
 
   const response = await fetch(url, {
     cache: "no-store",
@@ -294,14 +313,14 @@ async function fetchKlinesFromSource(
   };
 }
 
-async function fetchKlines(symbol: string, interval: TradeTimeframe) {
+async function fetchKlines(symbol: string, interval: MarketAnalysisTimeframe) {
   const sources: KlineSource[] = [
-    ...binanceSpotBaseUrls.map((baseUrl) => ({
-      baseUrl,
-      kind: "spot" as const,
-      path: "/api/v3/klines",
-      requestType: "symbol" as const,
-    })),
+    {
+      baseUrl: okxBaseUrl,
+      kind: "okx" as const,
+      path: "/api/v5/market/candles",
+      requestType: "okx-swap" as const,
+    },
     ...binanceFuturesBaseUrls.map((baseUrl) => ({
       baseUrl,
       kind: "futures" as const,
@@ -320,12 +339,12 @@ async function fetchKlines(symbol: string, interval: TradeTimeframe) {
       path: "/v5/market/kline",
       requestType: "bybit-linear" as const,
     },
-    {
-      baseUrl: okxBaseUrl,
-      kind: "okx" as const,
-      path: "/api/v5/market/candles",
-      requestType: "okx-swap" as const,
-    },
+    ...binanceSpotBaseUrls.map((baseUrl) => ({
+      baseUrl,
+      kind: "spot" as const,
+      path: "/api/v3/klines",
+      requestType: "symbol" as const,
+    })),
   ];
   const errors: string[] = [];
 
@@ -338,6 +357,25 @@ async function fetchKlines(symbol: string, interval: TradeTimeframe) {
   }
 
   throw new Error(errors.slice(-3).join("; ") || "No market data source returned candles.");
+}
+
+async function fetchOptionalKlines(
+  symbol: string,
+  interval: MarketAnalysisTimeframe,
+) {
+  try {
+    return {
+      interval,
+      data: await fetchKlines(symbol, interval),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      interval,
+      data: null,
+      error: error instanceof Error ? error.message : "Failed to load candles.",
+    };
+  }
 }
 
 export async function GET(request: Request) {
@@ -353,17 +391,36 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [symbolData, btcData] = await Promise.all([
-      fetchKlines(symbol, timeframe),
+    const [symbolTimeframeResults, btcData] = await Promise.all([
+      Promise.all(
+        analysisTimeframes.map((interval) => fetchOptionalKlines(symbol, interval)),
+      ),
       fetchKlines("BTCUSDT", timeframe),
     ]);
+    const selectedResult = symbolTimeframeResults.find(
+      (result) => result.interval === timeframe,
+    );
+    const selectedData = selectedResult?.data;
+
+    if (!selectedData) {
+      throw new Error(
+        selectedResult?.error ??
+          "Selected timeframe did not return market candles.",
+      );
+    }
+    const multiTimeframeCandles = Object.fromEntries(
+      symbolTimeframeResults
+        .filter((result) => result.data)
+        .map((result) => [result.interval, result.data?.candles]),
+    ) as Partial<Record<MarketAnalysisTimeframe, Candle[]>>;
 
     const market = buildMarketSnapshotFromCandles({
       symbol,
       timeframe,
-      candles: symbolData.candles,
+      candles: selectedData.candles,
       btcCandles: btcData.candles,
-      source: symbolData.source,
+      source: selectedData.source,
+      multiTimeframeCandles,
     });
 
     return NextResponse.json({ market });

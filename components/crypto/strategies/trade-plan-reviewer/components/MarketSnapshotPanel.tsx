@@ -1,4 +1,9 @@
-import type { MarketSnapshot, TrendDirection, ZoneKind } from "../types";
+import type {
+  MarketAnalysisTimeframe,
+  MarketSnapshot,
+  TrendDirection,
+  ZoneKind,
+} from "../types";
 import { formatTradingViewPrice } from "../formatters";
 
 type MarketSnapshotPanelProps = {
@@ -16,6 +21,14 @@ const trendLabel: Record<TrendDirection, string> = {
 const zoneClassName: Record<ZoneKind, string> = {
   support: "border-emerald-300/18 bg-emerald-300/8 text-emerald-100",
   resistance: "border-rose-300/18 bg-rose-300/8 text-rose-100",
+};
+
+const timeframeLabel: Record<MarketAnalysisTimeframe, string> = {
+  "5m": "5m",
+  "15m": "15m",
+  "1h": "1h",
+  "4h": "4h",
+  "1d": "1D",
 };
 
 export function MarketSnapshotPanel({
@@ -86,7 +99,7 @@ export function MarketSnapshotPanel({
         <SnapshotStat
           label="Свічки"
           value={String(market.candleCount)}
-          detail={market.updatedAt}
+          detail={`ТФ ${market.analyzedTimeframes.map((timeframe) => timeframeLabel[timeframe]).join(" / ")}`}
         />
       </div>
 
@@ -146,7 +159,12 @@ export function MarketSnapshotPanel({
             <p className="mt-1 text-xs opacity-60">
               центр {formatTradingViewPrice(zone.price)}
             </p>
-            <p className="mt-1 text-xs opacity-60">міцність {zone.strength}/100</p>
+            <p className="mt-1 text-xs opacity-60">
+              ТФ {zone.timeframes.map((timeframe) => timeframeLabel[timeframe]).join(" / ")}
+            </p>
+            <p className="mt-1 text-xs opacity-60">
+              {zone.isMultiTimeframe ? "MTF " : ""}міцність {zone.strength}/100
+            </p>
           </div>
         ))}
       </div>

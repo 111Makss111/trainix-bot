@@ -2,6 +2,8 @@ export type TradeDirection = "long" | "short";
 
 export type TradeTimeframe = "5m" | "15m" | "1h" | "4h";
 
+export type MarketAnalysisTimeframe = TradeTimeframe | "1d";
+
 export type TrendDirection = "up" | "down" | "sideways";
 
 export type BtcBias = "bullish" | "bearish" | "neutral";
@@ -34,6 +36,9 @@ export type MarketZone = {
   high: number;
   price: number;
   strength: number;
+  timeframes: MarketAnalysisTimeframe[];
+  sourceCount: number;
+  isMultiTimeframe: boolean;
 };
 
 export type MarketSource = "spot" | "futures" | "bybit" | "okx" | "fallback";
@@ -58,6 +63,7 @@ export type MarketSnapshot = {
   updatedAt: string;
   source: MarketSource;
   candleCount: number;
+  analyzedTimeframes: MarketAnalysisTimeframe[];
 };
 
 export type ReviewMetric = {
