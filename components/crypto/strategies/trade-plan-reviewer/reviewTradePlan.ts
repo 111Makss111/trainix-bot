@@ -10,6 +10,9 @@ import type {
 } from "./types";
 import { formatTradingViewPrice } from "./formatters";
 
+const minimumAutoStopAtr = 0.75;
+const zoneStopBufferAtr = 0.15;
+
 function toNumber(value: string) {
   const normalizedValue = value.replace(",", ".").trim();
   const numberValue = Number.parseFloat(normalizedValue);
@@ -25,16 +28,55 @@ function getEffectiveEntry(plan: TradePlan, market: MarketSnapshot) {
   return toNumber(plan.entryPrice) ?? market.currentPrice;
 }
 
-function getEffectiveStop(plan: TradePlan, market: MarketSnapshot) {
+function getAtrPriceDistance(
+  market: MarketSnapshot,
+  multiple: number,
+  fallbackPercent: number,
+) {
+  if (market.atr > 0) {
+    return market.atr * multiple;
+  }
+
+  return market.currentPrice * fallbackPercent;
+}
+
+function getAutoStopLoss(
+  direction: TradeDirection,
+  entryPrice: number,
+  market: MarketSnapshot,
+) {
+  const minimumStopDistance = getAtrPriceDistance(
+    market,
+    minimumAutoStopAtr,
+    0.004,
+  );
+  const zoneBuffer = getAtrPriceDistance(market, zoneStopBufferAtr, 0.001);
+
+  if (direction === "long") {
+    const stopBelowSupport = market.nearestSupport.low - zoneBuffer;
+    const stopBelowEntry = entryPrice - minimumStopDistance;
+
+    return Math.min(stopBelowSupport, stopBelowEntry);
+  }
+
+  const stopAboveResistance = market.nearestResistance.high + zoneBuffer;
+  const stopAboveEntry = entryPrice + minimumStopDistance;
+
+  return Math.max(stopAboveResistance, stopAboveEntry);
+}
+
+function getEffectiveStop(
+  plan: TradePlan,
+  market: MarketSnapshot,
+  entryPrice: number,
+) {
   const customStop = toNumber(plan.stopLoss);
 
   if (customStop !== null) {
     return customStop;
   }
 
-  return plan.direction === "long"
-    ? market.nearestSupport.price
-    : market.nearestResistance.price;
+  return getAutoStopLoss(plan.direction, entryPrice, market);
 }
 
 function getEffectiveTarget(plan: TradePlan, market: MarketSnapshot) {
@@ -304,7 +346,7 @@ export function reviewTradePlan(
   const accountBalance = toNumber(plan.accountBalance);
   const positionSize = toNumber(plan.positionSize);
   const entryPrice = getEffectiveEntry(plan, market);
-  const stopLoss = getEffectiveStop(plan, market);
+  const stopLoss = getEffectiveStop(plan, market, entryPrice);
   const takeProfit = getEffectiveTarget(plan, market);
 
   const riskDistancePercent = (Math.abs(entryPrice - stopLoss) / entryPrice) * 100;

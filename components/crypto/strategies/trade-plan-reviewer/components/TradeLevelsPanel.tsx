@@ -18,6 +18,27 @@ export function TradeLevelsPanel({
   const [copiedValue, setCopiedValue] = useState<string | null>(null);
   const rewardToRisk = levels.rewardToRisk;
   const isWeakPotential = rewardToRisk !== null && rewardToRisk < 1.2;
+  const isStopTooClose =
+    levels.stopAtrMultiple !== null && levels.stopAtrMultiple < 0.7;
+  const isTargetTooClose =
+    levels.targetAtrMultiple !== null && levels.targetAtrMultiple < 1;
+  const isStopTooWide =
+    levels.stopAtrMultiple !== null && levels.stopAtrMultiple > 3;
+  const levelStatus = isStopTooClose || isTargetTooClose || isWeakPotential
+    ? "danger"
+    : isStopTooWide
+      ? "warning"
+      : "ready";
+  const statusLabel =
+    levelStatus === "ready"
+      ? "рівні готові"
+      : isStopTooClose
+        ? "стоп близько"
+        : isTargetTooClose
+          ? "ціль близько"
+          : isWeakPotential
+            ? "слабкий R/R"
+            : "широкий стоп";
   const stopAtrDetail =
     levels.stopAtrMultiple === null
       ? ""
@@ -73,12 +94,14 @@ export function TradeLevelsPanel({
         <span
           className={[
             "rounded-full border px-3 py-1.5 text-sm",
-            isWeakPotential
-              ? "border-rose-300/22 bg-rose-300/8 text-rose-100"
-              : "border-emerald-300/18 bg-emerald-300/8 text-emerald-100",
+            levelStatus === "ready"
+              ? "border-emerald-300/18 bg-emerald-300/8 text-emerald-100"
+              : levelStatus === "warning"
+                ? "border-amber-300/18 bg-amber-300/8 text-amber-100"
+                : "border-rose-300/22 bg-rose-300/8 text-rose-100",
           ].join(" ")}
         >
-          {isWeakPotential ? "слабкий R/R" : "рівні готові"}
+          {statusLabel}
         </span>
       </div>
 
@@ -108,10 +131,15 @@ export function TradeLevelsPanel({
         ))}
       </div>
 
-      {isWeakPotential ? (
+      {levelStatus !== "ready" ? (
         <p className="mt-4 rounded-[1rem] border border-rose-300/18 bg-rose-300/8 px-3 py-2 text-sm leading-5 text-rose-100">
-          Потенціал менший за ризик. Для якіснішого входу треба ближчий стоп,
-          дальша ціль або вхід ближче до підтримки.
+          {isStopTooClose
+            ? "Стоп занадто близько до входу відносно ATR. Такий рівень може вибити звичайним шумом."
+            : isTargetTooClose
+              ? "Ціль занадто близько відносно ATR. Рух може бути меншим за нормальний шум активу."
+              : isWeakPotential
+                ? "Потенціал менший за ризик. Для якіснішого входу треба ближчий стоп, дальша ціль або вхід ближче до підтримки."
+                : "Стоп занадто широкий відносно ATR. Рівень може бути логічним, але ризик уже важкий."}
         </p>
       ) : null}
     </section>
