@@ -15,6 +15,8 @@ const minimumAutoStopAtr = 0.75;
 const minimumAutoTargetAtr = 1.5;
 const minimumAutoRewardRatio = 1.5;
 const marketEntryMaxAtrDistance = 0.35;
+const plannedEntryMaxAtrDistance = 2.5;
+const plannedEntryMaxPercentDistance = 8;
 const zoneStopBufferAtr = 0.15;
 
 function toNumber(value: string) {
@@ -79,22 +81,34 @@ function getAutoEntry(direction: TradeDirection, market: MarketSnapshot) {
   if (direction === "long") {
     const zoneEntry = market.nearestSupport.high;
     const isPriceNearEntryZone = market.currentPrice <= zoneEntry + allowedDistance;
+    const zoneDistance = getEntryDistanceFromMarket(zoneEntry, market);
+    const isZoneStillTradable =
+      zoneDistance.percent <= plannedEntryMaxPercentDistance &&
+      (zoneDistance.atr === null || zoneDistance.atr <= plannedEntryMaxAtrDistance);
 
-    return buildEntryResult(
-      isPriceNearEntryZone ? market.currentPrice : zoneEntry,
-      isPriceNearEntryZone ? "market" : "limit",
-      market,
-    );
+    if (isPriceNearEntryZone) {
+      return buildEntryResult(market.currentPrice, "market", market);
+    }
+
+    return isZoneStillTradable
+      ? buildEntryResult(zoneEntry, "limit", market)
+      : buildEntryResult(market.currentPrice, "distant", market);
   }
 
   const zoneEntry = market.nearestResistance.low;
   const isPriceNearEntryZone = market.currentPrice >= zoneEntry - allowedDistance;
+  const zoneDistance = getEntryDistanceFromMarket(zoneEntry, market);
+  const isZoneStillTradable =
+    zoneDistance.percent <= plannedEntryMaxPercentDistance &&
+    (zoneDistance.atr === null || zoneDistance.atr <= plannedEntryMaxAtrDistance);
 
-  return buildEntryResult(
-    isPriceNearEntryZone ? market.currentPrice : zoneEntry,
-    isPriceNearEntryZone ? "market" : "limit",
-    market,
-  );
+  if (isPriceNearEntryZone) {
+    return buildEntryResult(market.currentPrice, "market", market);
+  }
+
+  return isZoneStillTradable
+    ? buildEntryResult(zoneEntry, "limit", market)
+    : buildEntryResult(market.currentPrice, "distant", market);
 }
 
 function getEffectiveEntry(plan: TradePlan, market: MarketSnapshot) {
@@ -291,6 +305,10 @@ function getAtrStatus(
 }
 
 function getEntryStatus(entryMode: EntryMode): ReviewStatus {
+  if (entryMode === "distant") {
+    return "fail";
+  }
+
   return entryMode === "limit" ? "warning" : "pass";
 }
 
@@ -311,6 +329,10 @@ function getEntrySignalDetail({
 
   if (entryMode === "market") {
     return "Поточна ціна вже достатньо близько до ATR-зони входу.";
+  }
+
+  if (entryMode === "distant") {
+    return "Найближча сильна MTF-зона занадто далеко від поточної ціни. Це не робочий вхід зараз.";
   }
 
   const sideText = direction === "long" ? "нижче" : "вище";

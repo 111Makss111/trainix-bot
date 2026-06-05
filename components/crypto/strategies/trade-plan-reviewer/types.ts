@@ -16,7 +16,7 @@ export type ReviewStatus = "pass" | "warning" | "fail";
 
 export type ZoneKind = "support" | "resistance";
 
-export type EntryMode = "market" | "limit" | "custom";
+export type EntryMode = "market" | "limit" | "distant" | "custom";
 
 export type TradePlan = {
   symbol: string;

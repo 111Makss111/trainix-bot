@@ -20,6 +20,7 @@ export function TradeLevelsPanel({
   const isWeakPotential = rewardToRisk !== null && rewardToRisk < 1.2;
   const isMediumPotential = rewardToRisk !== null && rewardToRisk < 2;
   const isWaitingEntry = levels.entryMode === "limit";
+  const isDistantEntry = levels.entryMode === "distant";
   const isStopTooClose =
     levels.stopAtrMultiple !== null && levels.stopAtrMultiple < 0.7;
   const isTargetTooClose =
@@ -28,7 +29,7 @@ export function TradeLevelsPanel({
     levels.targetAtrMultiple !== null && levels.targetAtrMultiple < 1.5;
   const isStopTooWide =
     levels.stopAtrMultiple !== null && levels.stopAtrMultiple > 3;
-  const levelStatus = isStopTooClose || isTargetTooClose || isWeakPotential
+  const levelStatus = isDistantEntry || isStopTooClose || isTargetTooClose || isWeakPotential
     ? "danger"
     : isWaitingEntry || isStopTooWide || isTargetThin || isMediumPotential
       ? "warning"
@@ -36,7 +37,9 @@ export function TradeLevelsPanel({
   const statusLabel =
     levelStatus === "ready"
       ? "рівні готові"
-      : isStopTooClose
+      : isDistantEntry
+        ? "зона далеко"
+        : isStopTooClose
         ? "стоп близько"
         : isTargetTooClose
           ? "ціль близько"
@@ -58,7 +61,9 @@ export function TradeLevelsPanel({
   const entryDetail =
     levels.entryMode === "market"
       ? "market-вхід"
-      : levels.entryMode === "custom"
+      : isDistantEntry
+        ? "поточна ціна поза робочою MTF-зоною"
+        : levels.entryMode === "custom"
         ? "ручний вхід"
         : `очікуваний вхід · ${entryDirectionText} на ${levels.entryDistanceFromMarketPercent.toFixed(2)}%${entryAtrDetail}`;
   const stopAtrDetail =
@@ -155,7 +160,9 @@ export function TradeLevelsPanel({
 
       {levelStatus !== "ready" ? (
         <p className="mt-4 rounded-[1rem] border border-rose-300/18 bg-rose-300/8 px-3 py-2 text-sm leading-5 text-rose-100">
-          {isStopTooClose
+          {isDistantEntry
+            ? "Найближча сильна MTF-зона занадто далеко. Такий сценарій не варто рахувати робочим входом зараз."
+            : isStopTooClose
             ? "Стоп занадто близько до входу відносно ATR. Такий рівень може вибити звичайним шумом."
             : isTargetTooClose
               ? "Ціль занадто близько відносно ATR. Рух може бути меншим за нормальний шум активу."
