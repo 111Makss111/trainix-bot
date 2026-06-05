@@ -27,14 +27,6 @@ const analysisTimeframeOrder: MarketAnalysisTimeframe[] = [
   "1d",
 ];
 
-const timeframeZoneWeight: Record<MarketAnalysisTimeframe, number> = {
-  "5m": 8,
-  "15m": 12,
-  "1h": 18,
-  "4h": 26,
-  "1d": 34,
-};
-
 const timeframeLookbackCandles: Record<MarketAnalysisTimeframe, number> = {
   "5m": 120,
   "15m": 140,
@@ -244,7 +236,7 @@ function createZone({
 }
 
 function pickImportantZone(candidates: MarketZone[]) {
-  return candidates.find((zone) => zone.strength >= 70) ?? candidates[0];
+  return candidates[0];
 }
 
 function uniqueZones(zones: MarketZone[]) {
@@ -403,128 +395,86 @@ function buildZones(
   };
 }
 
-function getZoneMergeTolerance(currentPrice: number, atr: number) {
-  return Math.max(currentPrice * 0.0035, atr * 0.35);
+function getConfirmationTolerance(currentPrice: number, atr: number) {
+  return Math.max(currentPrice * 0.0045, atr * 0.5);
 }
 
-function getZoneWeight(zone: MarketZone) {
-  return (
-    average(zone.timeframes.map((timeframe) => timeframeZoneWeight[timeframe])) +
-    zone.strength / 10
-  );
-}
-
-function mergeZoneGroup(
-  zones: MarketZone[],
-  currentPrice: number,
-  atr: number,
+function zonesOverlapForConfirmation(
+  workingZone: MarketZone,
+  confirmationZone: MarketZone,
+  tolerance: number,
 ) {
-  const uniqueTimeframes = sortTimeframes([
-    ...new Set(zones.flatMap((zone) => zone.timeframes)),
+  return (
+    workingZone.kind === confirmationZone.kind &&
+    confirmationZone.low <= workingZone.high + tolerance &&
+    confirmationZone.high >= workingZone.low - tolerance
+  );
+}
+
+function getConfirmationBonus(timeframes: MarketAnalysisTimeframe[]) {
+  return timeframes.reduce((sum, timeframe) => {
+    if (timeframe === "1d") {
+      return sum + 18;
+    }
+
+    if (timeframe === "4h") {
+      return sum + 14;
+    }
+
+    if (timeframe === "1h") {
+      return sum + 9;
+    }
+
+    if (timeframe === "15m") {
+      return sum + 5;
+    }
+
+    return sum + 3;
+  }, 0);
+}
+
+function confirmWorkingZone(
+  workingZone: MarketZone,
+  confirmationZones: MarketZone[],
+  selectedTimeframe: TradeTimeframe,
+  tolerance: number,
+) {
+  const matchedTimeframes = confirmationZones
+    .filter((zone) => zonesOverlapForConfirmation(workingZone, zone, tolerance))
+    .flatMap((zone) => zone.timeframes)
+    .filter((timeframe) => timeframe !== selectedTimeframe);
+  const uniqueMatchedTimeframes = [...new Set(matchedTimeframes)];
+  const timeframes = sortTimeframes([
+    ...new Set([...workingZone.timeframes, ...uniqueMatchedTimeframes]),
   ]);
-  const totalTimeframeWeight = uniqueTimeframes.reduce(
-    (sum, timeframe) => sum + timeframeZoneWeight[timeframe],
-    0,
-  );
-  const weightedPriceTotal = zones.reduce(
-    (sum, zone) => sum + zone.price * getZoneWeight(zone),
-    0,
-  );
-  const weightedLowTotal = zones.reduce(
-    (sum, zone) => sum + zone.low * getZoneWeight(zone),
-    0,
-  );
-  const weightedHighTotal = zones.reduce(
-    (sum, zone) => sum + zone.high * getZoneWeight(zone),
-    0,
-  );
-  const totalZoneWeight = zones.reduce(
-    (sum, zone) => sum + getZoneWeight(zone),
-    0,
-  );
-  const averageStrength = average(zones.map((zone) => zone.strength));
-  const sourceCount = uniqueTimeframes.length;
+  const sourceCount = timeframes.length;
   const strength = Math.round(
-    clamp(30 + totalTimeframeWeight + sourceCount * 4 + averageStrength * 0.18, 45, 98),
+    clamp(
+      workingZone.strength + getConfirmationBonus(uniqueMatchedTimeframes),
+      45,
+      98,
+    ),
   );
-  const kind = zones[0].kind;
-  const mergedPrice = totalZoneWeight > 0
-    ? weightedPriceTotal / totalZoneWeight
-    : zones[0].price;
-  const weightedLow = totalZoneWeight > 0
-    ? weightedLowTotal / totalZoneWeight
-    : Math.min(...zones.map((zone) => zone.low));
-  const weightedHigh = totalZoneWeight > 0
-    ? weightedHighTotal / totalZoneWeight
-    : Math.max(...zones.map((zone) => zone.high));
-  const maxHalfWidth = Math.max(currentPrice * 0.008, atr * 1.2);
+  const isConfirmed = sourceCount > 1;
 
   return createZone({
-    kind,
-    label:
-      sourceCount > 1
-        ? kind === "support"
-          ? "MTF підтримка"
-          : "MTF опір"
-        : kind === "support"
-          ? `${uniqueTimeframes[0]} підтримка`
-          : `${uniqueTimeframes[0]} опір`,
-    low: Math.max(weightedLow, mergedPrice - maxHalfWidth),
-    high: Math.min(weightedHigh, mergedPrice + maxHalfWidth),
-    price: mergedPrice,
+    kind: workingZone.kind,
+    label: isConfirmed
+      ? workingZone.kind === "support"
+        ? "Підтримка з MTF-підтвердженням"
+        : "Опір з MTF-підтвердженням"
+      : workingZone.label,
+    low: workingZone.low,
+    high: workingZone.high,
+    price: workingZone.price,
     strength,
-    timeframes: uniqueTimeframes,
+    timeframes,
     sourceCount,
-    isMultiTimeframe: sourceCount > 1,
+    isMultiTimeframe: isConfirmed,
   });
 }
 
-function mergeZonesByKind(
-  zones: MarketZone[],
-  currentPrice: number,
-  atr: number,
-) {
-  const tolerance = getZoneMergeTolerance(currentPrice, atr);
-  const sortedZones = [...zones].sort((a, b) => a.price - b.price);
-  const groups: MarketZone[][] = [];
-
-  for (const zone of sortedZones) {
-    const currentGroup = groups.at(-1);
-
-    if (!currentGroup) {
-      groups.push([zone]);
-      continue;
-    }
-
-    const groupLow = Math.min(...currentGroup.map((item) => item.low));
-    const groupHigh = Math.max(...currentGroup.map((item) => item.high));
-    const overlapsGroup = zone.low <= groupHigh + tolerance && zone.high >= groupLow - tolerance;
-
-    if (overlapsGroup) {
-      currentGroup.push(zone);
-    } else {
-      groups.push([zone]);
-    }
-  }
-
-  return groups.map((group) => mergeZoneGroup(group, currentPrice, atr));
-}
-
-function mergeMultiTimeframeZones(
-  zones: MarketZone[],
-  currentPrice: number,
-  atr: number,
-) {
-  const supports = zones.filter((zone) => zone.kind === "support");
-  const resistances = zones.filter((zone) => zone.kind === "resistance");
-
-  return [
-    ...mergeZonesByKind(supports, currentPrice, atr),
-    ...mergeZonesByKind(resistances, currentPrice, atr),
-  ].sort((a, b) => a.price - b.price);
-}
-
-function buildMultiTimeframeZones({
+function buildConfirmedWorkingZones({
   currentPrice,
   atr,
   selectedTimeframe,
@@ -537,40 +487,41 @@ function buildMultiTimeframeZones({
   candles: Candle[];
   multiTimeframeCandles?: Partial<Record<MarketAnalysisTimeframe, Candle[]>>;
 }) {
+  const workingZones = buildZones(candles, currentPrice, {
+    timeframe: selectedTimeframe,
+    lookbackCandles: timeframeLookbackCandles[selectedTimeframe],
+  });
   const candlesByTimeframe: Partial<Record<MarketAnalysisTimeframe, Candle[]>> = {
     ...multiTimeframeCandles,
     [selectedTimeframe]: multiTimeframeCandles?.[selectedTimeframe] ?? candles,
   };
-  const rawZones = analysisTimeframeOrder.flatMap((timeframe) => {
-    const timeframeCandles = candlesByTimeframe[timeframe];
+  const confirmationZones = analysisTimeframeOrder
+    .filter((timeframe) => timeframe !== selectedTimeframe)
+    .flatMap((timeframe) => {
+      const timeframeCandles = candlesByTimeframe[timeframe];
 
-    if (!timeframeCandles || timeframeCandles.length < 30) {
-      return [];
-    }
+      if (!timeframeCandles || timeframeCandles.length < 30) {
+        return [];
+      }
 
-    return buildZones(timeframeCandles, currentPrice, {
-      timeframe,
-      lookbackCandles: timeframeLookbackCandles[timeframe],
-    }).allZones;
-  });
-
-  if (rawZones.length === 0) {
-    return buildZones(candles, currentPrice, { timeframe: selectedTimeframe });
-  }
-
-  const allZones = mergeMultiTimeframeZones(rawZones, currentPrice, atr);
+      return buildZones(timeframeCandles, currentPrice, {
+        timeframe,
+        lookbackCandles: timeframeLookbackCandles[timeframe],
+      }).allZones;
+    });
+  const tolerance = getConfirmationTolerance(currentPrice, atr);
+  const allZones = workingZones.allZones.map((zone) =>
+    confirmWorkingZone(zone, confirmationZones, selectedTimeframe, tolerance),
+  );
   const visibleZones = selectVisibleZones(allZones, currentPrice);
-  const fallbackZones = buildZones(candles, currentPrice, {
-    timeframe: selectedTimeframe,
-  });
 
   return {
-    nearestSupport: visibleZones.nearestSupport ?? fallbackZones.nearestSupport,
-    nearestResistance: visibleZones.nearestResistance ?? fallbackZones.nearestResistance,
+    nearestSupport: visibleZones.nearestSupport ?? workingZones.nearestSupport,
+    nearestResistance: visibleZones.nearestResistance ?? workingZones.nearestResistance,
     zones:
       visibleZones.zones.length > 0
         ? visibleZones.zones
-        : [fallbackZones.nearestSupport, fallbackZones.nearestResistance],
+        : [workingZones.nearestSupport, workingZones.nearestResistance],
     allZones,
   };
 }
@@ -601,7 +552,7 @@ export function buildMarketSnapshotFromCandles({
   const averageRangePercent = getAverageRangePercent(candles);
   const atr = getAtr(candles);
   const atrPercent = currentPrice > 0 ? (atr / currentPrice) * 100 : 0;
-  const zones = buildMultiTimeframeZones({
+  const zones = buildConfirmedWorkingZones({
     currentPrice,
     atr,
     selectedTimeframe: timeframe,

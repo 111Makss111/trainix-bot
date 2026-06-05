@@ -1,6 +1,7 @@
 import type {
   EntryMode,
   MarketSnapshot,
+  MarketZone,
   ReviewGrade,
   ReviewItem,
   ReviewMetric,
@@ -312,6 +313,37 @@ function getEntryStatus(entryMode: EntryMode): ReviewStatus {
   return entryMode === "limit" ? "warning" : "pass";
 }
 
+function formatTimeframes(timeframes: MarketZone["timeframes"]) {
+  return timeframes
+    .map((timeframe) => (timeframe === "1d" ? "1D" : timeframe))
+    .join(" / ");
+}
+
+function getMtfStatus(zone: MarketZone): ReviewStatus {
+  const hasHigherTimeframe =
+    zone.timeframes.includes("1h") ||
+    zone.timeframes.includes("4h") ||
+    zone.timeframes.includes("1d");
+
+  if (zone.sourceCount >= 3 || zone.timeframes.includes("4h") || zone.timeframes.includes("1d")) {
+    return "pass";
+  }
+
+  if (zone.sourceCount >= 2 || hasHigherTimeframe) {
+    return "warning";
+  }
+
+  return "warning";
+}
+
+function getMtfSignalDetail(zone: MarketZone) {
+  if (zone.sourceCount >= 2) {
+    return `Робочу зону підтверджують таймфрейми ${formatTimeframes(zone.timeframes)}.`;
+  }
+
+  return `Зона поки тільки на робочому таймфреймі ${formatTimeframes(zone.timeframes)}. Підтвердження зі старших ТФ немає.`;
+}
+
 function getEntrySignalDetail({
   direction,
   entryMode,
@@ -535,6 +567,7 @@ export function reviewTradePlan(
     (Math.abs(entryPrice - setupZone.price) / entryPrice) * 100;
   const zoneStatus =
     zoneDistancePercent <= 1 ? "pass" : zoneDistancePercent <= 2.5 ? "warning" : "fail";
+  const mtfStatus = getMtfStatus(setupZone);
   const targetZone =
     plan.direction === "long"
       ? market.nearestResistance
@@ -614,6 +647,12 @@ export function reviewTradePlan(
       "Близькість до зони",
       `Вхід на ${zoneDistancePercent.toFixed(2)}% від зони ${setupZone.label} (${formatTradingViewPrice(setupZone.low)} - ${formatTradingViewPrice(setupZone.high)}).`,
       zoneStatus,
+    ),
+    buildSignal(
+      "mtf",
+      "MTF-підтвердження",
+      getMtfSignalDetail(setupZone),
+      mtfStatus,
     ),
     buildSignal(
       "noise",
