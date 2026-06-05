@@ -18,6 +18,14 @@ export function TradeLevelsPanel({
   const [copiedValue, setCopiedValue] = useState<string | null>(null);
   const rewardToRisk = levels.rewardToRisk;
   const isWeakPotential = rewardToRisk !== null && rewardToRisk < 1.2;
+  const stopAtrDetail =
+    levels.stopAtrMultiple === null
+      ? ""
+      : ` · ${levels.stopAtrMultiple.toFixed(1)} ATR`;
+  const targetAtrDetail =
+    levels.targetAtrMultiple === null
+      ? ""
+      : ` · ${levels.targetAtrMultiple.toFixed(1)} ATR`;
   const rows = [
     {
       label: "Вхід",
@@ -27,12 +35,12 @@ export function TradeLevelsPanel({
     {
       label: "Стоп",
       value: formatTradingViewPrice(levels.stopLoss),
-      detail: `${levels.riskDistancePercent.toFixed(2)}% від входу`,
+      detail: `${levels.riskDistancePercent.toFixed(2)}% від входу${stopAtrDetail}`,
     },
     {
       label: "Ціль",
       value: formatTradingViewPrice(levels.takeProfit),
-      detail: `${levels.rewardDistancePercent.toFixed(2)}% від входу`,
+      detail: `${levels.rewardDistancePercent.toFixed(2)}% від входу${targetAtrDetail}`,
     },
     {
       label: "R/R",

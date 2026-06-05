@@ -126,6 +126,61 @@ function getRewardStatus(rewardToRisk: number | null): ReviewStatus {
   return "pass";
 }
 
+function getAtrMultiple(distancePercent: number, market: MarketSnapshot) {
+  if (market.atrPercent <= 0) {
+    return null;
+  }
+
+  return distancePercent / market.atrPercent;
+}
+
+function getAtrStatus(
+  stopAtrMultiple: number | null,
+  targetAtrMultiple: number | null,
+): ReviewStatus {
+  if (stopAtrMultiple === null || targetAtrMultiple === null) {
+    return "warning";
+  }
+
+  if (stopAtrMultiple < 0.7 || targetAtrMultiple < 1) {
+    return "fail";
+  }
+
+  if (stopAtrMultiple > 3 || targetAtrMultiple < 1.5) {
+    return "warning";
+  }
+
+  return "pass";
+}
+
+function getAtrSignalDetail(
+  stopAtrMultiple: number | null,
+  targetAtrMultiple: number | null,
+  market: MarketSnapshot,
+) {
+  if (stopAtrMultiple === null || targetAtrMultiple === null) {
+    return "ATR ще не пораховано. Без нього стоп і ціль не можна порівняти з нормальним рухом активу.";
+  }
+
+  if (stopAtrMultiple < 0.7) {
+    return `Стоп лише ${stopAtrMultiple.toFixed(1)} ATR. Його може вибити звичайним ринковим шумом.`;
+  }
+
+  if (targetAtrMultiple < 1) {
+    return `Ціль лише ${targetAtrMultiple.toFixed(1)} ATR. Потенціал менший за нормальний рух активу.`;
+  }
+
+  if (stopAtrMultiple > 3) {
+    return `Стоп ${stopAtrMultiple.toFixed(1)} ATR. Він занадто широкий для поточного шуму.`;
+  }
+
+  if (targetAtrMultiple < 1.5) {
+    return `Ціль ${targetAtrMultiple.toFixed(1)} ATR. Запас руху є, але він ще слабкий.`;
+  }
+
+  return `ATR ${market.atrPercent.toFixed(2)}%. Стоп ${stopAtrMultiple.toFixed(1)} ATR, ціль ${targetAtrMultiple.toFixed(1)} ATR.`;
+}
+
 function getSpaceStatus(targetSpacePercent: number, market: MarketSnapshot) {
   if (targetSpacePercent < 0.6 || market.rangeToNoiseRatio < 2) {
     return "fail";
@@ -263,6 +318,8 @@ export function reviewTradePlan(
 
   const rewardToRisk =
     riskDistancePercent > 0 ? rewardDistancePercent / riskDistancePercent : null;
+  const stopAtrMultiple = getAtrMultiple(riskDistancePercent, market);
+  const targetAtrMultiple = getAtrMultiple(rewardDistancePercent, market);
 
   const trendStatus = getTrendStatus(plan.direction, market);
   const btcStatus = getBtcStatus(plan.direction, market);
@@ -274,6 +331,7 @@ export function reviewTradePlan(
   );
   const riskStatus = getRiskStatus(accountRiskPercent);
   const rewardStatus = getRewardStatus(rewardToRisk);
+  const atrStatus = getAtrStatus(stopAtrMultiple, targetAtrMultiple);
 
   const setupZone =
     plan.direction === "long"
@@ -327,6 +385,12 @@ export function reviewTradePlan(
         ? `Ціль занадто близько: ${targetSpacePercent.toFixed(2)}%, а середній шум свічки ${market.averageRangePercent.toFixed(2)}%. Рух менший за шум.`
         : `До ${targetZone.label} ${targetSpacePercent.toFixed(2)}%. Діапазон ${market.rangeWidthPercent.toFixed(2)}%, шум ${market.averageRangePercent.toFixed(2)}%.`,
       spaceStatus,
+    ),
+    buildSignal(
+      "atr",
+      "ATR",
+      getAtrSignalDetail(stopAtrMultiple, targetAtrMultiple, market),
+      atrStatus,
     ),
     buildSignal(
       "position",
@@ -428,6 +492,8 @@ export function reviewTradePlan(
       pricePositionPercent,
       accountRiskPercent,
       rewardToRisk,
+      stopAtrMultiple,
+      targetAtrMultiple,
     },
     metrics,
     signals,

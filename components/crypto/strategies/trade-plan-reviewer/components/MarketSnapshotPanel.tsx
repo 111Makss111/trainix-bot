@@ -90,7 +90,7 @@ export function MarketSnapshotPanel({
         />
       </div>
 
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SnapshotStat
           label="Діапазон"
           value={`${market.rangeWidthPercent.toFixed(2)}%`}
@@ -108,6 +108,11 @@ export function MarketSnapshotPanel({
                   ? "тихий"
                   : "нормальний"
           }
+        />
+        <SnapshotStat
+          label="ATR"
+          value={`${market.atrPercent.toFixed(2)}%`}
+          detail={`рух ${formatTradingViewPrice(market.atr)}`}
         />
         <SnapshotStat
           label="Простір / шум"

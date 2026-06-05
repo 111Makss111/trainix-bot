@@ -126,6 +126,20 @@ function getAverageRangePercent(candles: Candle[]) {
   return average(ranges);
 }
 
+function getAtr(candles: Candle[], period = 14) {
+  const recentCandles = getRecentCandles(candles, period + 1);
+  const trueRanges = recentCandles.slice(1).map((candle, index) => {
+    const previousClose = recentCandles[index].close;
+    const candleRange = candle.high - candle.low;
+    const highGap = Math.abs(candle.high - previousClose);
+    const lowGap = Math.abs(candle.low - previousClose);
+
+    return Math.max(candleRange, highGap, lowGap);
+  });
+
+  return average(trueRanges);
+}
+
 function getVolatilityState(averageRangePercent: number): VolatilityState {
   if (averageRangePercent >= 1.2) {
     return "extreme";
@@ -313,6 +327,8 @@ export function buildMarketSnapshotFromCandles({
   const trend = getTrend(candles);
   const zones = buildZones(candles, currentPrice);
   const averageRangePercent = getAverageRangePercent(candles);
+  const atr = getAtr(candles);
+  const atrPercent = currentPrice > 0 ? (atr / currentPrice) * 100 : 0;
   const rangeWidthPercent =
     ((zones.nearestResistance.price - zones.nearestSupport.price) /
       currentPrice) *
@@ -328,6 +344,8 @@ export function buildMarketSnapshotFromCandles({
     trendStrength: trend.trendStrength,
     btcBias: getBtcBias(btcCandles),
     averageRangePercent,
+    atr,
+    atrPercent,
     rangeWidthPercent,
     rangeToNoiseRatio,
     volatilityState: getVolatilityState(averageRangePercent),
@@ -356,6 +374,8 @@ export function getFallbackMarketSnapshot(
     trendStrength: 42,
     btcBias: "neutral",
     averageRangePercent: 0,
+    atr: 0,
+    atrPercent: 0,
     rangeWidthPercent: 4,
     rangeToNoiseRatio: 0,
     volatilityState: "normal",

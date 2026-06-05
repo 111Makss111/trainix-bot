@@ -44,6 +44,8 @@ export type MarketSnapshot = {
   trendStrength: number;
   btcBias: BtcBias;
   averageRangePercent: number;
+  atr: number;
+  atrPercent: number;
   rangeWidthPercent: number;
   rangeToNoiseRatio: number;
   volatilityState: VolatilityState;
@@ -81,6 +83,8 @@ export type ReviewLevels = {
   pricePositionPercent: number;
   accountRiskPercent: number | null;
   rewardToRisk: number | null;
+  stopAtrMultiple: number | null;
+  targetAtrMultiple: number | null;
 };
 
 export type ReviewResult = {
