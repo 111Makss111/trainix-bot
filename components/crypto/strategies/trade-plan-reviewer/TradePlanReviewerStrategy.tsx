@@ -61,10 +61,15 @@ export function TradePlanReviewerStrategy() {
         const payload = (await response.json()) as {
           market?: MarketSnapshot;
           error?: string;
+          detail?: string;
         };
 
         if (!response.ok || !payload.market) {
-          throw new Error(payload.error ?? "Market data unavailable.");
+          throw new Error(
+            payload.detail
+              ? `${payload.error ?? "Market data unavailable."} Деталі: ${payload.detail}`
+              : payload.error ?? "Market data unavailable.",
+          );
         }
 
         setMarket(payload.market);

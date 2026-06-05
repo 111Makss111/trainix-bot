@@ -146,7 +146,10 @@ async function fetchKlinesFromSource(
     url.searchParams.set("symbol", symbol);
   }
 
-  url.searchParams.set("interval", interval);
+  if (source.requestType !== "bybit-linear") {
+    url.searchParams.set("interval", interval);
+  }
+
   url.searchParams.set("limit", "120");
 
   const response = await fetch(url, {
