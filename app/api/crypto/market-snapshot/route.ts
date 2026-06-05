@@ -22,6 +22,7 @@ const binanceFuturesBaseUrls = [
   "https://fapi4.binance.com",
 ];
 const bybitBaseUrl = "https://api.bybit.com";
+const okxBaseUrl = "https://www.okx.com";
 const allowedTimeframes = new Set<TradeTimeframe>(["5m", "15m", "1h", "4h"]);
 const bybitIntervalByTimeframe: Record<TradeTimeframe, string> = {
   "5m": "5",
@@ -29,12 +30,18 @@ const bybitIntervalByTimeframe: Record<TradeTimeframe, string> = {
   "1h": "60",
   "4h": "240",
 };
+const okxBarByTimeframe: Record<TradeTimeframe, string> = {
+  "5m": "5m",
+  "15m": "15m",
+  "1h": "1H",
+  "4h": "4H",
+};
 
 type KlineSource = {
   baseUrl: string;
-  kind: "spot" | "futures" | "bybit";
+  kind: "spot" | "futures" | "bybit" | "okx";
   path: string;
-  requestType: "symbol" | "continuous" | "bybit-linear";
+  requestType: "symbol" | "continuous" | "bybit-linear" | "okx-swap";
 };
 
 type BinanceKline = [
@@ -68,6 +75,24 @@ type BybitKlineResponse = {
   result?: {
     list?: BybitKline[];
   };
+};
+
+type OkxKline = [
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+];
+
+type OkxKlineResponse = {
+  code: string;
+  msg: string;
+  data?: OkxKline[];
 };
 
 function normalizeSymbol(value: string | null) {
@@ -112,6 +137,26 @@ function toBybitCandle(kline: BybitKline): Candle {
   };
 }
 
+function toOkxSymbol(symbol: string) {
+  return symbol.endsWith("USDT")
+    ? `${symbol.slice(0, -4)}-USDT-SWAP`
+    : symbol;
+}
+
+function toOkxCandle(kline: OkxKline): Candle {
+  const openTime = Number(kline[0]);
+
+  return {
+    openTime,
+    open: Number(kline[1]),
+    high: Number(kline[2]),
+    low: Number(kline[3]),
+    close: Number(kline[4]),
+    volume: Number(kline[5]),
+    closeTime: openTime,
+  };
+}
+
 async function readJsonResponse<T>(response: Response, source: KlineSource) {
   const responseText = await response.text();
 
@@ -135,7 +180,10 @@ async function fetchKlinesFromSource(
 ) {
   const url = new URL(source.path, source.baseUrl);
 
-  if (source.requestType === "bybit-linear") {
+  if (source.requestType === "okx-swap") {
+    url.searchParams.set("instId", toOkxSymbol(symbol));
+    url.searchParams.set("bar", okxBarByTimeframe[interval]);
+  } else if (source.requestType === "bybit-linear") {
     url.searchParams.set("category", "linear");
     url.searchParams.set("symbol", symbol);
     url.searchParams.set("interval", bybitIntervalByTimeframe[interval]);
@@ -146,7 +194,7 @@ async function fetchKlinesFromSource(
     url.searchParams.set("symbol", symbol);
   }
 
-  if (source.requestType !== "bybit-linear") {
+  if (source.requestType !== "bybit-linear" && source.requestType !== "okx-swap") {
     url.searchParams.set("interval", interval);
   }
 
@@ -173,6 +221,36 @@ async function fetchKlinesFromSource(
 
     const candles = (payload.result?.list ?? [])
       .map(toBybitCandle)
+      .filter((candle) => {
+        return (
+          Number.isFinite(candle.open) &&
+          Number.isFinite(candle.high) &&
+          Number.isFinite(candle.low) &&
+          Number.isFinite(candle.close) &&
+          Number.isFinite(candle.volume)
+        );
+      })
+      .sort((first, second) => first.openTime - second.openTime);
+
+    if (candles.length < 30) {
+      throw new Error(`${source.kind} returned only ${candles.length} candles`);
+    }
+
+    return {
+      candles,
+      source: source.kind,
+    };
+  }
+
+  if (source.requestType === "okx-swap") {
+    const payload = await readJsonResponse<OkxKlineResponse>(response, source);
+
+    if (payload.code !== "0") {
+      throw new Error(`${source.kind} ${payload.code}: ${payload.msg}`);
+    }
+
+    const candles = (payload.data ?? [])
+      .map(toOkxCandle)
       .filter((candle) => {
         return (
           Number.isFinite(candle.open) &&
@@ -241,6 +319,12 @@ async function fetchKlines(symbol: string, interval: TradeTimeframe) {
       kind: "bybit" as const,
       path: "/v5/market/kline",
       requestType: "bybit-linear" as const,
+    },
+    {
+      baseUrl: okxBaseUrl,
+      kind: "okx" as const,
+      path: "/api/v5/market/candles",
+      requestType: "okx-swap" as const,
     },
   ];
   const errors: string[] = [];
