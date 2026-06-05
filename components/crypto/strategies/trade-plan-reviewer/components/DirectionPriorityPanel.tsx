@@ -3,12 +3,10 @@ import type {
   DirectionCandidate,
   DirectionPriority,
   ReviewStatus,
-  TradeDirection,
 } from "../types";
 
 type DirectionPriorityPanelProps = {
   priority: DirectionPriority;
-  onUseDirection: (direction: TradeDirection) => void;
 };
 
 const statusClassName: Record<ReviewStatus, string> = {
@@ -20,11 +18,9 @@ const statusClassName: Record<ReviewStatus, string> = {
 function DirectionCard({
   candidate,
   isPreferred,
-  onUseDirection,
 }: {
   candidate: DirectionCandidate;
   isPreferred: boolean;
-  onUseDirection: (direction: TradeDirection) => void;
 }) {
   const levels = candidate.review.levels;
   const rewardToRisk = levels.rewardToRisk;
@@ -85,14 +81,6 @@ function DirectionCard({
           </p>
         ))}
       </div>
-
-      <button
-        type="button"
-        onClick={() => onUseDirection(candidate.direction)}
-        className="mt-4 w-full rounded-[0.95rem] border border-white/12 bg-white/[0.05] px-3 py-2 text-sm font-medium text-white/72 transition hover:border-white/24 hover:bg-white/[0.09] hover:text-white"
-      >
-        Взяти {candidate.label} з авто-рівнями
-      </button>
     </div>
   );
 }
@@ -110,7 +98,6 @@ function LevelStat({ label, value }: { label: string; value: string }) {
 
 export function DirectionPriorityPanel({
   priority,
-  onUseDirection,
 }: DirectionPriorityPanelProps) {
   return (
     <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
@@ -138,7 +125,6 @@ export function DirectionPriorityPanel({
             key={candidate.direction}
             candidate={candidate}
             isPreferred={priority.preferredDirection === candidate.direction}
-            onUseDirection={onUseDirection}
           />
         ))}
       </div>

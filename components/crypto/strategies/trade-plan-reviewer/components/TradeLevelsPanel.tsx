@@ -7,9 +7,14 @@ import type { ReviewLevels, TradeDirection } from "../types";
 type TradeLevelsPanelProps = {
   levels: ReviewLevels;
   direction: TradeDirection;
+  heading?: string;
 };
 
-export function TradeLevelsPanel({ levels, direction }: TradeLevelsPanelProps) {
+export function TradeLevelsPanel({
+  levels,
+  direction,
+  heading,
+}: TradeLevelsPanelProps) {
   const [copiedValue, setCopiedValue] = useState<string | null>(null);
   const rewardToRisk = levels.rewardToRisk;
   const isWeakPotential = rewardToRisk !== null && rewardToRisk < 1.2;
@@ -54,7 +59,7 @@ export function TradeLevelsPanel({ levels, direction }: TradeLevelsPanelProps) {
             Рівні для TradingView
           </p>
           <h2 className="mt-2 text-xl font-medium text-white">
-            {direction === "long" ? "Вибраний Long" : "Вибраний Short"}
+            {heading ?? (direction === "long" ? "Авто Long" : "Авто Short")}
           </h2>
         </div>
         <span

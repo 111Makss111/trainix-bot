@@ -2,18 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CompactHeader } from "./components/CompactHeader";
-import { DecisionPanel } from "./components/DecisionPanel";
 import { DirectionPriorityPanel } from "./components/DirectionPriorityPanel";
 import { MarketSnapshotPanel } from "./components/MarketSnapshotPanel";
-import { QuickTradeForm } from "./components/QuickTradeForm";
-import { RiskSummary } from "./components/RiskSummary";
+import { MarketControls } from "./components/MarketControls";
 import { SignalPanel } from "./components/SignalPanel";
 import { TradeLevelsPanel } from "./components/TradeLevelsPanel";
 import { initialTradePlan } from "./constants";
 import { getDirectionPriority } from "./directionPriority";
 import { getFallbackMarketSnapshot } from "./marketSnapshot";
-import { reviewTradePlan } from "./reviewTradePlan";
-import type { MarketSnapshot, TradeDirection, TradePlan } from "./types";
+import type { MarketSnapshot, TradePlan } from "./types";
 
 export function TradePlanReviewerStrategy() {
   // Тут живе тільки стан форми. Самі правила оцінки винесені в reviewTradePlan.ts.
@@ -24,12 +21,18 @@ export function TradePlanReviewerStrategy() {
   const [isMarketLoading, setIsMarketLoading] = useState(true);
   const [marketError, setMarketError] = useState<string | null>(null);
 
-  // Review вже спирається не на твої пояснення, а на market snapshot + рівні угоди.
-  const review = useMemo(() => reviewTradePlan(plan, market), [plan, market]);
   const directionPriority = useMemo(
     () => getDirectionPriority(plan, market),
     [plan, market],
   );
+  const activeCandidate =
+    directionPriority.candidates.find(
+      (candidate) => candidate.direction === directionPriority.preferredDirection,
+    ) ?? directionPriority.candidates[0];
+  const activeLevelsHeading =
+    directionPriority.preferredDirection === "wait"
+      ? `Найближчий варіант: ${activeCandidate.label}`
+      : `Авто ${activeCandidate.label}`;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -88,20 +91,12 @@ export function TradePlanReviewerStrategy() {
     };
   }, [plan.symbol, plan.timeframe]);
 
-  function updatePlan(patch: Partial<TradePlan>) {
+  function updateMarketControls(
+    patch: Pick<Partial<TradePlan>, "symbol" | "timeframe">,
+  ) {
     setPlan((currentPlan) => ({
       ...currentPlan,
       ...patch,
-    }));
-  }
-
-  function useAutoDirection(direction: TradeDirection) {
-    setPlan((currentPlan) => ({
-      ...currentPlan,
-      direction,
-      entryPrice: "",
-      stopLoss: "",
-      takeProfit: "",
     }));
   }
 
@@ -109,19 +104,19 @@ export function TradePlanReviewerStrategy() {
     <>
       <CompactHeader />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
-        <QuickTradeForm plan={plan} onChange={updatePlan} />
-        <DecisionPanel review={review} />
-      </div>
-
-      <RiskSummary metrics={review.metrics} />
-
-      <DirectionPriorityPanel
-        priority={directionPriority}
-        onUseDirection={useAutoDirection}
+      <MarketControls
+        symbol={plan.symbol}
+        timeframe={plan.timeframe}
+        onChange={updateMarketControls}
       />
 
-      <TradeLevelsPanel levels={review.levels} direction={plan.direction} />
+      <DirectionPriorityPanel priority={directionPriority} />
+
+      <TradeLevelsPanel
+        levels={activeCandidate.review.levels}
+        direction={activeCandidate.direction}
+        heading={activeLevelsHeading}
+      />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(26rem,0.8fr)]">
         <MarketSnapshotPanel
@@ -130,7 +125,7 @@ export function TradePlanReviewerStrategy() {
           error={marketError}
         />
 
-        <SignalPanel signals={review.signals} />
+        <SignalPanel signals={activeCandidate.review.signals} />
       </div>
     </>
   );

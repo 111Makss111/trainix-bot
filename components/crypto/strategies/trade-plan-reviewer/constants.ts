@@ -1,4 +1,4 @@
-import type { TradeDirection, TradePlan, TradeTimeframe } from "./types";
+import type { TradePlan, TradeTimeframe } from "./types";
 
 export const initialTradePlan: TradePlan = {
   symbol: "BTCUSDT",
@@ -10,14 +10,6 @@ export const initialTradePlan: TradePlan = {
   stopLoss: "",
   takeProfit: "",
 };
-
-export const directionOptions: Array<{
-  label: string;
-  value: TradeDirection;
-}> = [
-  { label: "Long", value: "long" },
-  { label: "Short", value: "short" },
-];
 
 export const timeframeOptions: Array<{
   label: string;
