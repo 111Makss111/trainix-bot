@@ -27,6 +27,7 @@ type KlineSource = {
   baseUrl: string;
   kind: "spot" | "futures";
   path: string;
+  requestType: "symbol" | "continuous";
 };
 
 type BinanceKline = [
@@ -72,13 +73,36 @@ function toCandle(kline: BinanceKline): Candle {
   };
 }
 
+async function readJsonResponse<T>(response: Response, source: KlineSource) {
+  const responseText = await response.text();
+
+  if (!responseText.trim()) {
+    throw new Error(`${source.kind} ${source.path} returned empty response`);
+  }
+
+  try {
+    return JSON.parse(responseText) as T;
+  } catch {
+    throw new Error(
+      `${source.kind} ${source.path} returned invalid JSON: ${responseText.slice(0, 120)}`,
+    );
+  }
+}
+
 async function fetchKlinesFromSource(
   source: KlineSource,
   symbol: string,
   interval: TradeTimeframe,
 ) {
   const url = new URL(source.path, source.baseUrl);
-  url.searchParams.set("symbol", symbol);
+
+  if (source.requestType === "continuous") {
+    url.searchParams.set("pair", symbol);
+    url.searchParams.set("contractType", "PERPETUAL");
+  } else {
+    url.searchParams.set("symbol", symbol);
+  }
+
   url.searchParams.set("interval", interval);
   url.searchParams.set("limit", "120");
 
@@ -94,7 +118,7 @@ async function fetchKlinesFromSource(
     throw new Error(`${source.kind} ${response.status}: ${errorText.slice(0, 160)}`);
   }
 
-  const klines = (await response.json()) as BinanceKline[];
+  const klines = await readJsonResponse<BinanceKline[]>(response, source);
 
   const candles = klines.map(toCandle).filter((candle) => {
     return (
@@ -122,11 +146,19 @@ async function fetchKlines(symbol: string, interval: TradeTimeframe) {
       baseUrl,
       kind: "spot" as const,
       path: "/api/v3/klines",
+      requestType: "symbol" as const,
     })),
     ...binanceFuturesBaseUrls.map((baseUrl) => ({
       baseUrl,
       kind: "futures" as const,
       path: "/fapi/v1/klines",
+      requestType: "symbol" as const,
+    })),
+    ...binanceFuturesBaseUrls.map((baseUrl) => ({
+      baseUrl,
+      kind: "futures" as const,
+      path: "/fapi/v1/continuousKlines",
+      requestType: "continuous" as const,
     })),
   ];
   const errors: string[] = [];
