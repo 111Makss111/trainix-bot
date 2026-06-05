@@ -33,6 +33,7 @@ export function TradePlanReviewerStrategy() {
     directionPriority.preferredDirection === "wait"
       ? `Найближчий варіант: ${activeCandidate.label}`
       : `Авто ${activeCandidate.label}`;
+  const hasMarketData = market.source !== "fallback" && market.candleCount > 0;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -110,13 +111,30 @@ export function TradePlanReviewerStrategy() {
         onChange={updateMarketControls}
       />
 
-      <DirectionPriorityPanel priority={directionPriority} />
+      {hasMarketData ? (
+        <>
+          <DirectionPriorityPanel priority={directionPriority} />
 
-      <TradeLevelsPanel
-        levels={activeCandidate.review.levels}
-        direction={activeCandidate.direction}
-        heading={activeLevelsHeading}
-      />
+          <TradeLevelsPanel
+            levels={activeCandidate.review.levels}
+            direction={activeCandidate.direction}
+            heading={activeLevelsHeading}
+          />
+        </>
+      ) : (
+        <section className="rounded-[1.5rem] border border-amber-300/18 bg-amber-300/8 p-5 text-amber-100">
+          <p className="text-[0.68rem] uppercase tracking-[0.28em] opacity-70">
+            Дані не завантажені
+          </p>
+          <h2 className="mt-2 text-xl font-semibold text-white">
+            Рівні не будуються без реальної ціни
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-amber-100/78">
+            Система не буде показувати резервні числа як торговий сигнал.
+            Перевір підключення або спробуй інший актив/таймфрейм.
+          </p>
+        </section>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(26rem,0.8fr)]">
         <MarketSnapshotPanel
@@ -125,7 +143,7 @@ export function TradePlanReviewerStrategy() {
           error={marketError}
         />
 
-        <SignalPanel signals={activeCandidate.review.signals} />
+        {hasMarketData ? <SignalPanel signals={activeCandidate.review.signals} /> : null}
       </div>
     </>
   );

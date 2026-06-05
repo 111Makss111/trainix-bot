@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 
 const binanceMarketDataBaseUrl = "https://data-api.binance.vision";
-const binanceFuturesBaseUrl = "https://fapi.binance.com";
+const binanceFuturesBaseUrls = [
+  "https://fapi.binance.com",
+  "https://fapi1.binance.com",
+  "https://fapi2.binance.com",
+  "https://fapi3.binance.com",
+  "https://fapi4.binance.com",
+];
 const popularSymbols = [
   "BTCUSDT",
   "ETHUSDT",
@@ -173,28 +179,36 @@ async function fetchSpotAssets() {
 }
 
 async function fetchFuturesAssets() {
-  const url = new URL("/fapi/v1/exchangeInfo", binanceFuturesBaseUrl);
-  const response = await fetch(url, {
-    next: { revalidate: 60 * 60 },
-    headers: {
-      Accept: "application/json",
-    },
-  });
+  for (const baseUrl of binanceFuturesBaseUrls) {
+    try {
+      const url = new URL("/fapi/v1/exchangeInfo", baseUrl);
+      const response = await fetch(url, {
+        next: { revalidate: 60 * 60 },
+        headers: {
+          Accept: "application/json",
+        },
+      });
 
-  if (!response.ok) {
-    throw new Error(`Binance Futures returned ${response.status}.`);
+      if (!response.ok) {
+        throw new Error(`Binance Futures returned ${response.status}.`);
+      }
+
+      const exchangeInfo = (await response.json()) as BinanceExchangeInfo;
+
+      return (exchangeInfo.symbols ?? [])
+        .filter(isTradableFuturesSymbol)
+        .map((symbol) => ({
+          symbol: symbol.symbol,
+          baseAsset: symbol.baseAsset,
+          quoteAsset: symbol.quoteAsset,
+          marketTypes: ["futures"] as Array<"spot" | "futures">,
+        }));
+    } catch {
+      continue;
+    }
   }
 
-  const exchangeInfo = (await response.json()) as BinanceExchangeInfo;
-
-  return (exchangeInfo.symbols ?? [])
-    .filter(isTradableFuturesSymbol)
-    .map((symbol) => ({
-      symbol: symbol.symbol,
-      baseAsset: symbol.baseAsset,
-      quoteAsset: symbol.quoteAsset,
-      marketTypes: ["futures"] as Array<"spot" | "futures">,
-    }));
+  throw new Error("Binance Futures symbols unavailable.");
 }
 
 async function fetchBinanceAssets() {

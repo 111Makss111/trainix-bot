@@ -23,7 +23,13 @@ export function MarketSnapshotPanel({
   isLoading,
   error,
 }: MarketSnapshotPanelProps) {
-  const sourceLabel = market.source === "live" ? "ЖИВІ ДАНІ" : "РЕЗЕРВ";
+  const sourceLabel =
+    market.source === "spot"
+      ? "SPOT"
+      : market.source === "futures"
+        ? "FUTURES"
+        : "НЕМАЄ ДАНИХ";
+  const hasMarketData = market.source !== "fallback" && market.candleCount > 0;
 
   return (
     <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
@@ -43,7 +49,7 @@ export function MarketSnapshotPanel({
           <span
             className={[
               "rounded-full border px-3 py-1.5 text-sm",
-              market.source === "live"
+              hasMarketData
                 ? "border-emerald-300/18 bg-emerald-300/8 text-emerald-100"
                 : "border-amber-300/18 bg-amber-300/8 text-amber-100",
             ].join(" ")}
@@ -53,6 +59,15 @@ export function MarketSnapshotPanel({
         </div>
       </div>
 
+      {!hasMarketData ? (
+        <div className="mt-5 rounded-[1.1rem] border border-amber-300/18 bg-amber-300/8 px-4 py-3 text-sm leading-6 text-amber-100">
+          {error ??
+            "Не вдалося отримати реальні свічки для цього активу. Авто-рівні не будуються без ринкових даних."}
+        </div>
+      ) : null}
+
+      {hasMarketData ? (
+      <>
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <SnapshotStat
           label="Тренд"
@@ -126,6 +141,8 @@ export function MarketSnapshotPanel({
           </div>
         ))}
       </div>
+      </>
+      ) : null}
     </section>
   );
 }

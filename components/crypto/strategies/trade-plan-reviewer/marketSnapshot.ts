@@ -1,6 +1,7 @@
 import type {
   BtcBias,
   MarketSnapshot,
+  MarketSource,
   MarketZone,
   TradeTimeframe,
   TrendDirection,
@@ -294,11 +295,13 @@ export function buildMarketSnapshotFromCandles({
   timeframe,
   candles,
   btcCandles,
+  source,
 }: {
   symbol: string;
   timeframe: TradeTimeframe;
   candles: Candle[];
   btcCandles: Candle[];
+  source: Exclude<MarketSource, "fallback">;
 }): MarketSnapshot {
   const currentCandle = candles.at(-1);
 
@@ -333,7 +336,7 @@ export function buildMarketSnapshotFromCandles({
     nearestResistance: zones.nearestResistance,
     zones: zones.zones,
     updatedAt: new Date().toISOString(),
-    source: "live",
+    source,
     candleCount: candles.length,
   };
 }

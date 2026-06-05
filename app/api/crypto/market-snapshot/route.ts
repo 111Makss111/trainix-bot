@@ -6,8 +6,28 @@ import {
 import type { TradeTimeframe } from "@/components/crypto/strategies/trade-plan-reviewer/types";
 
 const binanceMarketDataBaseUrl = "https://data-api.binance.vision";
-const binanceFuturesBaseUrl = "https://fapi.binance.com";
+const binanceSpotBaseUrls = [
+  binanceMarketDataBaseUrl,
+  "https://api.binance.com",
+  "https://api1.binance.com",
+  "https://api2.binance.com",
+  "https://api3.binance.com",
+  "https://api4.binance.com",
+];
+const binanceFuturesBaseUrls = [
+  "https://fapi.binance.com",
+  "https://fapi1.binance.com",
+  "https://fapi2.binance.com",
+  "https://fapi3.binance.com",
+  "https://fapi4.binance.com",
+];
 const allowedTimeframes = new Set<TradeTimeframe>(["5m", "15m", "1h", "4h"]);
+
+type KlineSource = {
+  baseUrl: string;
+  kind: "spot" | "futures";
+  path: string;
+};
 
 type BinanceKline = [
   number,
@@ -52,13 +72,12 @@ function toCandle(kline: BinanceKline): Candle {
   };
 }
 
-async function fetchKlinesFromUrl(
-  baseUrl: string,
-  path: string,
+async function fetchKlinesFromSource(
+  source: KlineSource,
   symbol: string,
   interval: TradeTimeframe,
 ) {
-  const url = new URL(path, baseUrl);
+  const url = new URL(source.path, source.baseUrl);
   url.searchParams.set("symbol", symbol);
   url.searchParams.set("interval", interval);
   url.searchParams.set("limit", "120");
@@ -72,14 +91,12 @@ async function fetchKlinesFromUrl(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(
-      `Binance returned ${response.status}: ${errorText.slice(0, 160)}`,
-    );
+    throw new Error(`${source.kind} ${response.status}: ${errorText.slice(0, 160)}`);
   }
 
   const klines = (await response.json()) as BinanceKline[];
 
-  return klines.map(toCandle).filter((candle) => {
+  const candles = klines.map(toCandle).filter((candle) => {
     return (
       Number.isFinite(candle.open) &&
       Number.isFinite(candle.high) &&
@@ -88,35 +105,41 @@ async function fetchKlinesFromUrl(
       Number.isFinite(candle.volume)
     );
   });
+
+  if (candles.length < 30) {
+    throw new Error(`${source.kind} returned only ${candles.length} candles`);
+  }
+
+  return {
+    candles,
+    source: source.kind,
+  };
 }
 
 async function fetchKlines(symbol: string, interval: TradeTimeframe) {
-  try {
-    return await fetchKlinesFromUrl(
-      binanceMarketDataBaseUrl,
-      "/api/v3/klines",
-      symbol,
-      interval,
-    );
-  } catch (spotError) {
-    try {
-      return await fetchKlinesFromUrl(
-        binanceFuturesBaseUrl,
-        "/fapi/v1/klines",
-        symbol,
-        interval,
-      );
-    } catch (futuresError) {
-      const spotMessage =
-        spotError instanceof Error ? spotError.message : "spot data unavailable";
-      const futuresMessage =
-        futuresError instanceof Error
-          ? futuresError.message
-          : "futures data unavailable";
+  const sources: KlineSource[] = [
+    ...binanceSpotBaseUrls.map((baseUrl) => ({
+      baseUrl,
+      kind: "spot" as const,
+      path: "/api/v3/klines",
+    })),
+    ...binanceFuturesBaseUrls.map((baseUrl) => ({
+      baseUrl,
+      kind: "futures" as const,
+      path: "/fapi/v1/klines",
+    })),
+  ];
+  const errors: string[] = [];
 
-      throw new Error(`${spotMessage}; ${futuresMessage}`);
+  for (const source of sources) {
+    try {
+      return await fetchKlinesFromSource(source, symbol, interval);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : `${source.kind} failed`);
     }
   }
+
+  throw new Error(errors.slice(-3).join("; ") || "Market data unavailable.");
 }
 
 export async function GET(request: Request) {
@@ -132,7 +155,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [candles, btcCandles] = await Promise.all([
+    const [symbolData, btcData] = await Promise.all([
       fetchKlines(symbol, timeframe),
       fetchKlines("BTCUSDT", timeframe),
     ]);
@@ -140,8 +163,9 @@ export async function GET(request: Request) {
     const market = buildMarketSnapshotFromCandles({
       symbol,
       timeframe,
-      candles,
-      btcCandles,
+      candles: symbolData.candles,
+      btcCandles: btcData.candles,
+      source: symbolData.source,
     });
 
     return NextResponse.json({ market });

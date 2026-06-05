@@ -34,7 +34,7 @@ export type MarketZone = {
   strength: number;
 };
 
-export type MarketSource = "live" | "fallback";
+export type MarketSource = "spot" | "futures" | "fallback";
 
 export type MarketSnapshot = {
   symbol: string;
