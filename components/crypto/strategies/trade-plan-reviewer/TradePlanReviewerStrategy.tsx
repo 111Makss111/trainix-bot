@@ -12,6 +12,35 @@ import { getDirectionPriority } from "./directionPriority";
 import { getFallbackMarketSnapshot } from "./marketSnapshot";
 import type { MarketSnapshot, TradePlan } from "./types";
 
+const savedMarketControlsKey = "trainix.tradePlanReviewer.marketControls";
+const autoRefreshMs = 30_000;
+
+function getSavedMarketControls() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const savedValue = window.localStorage.getItem(savedMarketControlsKey);
+
+    if (!savedValue) {
+      return null;
+    }
+
+    const parsedValue = JSON.parse(savedValue) as Partial<TradePlan>;
+
+    return {
+      symbol:
+        typeof parsedValue.symbol === "string"
+          ? parsedValue.symbol.trim().toUpperCase()
+          : "",
+      timeframe: parsedValue.timeframe,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function TradePlanReviewerStrategy() {
   // Тут живе тільки стан форми. Самі правила оцінки винесені в reviewTradePlan.ts.
   const [plan, setPlan] = useState<TradePlan>(initialTradePlan);
@@ -20,6 +49,8 @@ export function TradePlanReviewerStrategy() {
   );
   const [isMarketLoading, setIsMarketLoading] = useState(true);
   const [marketError, setMarketError] = useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [hasLoadedSavedControls, setHasLoadedSavedControls] = useState(false);
 
   const directionPriority = useMemo(
     () => getDirectionPriority(plan, market),
@@ -34,6 +65,34 @@ export function TradePlanReviewerStrategy() {
       ? `Найближчий варіант: ${activeCandidate.label}`
       : `Авто ${activeCandidate.label}`;
   const hasMarketData = market.source !== "fallback" && market.candleCount > 0;
+
+  useEffect(() => {
+    const savedControls = getSavedMarketControls();
+
+    if (savedControls?.symbol) {
+      setPlan((currentPlan) => ({
+        ...currentPlan,
+        symbol: savedControls.symbol,
+        timeframe: savedControls.timeframe ?? currentPlan.timeframe,
+      }));
+    }
+
+    setHasLoadedSavedControls(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedSavedControls) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      savedMarketControlsKey,
+      JSON.stringify({
+        symbol: plan.symbol,
+        timeframe: plan.timeframe,
+      }),
+    );
+  }, [hasLoadedSavedControls, plan.symbol, plan.timeframe]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -95,7 +154,15 @@ export function TradePlanReviewerStrategy() {
       window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [plan.symbol, plan.timeframe]);
+  }, [plan.symbol, plan.timeframe, refreshNonce]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setRefreshNonce((currentNonce) => currentNonce + 1);
+    }, autoRefreshMs);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   function updateMarketControls(
     patch: Pick<Partial<TradePlan>, "symbol" | "timeframe">,
@@ -113,7 +180,9 @@ export function TradePlanReviewerStrategy() {
       <MarketControls
         symbol={plan.symbol}
         timeframe={plan.timeframe}
+        isLoading={isMarketLoading}
         onChange={updateMarketControls}
+        onRefresh={() => setRefreshNonce((currentNonce) => currentNonce + 1)}
       />
 
       {hasMarketData ? (
