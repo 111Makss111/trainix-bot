@@ -21,13 +21,20 @@ const binanceFuturesBaseUrls = [
   "https://fapi3.binance.com",
   "https://fapi4.binance.com",
 ];
+const bybitBaseUrl = "https://api.bybit.com";
 const allowedTimeframes = new Set<TradeTimeframe>(["5m", "15m", "1h", "4h"]);
+const bybitIntervalByTimeframe: Record<TradeTimeframe, string> = {
+  "5m": "5",
+  "15m": "15",
+  "1h": "60",
+  "4h": "240",
+};
 
 type KlineSource = {
   baseUrl: string;
-  kind: "spot" | "futures";
+  kind: "spot" | "futures" | "bybit";
   path: string;
-  requestType: "symbol" | "continuous";
+  requestType: "symbol" | "continuous" | "bybit-linear";
 };
 
 type BinanceKline = [
@@ -44,6 +51,24 @@ type BinanceKline = [
   string,
   string,
 ];
+
+type BybitKline = [
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+];
+
+type BybitKlineResponse = {
+  retCode: number;
+  retMsg: string;
+  result?: {
+    list?: BybitKline[];
+  };
+};
 
 function normalizeSymbol(value: string | null) {
   const symbol = value?.trim().toUpperCase() ?? "";
@@ -73,6 +98,20 @@ function toCandle(kline: BinanceKline): Candle {
   };
 }
 
+function toBybitCandle(kline: BybitKline): Candle {
+  const openTime = Number(kline[0]);
+
+  return {
+    openTime,
+    open: Number(kline[1]),
+    high: Number(kline[2]),
+    low: Number(kline[3]),
+    close: Number(kline[4]),
+    volume: Number(kline[5]),
+    closeTime: openTime,
+  };
+}
+
 async function readJsonResponse<T>(response: Response, source: KlineSource) {
   const responseText = await response.text();
 
@@ -96,7 +135,11 @@ async function fetchKlinesFromSource(
 ) {
   const url = new URL(source.path, source.baseUrl);
 
-  if (source.requestType === "continuous") {
+  if (source.requestType === "bybit-linear") {
+    url.searchParams.set("category", "linear");
+    url.searchParams.set("symbol", symbol);
+    url.searchParams.set("interval", bybitIntervalByTimeframe[interval]);
+  } else if (source.requestType === "continuous") {
     url.searchParams.set("pair", symbol);
     url.searchParams.set("contractType", "PERPETUAL");
   } else {
@@ -116,6 +159,36 @@ async function fetchKlinesFromSource(
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`${source.kind} ${response.status}: ${errorText.slice(0, 160)}`);
+  }
+
+  if (source.requestType === "bybit-linear") {
+    const payload = await readJsonResponse<BybitKlineResponse>(response, source);
+
+    if (payload.retCode !== 0) {
+      throw new Error(`${source.kind} ${payload.retCode}: ${payload.retMsg}`);
+    }
+
+    const candles = (payload.result?.list ?? [])
+      .map(toBybitCandle)
+      .filter((candle) => {
+        return (
+          Number.isFinite(candle.open) &&
+          Number.isFinite(candle.high) &&
+          Number.isFinite(candle.low) &&
+          Number.isFinite(candle.close) &&
+          Number.isFinite(candle.volume)
+        );
+      })
+      .sort((first, second) => first.openTime - second.openTime);
+
+    if (candles.length < 30) {
+      throw new Error(`${source.kind} returned only ${candles.length} candles`);
+    }
+
+    return {
+      candles,
+      source: source.kind,
+    };
   }
 
   const klines = await readJsonResponse<BinanceKline[]>(response, source);
@@ -160,6 +233,12 @@ async function fetchKlines(symbol: string, interval: TradeTimeframe) {
       path: "/fapi/v1/continuousKlines",
       requestType: "continuous" as const,
     })),
+    {
+      baseUrl: bybitBaseUrl,
+      kind: "bybit" as const,
+      path: "/v5/market/kline",
+      requestType: "bybit-linear" as const,
+    },
   ];
   const errors: string[] = [];
 
@@ -171,7 +250,7 @@ async function fetchKlines(symbol: string, interval: TradeTimeframe) {
     }
   }
 
-  throw new Error(errors.slice(-3).join("; ") || "Market data unavailable.");
+  throw new Error(errors.slice(-3).join("; ") || "No market data source returned candles.");
 }
 
 export async function GET(request: Request) {
@@ -202,9 +281,16 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ market });
   } catch (error) {
-    const message =
+    const detail =
       error instanceof Error ? error.message : "Failed to load market data.";
 
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json(
+      {
+        error:
+          "Не вдалося отримати ринкові свічки для цього активу. Спробуй інший таймфрейм або актив.",
+        detail,
+      },
+      { status: 502 },
+    );
   }
 }

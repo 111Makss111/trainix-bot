@@ -28,7 +28,9 @@ export function MarketSnapshotPanel({
       ? "SPOT"
       : market.source === "futures"
         ? "FUTURES"
-        : "НЕМАЄ ДАНИХ";
+        : market.source === "bybit"
+          ? "BYBIT"
+          : "НЕМАЄ ДАНИХ";
   const hasMarketData = market.source !== "fallback" && market.candleCount > 0;
 
   return (
