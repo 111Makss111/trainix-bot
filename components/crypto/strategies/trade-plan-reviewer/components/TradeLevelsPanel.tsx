@@ -18,15 +18,18 @@ export function TradeLevelsPanel({
   const [copiedValue, setCopiedValue] = useState<string | null>(null);
   const rewardToRisk = levels.rewardToRisk;
   const isWeakPotential = rewardToRisk !== null && rewardToRisk < 1.2;
+  const isMediumPotential = rewardToRisk !== null && rewardToRisk < 2;
   const isStopTooClose =
     levels.stopAtrMultiple !== null && levels.stopAtrMultiple < 0.7;
   const isTargetTooClose =
     levels.targetAtrMultiple !== null && levels.targetAtrMultiple < 1;
+  const isTargetThin =
+    levels.targetAtrMultiple !== null && levels.targetAtrMultiple < 1.5;
   const isStopTooWide =
     levels.stopAtrMultiple !== null && levels.stopAtrMultiple > 3;
   const levelStatus = isStopTooClose || isTargetTooClose || isWeakPotential
     ? "danger"
-    : isStopTooWide
+    : isStopTooWide || isTargetThin || isMediumPotential
       ? "warning"
       : "ready";
   const statusLabel =
@@ -38,7 +41,11 @@ export function TradeLevelsPanel({
           ? "ціль близько"
           : isWeakPotential
             ? "слабкий R/R"
-            : "широкий стоп";
+            : isStopTooWide
+              ? "широкий стоп"
+              : isTargetThin
+                ? "ціль слабка"
+                : "R/R середній";
   const stopAtrDetail =
     levels.stopAtrMultiple === null
       ? ""
@@ -139,7 +146,11 @@ export function TradeLevelsPanel({
               ? "Ціль занадто близько відносно ATR. Рух може бути меншим за нормальний шум активу."
               : isWeakPotential
                 ? "Потенціал менший за ризик. Для якіснішого входу треба ближчий стоп, дальша ціль або вхід ближче до підтримки."
-                : "Стоп занадто широкий відносно ATR. Рівень може бути логічним, але ризик уже важкий."}
+                : isStopTooWide
+                  ? "Стоп занадто широкий відносно ATR. Рівень може бути логічним, але ризик уже важкий."
+                  : isTargetThin
+                    ? "Ціль ще слабка відносно ATR. Для волатильної монети потрібен більший простір до цілі."
+                    : "R/R нижче 2. Рівні вже не провальні, але запас по потенціалу ще середній."}
         </p>
       ) : null}
     </section>

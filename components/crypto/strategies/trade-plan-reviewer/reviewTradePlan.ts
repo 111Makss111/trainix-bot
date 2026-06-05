@@ -11,6 +11,8 @@ import type {
 import { formatTradingViewPrice } from "./formatters";
 
 const minimumAutoStopAtr = 0.75;
+const minimumAutoTargetAtr = 1.5;
+const minimumAutoRewardRatio = 1.5;
 const zoneStopBufferAtr = 0.15;
 
 function toNumber(value: string) {
@@ -79,16 +81,44 @@ function getEffectiveStop(
   return getAutoStopLoss(plan.direction, entryPrice, market);
 }
 
-function getEffectiveTarget(plan: TradePlan, market: MarketSnapshot) {
+function getAutoTakeProfit(
+  direction: TradeDirection,
+  entryPrice: number,
+  stopLoss: number,
+  market: MarketSnapshot,
+) {
+  const riskDistance = Math.abs(entryPrice - stopLoss);
+  const minimumTargetDistance = Math.max(
+    riskDistance * minimumAutoRewardRatio,
+    getAtrPriceDistance(market, minimumAutoTargetAtr, 0.008),
+  );
+
+  if (direction === "long") {
+    const targetByZone = market.nearestResistance.price;
+    const targetByAtr = entryPrice + minimumTargetDistance;
+
+    return Math.max(targetByZone, targetByAtr);
+  }
+
+  const targetByZone = market.nearestSupport.price;
+  const targetByAtr = entryPrice - minimumTargetDistance;
+
+  return Math.min(targetByZone, targetByAtr);
+}
+
+function getEffectiveTarget(
+  plan: TradePlan,
+  market: MarketSnapshot,
+  entryPrice: number,
+  stopLoss: number,
+) {
   const customTarget = toNumber(plan.takeProfit);
 
   if (customTarget !== null) {
     return customTarget;
   }
 
-  return plan.direction === "long"
-    ? market.nearestResistance.price
-    : market.nearestSupport.price;
+  return getAutoTakeProfit(plan.direction, entryPrice, stopLoss, market);
 }
 
 function getPriceSideStatus(
@@ -347,7 +377,7 @@ export function reviewTradePlan(
   const positionSize = toNumber(plan.positionSize);
   const entryPrice = getEffectiveEntry(plan, market);
   const stopLoss = getEffectiveStop(plan, market, entryPrice);
-  const takeProfit = getEffectiveTarget(plan, market);
+  const takeProfit = getEffectiveTarget(plan, market, entryPrice, stopLoss);
 
   const riskDistancePercent = (Math.abs(entryPrice - stopLoss) / entryPrice) * 100;
   const rewardDistancePercent =
@@ -388,8 +418,9 @@ export function reviewTradePlan(
     plan.direction === "long"
       ? market.nearestResistance
       : market.nearestSupport;
-  const targetSpacePercent =
+  const nearestTargetZoneDistancePercent =
     (Math.abs(targetZone.price - entryPrice) / entryPrice) * 100;
+  const targetSpacePercent = rewardDistancePercent;
   const rangeWidth = market.nearestResistance.price - market.nearestSupport.price;
   const pricePositionPercent =
     rangeWidth > 0
@@ -425,7 +456,7 @@ export function reviewTradePlan(
       "Простір до цілі",
       targetSpacePercent <= market.averageRangePercent
         ? `Ціль занадто близько: ${targetSpacePercent.toFixed(2)}%, а середній шум свічки ${market.averageRangePercent.toFixed(2)}%. Рух менший за шум.`
-        : `До ${targetZone.label} ${targetSpacePercent.toFixed(2)}%. Діапазон ${market.rangeWidthPercent.toFixed(2)}%, шум ${market.averageRangePercent.toFixed(2)}%.`,
+        : `Ціль ${targetSpacePercent.toFixed(2)}% від входу. Найближча зона ${targetZone.label} на ${nearestTargetZoneDistancePercent.toFixed(2)}%. Шум ${market.averageRangePercent.toFixed(2)}%.`,
       spaceStatus,
     ),
     buildSignal(
