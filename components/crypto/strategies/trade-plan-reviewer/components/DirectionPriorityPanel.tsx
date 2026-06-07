@@ -2,6 +2,7 @@ import { formatTradingViewPrice } from "../formatters";
 import type {
   DirectionCandidate,
   MarketZoneReaction,
+  PriceActionState,
   DirectionPriority,
   ReviewStatus,
 } from "../types";
@@ -23,6 +24,12 @@ const reactionClassName: Record<MarketZoneReaction["strength"], string> = {
   none: "border-white/10 bg-white/[0.04] text-white/52",
 };
 
+const priceActionClassName: Record<PriceActionState["direction"], string> = {
+  long: "border-emerald-300/18 bg-emerald-300/8 text-emerald-100",
+  short: "border-rose-300/18 bg-rose-300/8 text-rose-100",
+  neutral: "border-white/10 bg-white/[0.04] text-white/52",
+};
+
 function DirectionCard({
   candidate,
   isPreferred,
@@ -33,6 +40,7 @@ function DirectionCard({
   const levels = candidate.review.levels;
   const rewardToRisk = levels.rewardToRisk;
   const reaction = levels.zoneReaction;
+  const priceAction = levels.priceAction;
 
   return (
     <div
@@ -81,6 +89,8 @@ function DirectionCard({
         <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
           {levels.entryMode === "limit"
             ? "чекати вхід"
+            : levels.entryMode === "momentum"
+              ? "імпульс"
             : levels.entryMode === "distant"
               ? "зона далеко"
             : levels.entryMode === "custom"
@@ -99,6 +109,14 @@ function DirectionCard({
           ].join(" ")}
         >
           реакція {reaction.summary}
+        </span>
+        <span
+          className={[
+            "rounded-full border px-2.5 py-1",
+            priceActionClassName[priceAction.direction],
+          ].join(" ")}
+        >
+          рух {priceAction.label}
         </span>
       </div>
 

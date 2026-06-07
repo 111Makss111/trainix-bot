@@ -3,6 +3,7 @@ import type {
   MarketSnapshot,
   MarketZone,
   MarketZoneReaction,
+  PriceActionState,
   ReviewGrade,
   ReviewItem,
   ReviewMetric,
@@ -20,6 +21,19 @@ const marketEntryMaxAtrDistance = 0.35;
 const plannedEntryMaxAtrDistance = 2.5;
 const plannedEntryMaxPercentDistance = 8;
 const zoneStopBufferAtr = 0.15;
+
+function isMomentumMode(priceAction: PriceActionState) {
+  return (
+    priceAction.mode === "impulse-up" ||
+    priceAction.mode === "impulse-down" ||
+    priceAction.mode === "overextended-up" ||
+    priceAction.mode === "overextended-down"
+  );
+}
+
+function isPriceActionAligned(direction: TradeDirection, priceAction: PriceActionState) {
+  return priceAction.direction === direction && isMomentumMode(priceAction);
+}
 
 function toNumber(value: string) {
   const normalizedValue = value.replace(",", ".").trim();
@@ -74,6 +88,13 @@ function buildEntryResult(price: number, mode: EntryMode, market: MarketSnapshot
 }
 
 function getAutoEntry(direction: TradeDirection, market: MarketSnapshot) {
+  if (
+    isPriceActionAligned(direction, market.priceAction) &&
+    market.priceAction.entryPrice !== null
+  ) {
+    return buildEntryResult(market.priceAction.entryPrice, "momentum", market);
+  }
+
   const allowedDistance = getAtrPriceDistance(
     market,
     marketEntryMaxAtrDistance,
@@ -128,6 +149,13 @@ function getAutoStopLoss(
   entryPrice: number,
   market: MarketSnapshot,
 ) {
+  if (
+    isPriceActionAligned(direction, market.priceAction) &&
+    market.priceAction.stopLoss !== null
+  ) {
+    return market.priceAction.stopLoss;
+  }
+
   const minimumStopDistance = getAtrPriceDistance(
     market,
     minimumAutoStopAtr,
@@ -168,6 +196,13 @@ function getAutoTakeProfit(
   stopLoss: number,
   market: MarketSnapshot,
 ) {
+  if (
+    isPriceActionAligned(direction, market.priceAction) &&
+    market.priceAction.takeProfit !== null
+  ) {
+    return market.priceAction.takeProfit;
+  }
+
   const riskDistance = Math.abs(entryPrice - stopLoss);
   const minimumTargetDistance = Math.max(
     riskDistance * minimumAutoRewardRatio,
@@ -311,6 +346,10 @@ function getEntryStatus(entryMode: EntryMode): ReviewStatus {
     return "fail";
   }
 
+  if (entryMode === "momentum") {
+    return "warning";
+  }
+
   return entryMode === "limit" ? "warning" : "pass";
 }
 
@@ -371,6 +410,52 @@ function getReactionSignalDetail(reaction: MarketZoneReaction) {
   }.`;
 }
 
+function getPriceActionStatus(
+  direction: TradeDirection,
+  priceAction: PriceActionState,
+): ReviewStatus {
+  if (priceAction.direction === "neutral") {
+    return "warning";
+  }
+
+  if (priceAction.direction !== direction) {
+    return "fail";
+  }
+
+  if (
+    priceAction.mode === "overextended-up" ||
+    priceAction.mode === "overextended-down"
+  ) {
+    return "warning";
+  }
+
+  return "pass";
+}
+
+function getPriceActionSignalDetail(
+  direction: TradeDirection,
+  priceAction: PriceActionState,
+) {
+  if (priceAction.direction === "neutral") {
+    return priceAction.summary;
+  }
+
+  if (priceAction.direction !== direction) {
+    return direction === "long"
+      ? "Зараз рух не на боці Long."
+      : "Зараз рух не на боці Short.";
+  }
+
+  if (
+    priceAction.mode === "overextended-up" ||
+    priceAction.mode === "overextended-down"
+  ) {
+    return `${priceAction.summary} Але ціна вже близько до цільової зони.`;
+  }
+
+  return priceAction.summary;
+}
+
 function getEntrySignalDetail({
   direction,
   entryMode,
@@ -388,6 +473,10 @@ function getEntrySignalDetail({
 
   if (entryMode === "market") {
     return "Поточна ціна вже достатньо близько до ATR-зони входу.";
+  }
+
+  if (entryMode === "momentum") {
+    return "Ціна вже в русі. Вхід рахується від мікро-відкату, не від старої зони.";
   }
 
   if (entryMode === "distant") {
@@ -446,7 +535,15 @@ function getSpaceStatus(targetSpacePercent: number, market: MarketSnapshot) {
 function getPositionStatus(
   direction: TradeDirection,
   pricePositionPercent: number,
+  priceAction: PriceActionState,
 ): ReviewStatus {
+  if (isPriceActionAligned(direction, priceAction)) {
+    return priceAction.mode === "overextended-up" ||
+      priceAction.mode === "overextended-down"
+      ? "warning"
+      : "pass";
+  }
+
   if (direction === "long") {
     if (pricePositionPercent <= 35) {
       return "pass";
@@ -480,6 +577,40 @@ function getVolatilityStatus(market: MarketSnapshot): ReviewStatus {
   }
 
   return "pass";
+}
+
+function getZoneStatus(
+  entryMode: EntryMode,
+  zoneDistancePercent: number,
+  priceActionStatus: ReviewStatus,
+): ReviewStatus {
+  if (entryMode === "momentum") {
+    return priceActionStatus === "fail" ? "warning" : priceActionStatus;
+  }
+
+  return zoneDistancePercent <= 1
+    ? "pass"
+    : zoneDistancePercent <= 2.5
+      ? "warning"
+      : "fail";
+}
+
+function getZoneSignalDetail({
+  entryMode,
+  zoneDistancePercent,
+  setupZone,
+  priceAction,
+}: {
+  entryMode: EntryMode;
+  zoneDistancePercent: number;
+  setupZone: MarketZone;
+  priceAction: PriceActionState;
+}) {
+  if (entryMode === "momentum") {
+    return `${priceAction.label}: вхід не прив'язаний до старої зони. База сценарію - поточний рух і мікро-відкат.`;
+  }
+
+  return `Вхід на ${zoneDistancePercent.toFixed(2)}% від зони ${setupZone.label} (${formatTradingViewPrice(setupZone.low)} - ${formatTradingViewPrice(setupZone.high)}).`;
 }
 
 function buildMetric(
@@ -584,6 +715,7 @@ export function reviewTradePlan(
   const rewardStatus = getRewardStatus(rewardToRisk);
   const atrStatus = getAtrStatus(stopAtrMultiple, targetAtrMultiple);
   const entryStatus = getEntryStatus(entry.mode);
+  const priceActionStatus = getPriceActionStatus(plan.direction, market.priceAction);
 
   const setupZone =
     plan.direction === "long"
@@ -592,8 +724,11 @@ export function reviewTradePlan(
 
   const zoneDistancePercent =
     (Math.abs(entryPrice - setupZone.price) / entryPrice) * 100;
-  const zoneStatus =
-    zoneDistancePercent <= 1 ? "pass" : zoneDistancePercent <= 2.5 ? "warning" : "fail";
+  const zoneStatus = getZoneStatus(
+    entry.mode,
+    zoneDistancePercent,
+    priceActionStatus,
+  );
   const mtfStatus = getMtfStatus(setupZone);
   const zoneReaction =
     plan.direction === "long"
@@ -619,7 +754,11 @@ export function reviewTradePlan(
         )
       : 50;
   const spaceStatus = getSpaceStatus(targetSpacePercent, market);
-  const positionStatus = getPositionStatus(plan.direction, pricePositionPercent);
+  const positionStatus = getPositionStatus(
+    plan.direction,
+    pricePositionPercent,
+    market.priceAction,
+  );
   const volatilityStatus = getVolatilityStatus(market);
 
   const signals = [
@@ -630,6 +769,12 @@ export function reviewTradePlan(
         ? `Ринок у боковику, сила ${market.trendStrength}/100.`
         : `Тренд ${market.trend === "up" ? "вгору" : "вниз"}, сила ${market.trendStrength}/100.`,
       trendStatus,
+    ),
+    buildSignal(
+      "price-action",
+      "Рух ціни",
+      getPriceActionSignalDetail(plan.direction, market.priceAction),
+      priceActionStatus,
     ),
     buildSignal(
       "btc",
@@ -677,7 +822,12 @@ export function reviewTradePlan(
     buildSignal(
       "zone",
       "Близькість до зони",
-      `Вхід на ${zoneDistancePercent.toFixed(2)}% від зони ${setupZone.label} (${formatTradingViewPrice(setupZone.low)} - ${formatTradingViewPrice(setupZone.high)}).`,
+      getZoneSignalDetail({
+        entryMode: entry.mode,
+        zoneDistancePercent,
+        setupZone,
+        priceAction: market.priceAction,
+      }),
       zoneStatus,
     ),
     buildSignal(
@@ -780,6 +930,7 @@ export function reviewTradePlan(
       rewardToRisk,
       stopAtrMultiple,
       targetAtrMultiple,
+      priceAction: market.priceAction,
       zoneReaction,
     },
     metrics,

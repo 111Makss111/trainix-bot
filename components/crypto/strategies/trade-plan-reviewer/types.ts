@@ -16,7 +16,16 @@ export type ReviewStatus = "pass" | "warning" | "fail";
 
 export type ZoneKind = "support" | "resistance";
 
-export type EntryMode = "market" | "limit" | "distant" | "custom";
+export type EntryMode = "market" | "limit" | "momentum" | "distant" | "custom";
+
+export type PriceActionMode =
+  | "range"
+  | "support-reaction"
+  | "resistance-reaction"
+  | "impulse-up"
+  | "impulse-down"
+  | "overextended-up"
+  | "overextended-down";
 
 export type ZoneReactionStrength = "strong" | "medium" | "weak" | "none";
 
@@ -66,6 +75,17 @@ export type MarketZoneReaction = {
   detail: string;
 };
 
+export type PriceActionState = {
+  mode: PriceActionMode;
+  direction: TradeDirection | "neutral";
+  label: string;
+  summary: string;
+  strength: number;
+  entryPrice: number | null;
+  stopLoss: number | null;
+  takeProfit: number | null;
+};
+
 export type MarketSource = "spot" | "futures" | "bybit" | "okx" | "fallback";
 
 export type MarketSnapshot = {
@@ -84,6 +104,7 @@ export type MarketSnapshot = {
   volumeState: string;
   nearestSupport: MarketZone;
   nearestResistance: MarketZone;
+  priceAction: PriceActionState;
   zoneReactions: {
     support: MarketZoneReaction;
     resistance: MarketZoneReaction;
@@ -126,6 +147,7 @@ export type ReviewLevels = {
   rewardToRisk: number | null;
   stopAtrMultiple: number | null;
   targetAtrMultiple: number | null;
+  priceAction: PriceActionState;
   zoneReaction: MarketZoneReaction;
 };
 

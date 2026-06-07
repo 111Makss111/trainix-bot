@@ -8,6 +8,7 @@ import type {
   TrendDirection,
   VolatilityState,
 } from "./types";
+import { getPriceActionState } from "./priceAction";
 import { getZoneReaction } from "./zoneReaction";
 
 export type Candle = {
@@ -564,6 +565,16 @@ export function buildMarketSnapshotFromCandles({
     support: getZoneReaction(candles, zones.nearestSupport),
     resistance: getZoneReaction(candles, zones.nearestResistance),
   };
+  const priceAction = getPriceActionState({
+    candles,
+    currentPrice,
+    atr,
+    trend: trend.trend,
+    nearestSupport: zones.nearestSupport,
+    nearestResistance: zones.nearestResistance,
+    supportReaction: zoneReactions.support,
+    resistanceReaction: zoneReactions.resistance,
+  });
   const analyzedTimeframes = analysisTimeframeOrder.filter((analysisTimeframe) => {
     if (analysisTimeframe === timeframe) {
       return true;
@@ -594,6 +605,7 @@ export function buildMarketSnapshotFromCandles({
     volumeState: getVolumeState(candles),
     nearestSupport: zones.nearestSupport,
     nearestResistance: zones.nearestResistance,
+    priceAction,
     zoneReactions,
     zones: zones.zones,
     updatedAt: new Date().toISOString(),
@@ -645,6 +657,16 @@ export function getFallbackMarketSnapshot(
       timeframes: [timeframe],
       sourceCount: 1,
       isMultiTimeframe: false,
+    },
+    priceAction: {
+      mode: "range",
+      direction: "neutral",
+      label: "без імпульсу",
+      summary: "Імпульс не рахується без живих свічок.",
+      strength: 0,
+      entryPrice: null,
+      stopLoss: null,
+      takeProfit: null,
     },
     zoneReactions: {
       support: {

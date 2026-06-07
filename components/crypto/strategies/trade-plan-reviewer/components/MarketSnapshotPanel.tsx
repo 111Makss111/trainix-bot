@@ -85,11 +85,16 @@ export function MarketSnapshotPanel({
 
       {hasMarketData ? (
       <>
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SnapshotStat
           label="Тренд"
           value={trendLabel[market.trend]}
           detail={`сила ${market.trendStrength}/100`}
+        />
+        <SnapshotStat
+          label="Рух"
+          value={market.priceAction.label.toUpperCase()}
+          detail={`сила ${market.priceAction.strength}/100`}
         />
         <SnapshotStat
           label="Настрій BTC"

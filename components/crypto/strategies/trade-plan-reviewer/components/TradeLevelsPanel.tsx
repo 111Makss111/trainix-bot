@@ -20,6 +20,7 @@ export function TradeLevelsPanel({
   const isWeakPotential = rewardToRisk !== null && rewardToRisk < 1.2;
   const isMediumPotential = rewardToRisk !== null && rewardToRisk < 2;
   const isWaitingEntry = levels.entryMode === "limit";
+  const isMomentumEntry = levels.entryMode === "momentum";
   const isDistantEntry = levels.entryMode === "distant";
   const isStopTooClose =
     levels.stopAtrMultiple !== null && levels.stopAtrMultiple < 0.7;
@@ -31,7 +32,11 @@ export function TradeLevelsPanel({
     levels.stopAtrMultiple !== null && levels.stopAtrMultiple > 3;
   const levelStatus = isDistantEntry || isStopTooClose || isTargetTooClose || isWeakPotential
     ? "danger"
-    : isWaitingEntry || isStopTooWide || isTargetThin || isMediumPotential
+    : isWaitingEntry ||
+        isMomentumEntry ||
+        isStopTooWide ||
+        isTargetThin ||
+        isMediumPotential
       ? "warning"
       : "ready";
   const statusLabel =
@@ -47,6 +52,8 @@ export function TradeLevelsPanel({
             ? "слабкий R/R"
             : isStopTooWide
               ? "широкий стоп"
+              : isMomentumEntry
+                ? "імпульс"
               : isWaitingEntry
                 ? "чекати вхід"
                 : isTargetThin
@@ -61,6 +68,8 @@ export function TradeLevelsPanel({
   const entryDetail =
     levels.entryMode === "market"
       ? "market-вхід"
+      : isMomentumEntry
+        ? "імпульсний вхід · мікро-відкат"
       : isDistantEntry
         ? "поточна ціна поза робочою MTF-зоною"
         : levels.entryMode === "custom"
@@ -170,6 +179,8 @@ export function TradeLevelsPanel({
                 ? "Потенціал менший за ризик. Для якіснішого входу треба ближчий стоп, дальша ціль або вхід ближче до підтримки."
                 : isStopTooWide
                   ? "Стоп занадто широкий відносно ATR. Рівень може бути логічним, але ризик уже важкий."
+                  : isMomentumEntry
+                    ? "Ціна вже рухається. Система показує мікро-відкат, а не стару підтримку або опір."
                   : isWaitingEntry
                     ? "Ціна ще не в зоні входу. Система показує очікуваний вхід, а не угоду по поточній ціні."
                     : isTargetThin
