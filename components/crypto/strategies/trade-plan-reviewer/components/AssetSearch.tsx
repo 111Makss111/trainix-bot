@@ -6,7 +6,7 @@ type CryptoAsset = {
   symbol: string;
   baseAsset: string;
   quoteAsset: string;
-  marketTypes?: Array<"spot" | "futures">;
+  marketTypes?: Array<"spot" | "futures" | "bybit" | "okx">;
 };
 
 type AssetSearchProps = {
@@ -25,6 +25,7 @@ const fallbackAssets: CryptoAsset[] = [
   { symbol: "AVAXUSDT", baseAsset: "AVAX", quoteAsset: "USDT", marketTypes: ["spot", "futures"] },
   { symbol: "LINKUSDT", baseAsset: "LINK", quoteAsset: "USDT", marketTypes: ["spot", "futures"] },
   { symbol: "POPCATUSDT", baseAsset: "POPCAT", quoteAsset: "USDT", marketTypes: ["futures"] },
+  { symbol: "BTWUSDT", baseAsset: "BTW", quoteAsset: "USDT", marketTypes: ["bybit"] },
 ];
 
 function normalizeSymbol(value: string) {
@@ -50,12 +51,14 @@ function filterLocalAssets(assets: CryptoAsset[], query: string) {
 
 function getMarketLabel(asset: CryptoAsset) {
   const marketTypes = asset.marketTypes ?? ["spot"];
+  const labels = [
+    marketTypes.includes("spot") ? "Spot" : null,
+    marketTypes.includes("futures") ? "Binance Futures" : null,
+    marketTypes.includes("bybit") ? "Bybit" : null,
+    marketTypes.includes("okx") ? "OKX" : null,
+  ].filter(Boolean);
 
-  if (marketTypes.includes("spot") && marketTypes.includes("futures")) {
-    return "Spot + Futures";
-  }
-
-  return marketTypes.includes("futures") ? "Futures" : "Spot";
+  return labels.join(" + ") || "Spot";
 }
 
 export function AssetSearch({ value, onChange }: AssetSearchProps) {
@@ -187,7 +190,7 @@ export function AssetSearch({ value, onChange }: AssetSearchProps) {
         >
           <div className="flex items-center justify-between border-b border-white/8 px-3 py-2 text-xs text-white/42">
             <span>{isLoading ? "Оновлення активів" : "Активні пари"}</span>
-            <span>{source === "live" ? "Binance" : "резерв"}</span>
+            <span>{source === "live" ? "біржі" : "резерв"}</span>
           </div>
 
           <div className="max-h-72 overflow-y-auto p-1.5">

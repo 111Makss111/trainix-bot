@@ -8,6 +8,8 @@ const binanceFuturesBaseUrls = [
   "https://fapi3.binance.com",
   "https://fapi4.binance.com",
 ];
+const bybitBaseUrl = "https://api.bybit.com";
+const okxBaseUrl = "https://www.okx.com";
 const popularSymbols = [
   "BTCUSDT",
   "ETHUSDT",
@@ -32,6 +34,7 @@ const popularSymbols = [
   "POPCATUSDT",
   "WIFUSDT",
   "1000PEPEUSDT",
+  "BTWUSDT",
 ];
 
 type BinanceSymbol = {
@@ -47,11 +50,43 @@ type BinanceExchangeInfo = {
   symbols?: BinanceSymbol[];
 };
 
+type BybitInstrument = {
+  symbol: string;
+  status: string;
+  baseCoin: string;
+  quoteCoin: string;
+  contractType?: string;
+};
+
+type BybitInstrumentsResponse = {
+  retCode: number;
+  retMsg: string;
+  result?: {
+    list?: BybitInstrument[];
+    nextPageCursor?: string;
+  };
+};
+
+type OkxInstrument = {
+  instId: string;
+  state: string;
+  baseCcy: string;
+  quoteCcy: string;
+};
+
+type OkxInstrumentsResponse = {
+  code: string;
+  msg: string;
+  data?: OkxInstrument[];
+};
+
+type MarketType = "spot" | "futures" | "bybit" | "okx";
+
 type CryptoAsset = {
   symbol: string;
   baseAsset: string;
   quoteAsset: string;
-  marketTypes: Array<"spot" | "futures">;
+  marketTypes: MarketType[];
 };
 
 function normalizeQuery(value: string | null) {
@@ -66,8 +101,8 @@ function toFallbackAsset(symbol: string): CryptoAsset {
     baseAsset: quoteAsset ? symbol.slice(0, -quoteAsset.length) : symbol,
     quoteAsset,
     marketTypes: symbol === "POPCATUSDT" || symbol.startsWith("1000")
-      ? ["futures"]
-      : ["spot", "futures"],
+      ? ["futures", "bybit"]
+      : ["spot", "futures", "bybit"],
   };
 }
 
@@ -84,6 +119,29 @@ function isTradableFuturesSymbol(symbol: BinanceSymbol) {
     symbol.status === "TRADING" &&
     symbol.contractType === "PERPETUAL" &&
     /^[A-Z0-9]{5,24}$/u.test(symbol.symbol)
+  );
+}
+
+function isTradableBybitInstrument(instrument: BybitInstrument) {
+  return (
+    instrument.status === "Trading" &&
+    instrument.quoteCoin === "USDT" &&
+    /^[A-Z0-9]{5,24}$/u.test(instrument.symbol)
+  );
+}
+
+function toOkxSymbol(instId: string) {
+  return instId.endsWith("-USDT-SWAP")
+    ? instId.replace("-USDT-SWAP", "USDT").replace(/-/gu, "")
+    : instId.replace(/-/gu, "");
+}
+
+function isTradableOkxInstrument(instrument: OkxInstrument) {
+  return (
+    instrument.state === "live" &&
+    instrument.quoteCcy === "USDT" &&
+    instrument.instId.endsWith("-USDT-SWAP") &&
+    /^[A-Z0-9-]{5,32}$/u.test(instrument.instId)
   );
 }
 
@@ -170,12 +228,12 @@ async function fetchSpotAssets() {
 
   return (exchangeInfo.symbols ?? [])
     .filter(isTradableSpotSymbol)
-    .map((symbol) => ({
-      symbol: symbol.symbol,
-      baseAsset: symbol.baseAsset,
-      quoteAsset: symbol.quoteAsset,
-      marketTypes: ["spot"] as Array<"spot" | "futures">,
-    }));
+        .map((symbol) => ({
+          symbol: symbol.symbol,
+          baseAsset: symbol.baseAsset,
+          quoteAsset: symbol.quoteAsset,
+          marketTypes: ["spot"] as MarketType[],
+        }));
 }
 
 async function fetchFuturesAssets() {
@@ -201,7 +259,7 @@ async function fetchFuturesAssets() {
           symbol: symbol.symbol,
           baseAsset: symbol.baseAsset,
           quoteAsset: symbol.quoteAsset,
-          marketTypes: ["futures"] as Array<"spot" | "futures">,
+          marketTypes: ["futures"] as MarketType[],
         }));
     } catch {
       continue;
@@ -209,6 +267,87 @@ async function fetchFuturesAssets() {
   }
 
   throw new Error("Binance Futures symbols unavailable.");
+}
+
+async function fetchBybitAssets() {
+  const assets: CryptoAsset[] = [];
+  let cursor = "";
+
+  for (let page = 0; page < 5; page += 1) {
+    const url = new URL("/v5/market/instruments-info", bybitBaseUrl);
+    url.searchParams.set("category", "linear");
+    url.searchParams.set("limit", "1000");
+
+    if (cursor) {
+      url.searchParams.set("cursor", cursor);
+    }
+
+    const response = await fetch(url, {
+      next: { revalidate: 60 * 60 },
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Bybit returned ${response.status}.`);
+    }
+
+    const payload = (await response.json()) as BybitInstrumentsResponse;
+
+    if (payload.retCode !== 0) {
+      throw new Error(`Bybit ${payload.retCode}: ${payload.retMsg}`);
+    }
+
+    assets.push(
+      ...(payload.result?.list ?? [])
+        .filter(isTradableBybitInstrument)
+        .map((instrument) => ({
+          symbol: instrument.symbol,
+          baseAsset: instrument.baseCoin,
+          quoteAsset: instrument.quoteCoin,
+          marketTypes: ["bybit"] as MarketType[],
+        })),
+    );
+
+    cursor = payload.result?.nextPageCursor ?? "";
+
+    if (!cursor) {
+      break;
+    }
+  }
+
+  return assets;
+}
+
+async function fetchOkxAssets() {
+  const url = new URL("/api/v5/public/instruments", okxBaseUrl);
+  url.searchParams.set("instType", "SWAP");
+  const response = await fetch(url, {
+    next: { revalidate: 60 * 60 },
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`OKX returned ${response.status}.`);
+  }
+
+  const payload = (await response.json()) as OkxInstrumentsResponse;
+
+  if (payload.code !== "0") {
+    throw new Error(`OKX ${payload.code}: ${payload.msg}`);
+  }
+
+  return (payload.data ?? [])
+    .filter(isTradableOkxInstrument)
+    .map((instrument) => ({
+      symbol: toOkxSymbol(instrument.instId),
+      baseAsset: instrument.baseCcy,
+      quoteAsset: instrument.quoteCcy,
+      marketTypes: ["okx"] as MarketType[],
+    }));
 }
 
 async function fetchBinanceAssets() {
@@ -228,12 +367,31 @@ async function fetchBinanceAssets() {
   return assets;
 }
 
+async function fetchLiveAssets() {
+  const [binanceResult, bybitResult, okxResult] = await Promise.allSettled([
+    fetchBinanceAssets(),
+    fetchBybitAssets(),
+    fetchOkxAssets(),
+  ]);
+  const binanceAssets =
+    binanceResult.status === "fulfilled" ? binanceResult.value : [];
+  const bybitAssets = bybitResult.status === "fulfilled" ? bybitResult.value : [];
+  const okxAssets = okxResult.status === "fulfilled" ? okxResult.value : [];
+  const assets = mergeAssets([binanceAssets, bybitAssets, okxAssets]);
+
+  if (assets.length === 0) {
+    throw new Error("No live symbols available.");
+  }
+
+  return assets;
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const query = normalizeQuery(url.searchParams.get("query"));
 
   try {
-    const assets = await fetchBinanceAssets();
+    const assets = await fetchLiveAssets();
 
     return NextResponse.json({
       assets: filterAssets(assets, query),
