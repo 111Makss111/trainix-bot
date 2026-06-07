@@ -9,6 +9,7 @@ const binanceFuturesBaseUrls = [
   "https://fapi4.binance.com",
 ];
 const bybitBaseUrls = ["https://api.bybit.com", "https://api.bytick.com"];
+const bitgetBaseUrl = "https://api.bitget.com";
 const okxBaseUrl = "https://www.okx.com";
 const popularSymbols = [
   "BTCUSDT",
@@ -80,7 +81,20 @@ type OkxInstrumentsResponse = {
   data?: OkxInstrument[];
 };
 
-type MarketType = "spot" | "futures" | "bybit" | "okx";
+type BitgetContract = {
+  symbol: string;
+  baseCoin: string;
+  quoteCoin: string;
+  symbolStatus: string;
+};
+
+type BitgetContractsResponse = {
+  code: string;
+  msg: string;
+  data?: BitgetContract[];
+};
+
+type MarketType = "spot" | "futures" | "bybit" | "bitget" | "okx";
 
 type CryptoAsset = {
   symbol: string;
@@ -100,9 +114,10 @@ function toFallbackAsset(symbol: string): CryptoAsset {
     symbol,
     baseAsset: quoteAsset ? symbol.slice(0, -quoteAsset.length) : symbol,
     quoteAsset,
-    marketTypes: symbol === "POPCATUSDT" || symbol.startsWith("1000")
-      ? ["futures", "bybit"]
-      : ["spot", "futures", "bybit"],
+    marketTypes:
+      symbol === "POPCATUSDT" || symbol === "BTWUSDT" || symbol.startsWith("1000")
+        ? ["futures", "bybit", "bitget"]
+        : ["spot", "futures", "bybit", "bitget"],
   };
 }
 
@@ -142,6 +157,14 @@ function isTradableOkxInstrument(instrument: OkxInstrument) {
     instrument.quoteCcy === "USDT" &&
     instrument.instId.endsWith("-USDT-SWAP") &&
     /^[A-Z0-9-]{5,32}$/u.test(instrument.instId)
+  );
+}
+
+function isTradableBitgetContract(contract: BitgetContract) {
+  return (
+    contract.symbolStatus === "normal" &&
+    contract.quoteCoin === "USDT" &&
+    /^[A-Z0-9]{5,24}$/u.test(contract.symbol)
   );
 }
 
@@ -358,6 +381,36 @@ async function fetchOkxAssets() {
     }));
 }
 
+async function fetchBitgetAssets() {
+  const url = new URL("/api/v2/mix/market/contracts", bitgetBaseUrl);
+  url.searchParams.set("productType", "usdt-futures");
+  const response = await fetch(url, {
+    next: { revalidate: 60 * 60 },
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Bitget returned ${response.status}.`);
+  }
+
+  const payload = (await response.json()) as BitgetContractsResponse;
+
+  if (payload.code !== "00000") {
+    throw new Error(`Bitget ${payload.code}: ${payload.msg}`);
+  }
+
+  return (payload.data ?? [])
+    .filter(isTradableBitgetContract)
+    .map((contract) => ({
+      symbol: contract.symbol,
+      baseAsset: contract.baseCoin,
+      quoteAsset: contract.quoteCoin,
+      marketTypes: ["bitget"] as MarketType[],
+    }));
+}
+
 async function fetchBinanceAssets() {
   const [spotResult, futuresResult] = await Promise.allSettled([
     fetchSpotAssets(),
@@ -376,16 +429,25 @@ async function fetchBinanceAssets() {
 }
 
 async function fetchLiveAssets() {
-  const [binanceResult, bybitResult, okxResult] = await Promise.allSettled([
-    fetchBinanceAssets(),
-    fetchBybitAssets(),
-    fetchOkxAssets(),
-  ]);
+  const [binanceResult, bybitResult, bitgetResult, okxResult] =
+    await Promise.allSettled([
+      fetchBinanceAssets(),
+      fetchBybitAssets(),
+      fetchBitgetAssets(),
+      fetchOkxAssets(),
+    ]);
   const binanceAssets =
     binanceResult.status === "fulfilled" ? binanceResult.value : [];
   const bybitAssets = bybitResult.status === "fulfilled" ? bybitResult.value : [];
+  const bitgetAssets =
+    bitgetResult.status === "fulfilled" ? bitgetResult.value : [];
   const okxAssets = okxResult.status === "fulfilled" ? okxResult.value : [];
-  const assets = mergeAssets([binanceAssets, bybitAssets, okxAssets]);
+  const assets = mergeAssets([
+    binanceAssets,
+    bybitAssets,
+    bitgetAssets,
+    okxAssets,
+  ]);
 
   if (assets.length === 0) {
     throw new Error("No live symbols available.");

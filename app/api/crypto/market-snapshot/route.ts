@@ -27,6 +27,7 @@ const binanceFuturesBaseUrls = [
   "https://fapi4.binance.com",
 ];
 const bybitBaseUrls = ["https://api.bybit.com", "https://api.bytick.com"];
+const bitgetBaseUrl = "https://api.bitget.com";
 const okxBaseUrl = "https://www.okx.com";
 const allowedTimeframes = new Set<TradeTimeframe>(["5m", "15m", "1h", "4h"]);
 const analysisTimeframes: MarketAnalysisTimeframe[] = [
@@ -50,6 +51,13 @@ const okxBarByTimeframe: Record<MarketAnalysisTimeframe, string> = {
   "4h": "4H",
   "1d": "1D",
 };
+const bitgetGranularityByTimeframe: Record<MarketAnalysisTimeframe, string> = {
+  "5m": "5m",
+  "15m": "15m",
+  "1h": "1H",
+  "4h": "4H",
+  "1d": "1D",
+};
 const candleLimitByTimeframe: Record<MarketAnalysisTimeframe, string> = {
   "5m": "180",
   "15m": "180",
@@ -61,9 +69,14 @@ const minimumKlineCandles = 20;
 
 type KlineSource = {
   baseUrl: string;
-  kind: "spot" | "futures" | "bybit" | "okx";
+  kind: "spot" | "futures" | "bybit" | "bitget" | "okx";
   path: string;
-  requestType: "symbol" | "continuous" | "bybit-linear" | "okx-swap";
+  requestType:
+    | "symbol"
+    | "continuous"
+    | "bybit-linear"
+    | "bitget-futures"
+    | "okx-swap";
 };
 
 type KlineVenue = {
@@ -90,6 +103,16 @@ class MarketDataFetchError extends Error {
     super(message);
     this.name = "MarketDataFetchError";
     this.diagnostics = diagnostics;
+  }
+}
+
+class KlineSourceHttpError extends Error {
+  status: number;
+
+  constructor(source: KlineSource, status: number, message: string) {
+    super(`${source.kind} ${status}: ${message}`);
+    this.name = "KlineSourceHttpError";
+    this.status = status;
   }
 }
 
@@ -142,6 +165,22 @@ type OkxKlineResponse = {
   code: string;
   msg: string;
   data?: OkxKline[];
+};
+
+type BitgetKline = [
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+];
+
+type BitgetKlineResponse = {
+  code: string;
+  msg: string;
+  data?: BitgetKline[];
 };
 
 function normalizeSymbol(value: string | null) {
@@ -206,6 +245,20 @@ function toOkxCandle(kline: OkxKline): Candle {
   };
 }
 
+function toBitgetCandle(kline: BitgetKline): Candle {
+  const openTime = Number(kline[0]);
+
+  return {
+    openTime,
+    open: Number(kline[1]),
+    high: Number(kline[2]),
+    low: Number(kline[3]),
+    close: Number(kline[4]),
+    volume: Number(kline[5]),
+    closeTime: openTime,
+  };
+}
+
 async function readJsonResponse<T>(response: Response, source: KlineSource) {
   const responseText = await response.text();
 
@@ -236,6 +289,10 @@ async function fetchKlinesFromSource(
     url.searchParams.set("category", "linear");
     url.searchParams.set("symbol", symbol);
     url.searchParams.set("interval", bybitIntervalByTimeframe[interval]);
+  } else if (source.requestType === "bitget-futures") {
+    url.searchParams.set("symbol", symbol);
+    url.searchParams.set("productType", "usdt-futures");
+    url.searchParams.set("granularity", bitgetGranularityByTimeframe[interval]);
   } else if (source.requestType === "continuous") {
     url.searchParams.set("pair", symbol);
     url.searchParams.set("contractType", "PERPETUAL");
@@ -243,11 +300,20 @@ async function fetchKlinesFromSource(
     url.searchParams.set("symbol", symbol);
   }
 
-  if (source.requestType !== "bybit-linear" && source.requestType !== "okx-swap") {
+  if (
+    source.requestType !== "bybit-linear" &&
+    source.requestType !== "bitget-futures" &&
+    source.requestType !== "okx-swap"
+  ) {
     url.searchParams.set("interval", interval);
   }
 
-  url.searchParams.set("limit", candleLimitByTimeframe[interval]);
+  url.searchParams.set(
+    "limit",
+    source.requestType === "bitget-futures"
+      ? String(Math.min(Number(candleLimitByTimeframe[interval]), 100))
+      : candleLimitByTimeframe[interval],
+  );
 
   const response = await fetch(url, {
     cache: "no-store",
@@ -258,7 +324,11 @@ async function fetchKlinesFromSource(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`${source.kind} ${response.status}: ${errorText.slice(0, 160)}`);
+    throw new KlineSourceHttpError(
+      source,
+      response.status,
+      errorText.slice(0, 160),
+    );
   }
 
   if (source.requestType === "bybit-linear") {
@@ -321,6 +391,36 @@ async function fetchKlinesFromSource(
     };
   }
 
+  if (source.requestType === "bitget-futures") {
+    const payload = await readJsonResponse<BitgetKlineResponse>(response, source);
+
+    if (payload.code !== "00000") {
+      throw new Error(`${source.kind} ${payload.code}: ${payload.msg}`);
+    }
+
+    const candles = (payload.data ?? [])
+      .map(toBitgetCandle)
+      .filter((candle) => {
+        return (
+          Number.isFinite(candle.open) &&
+          Number.isFinite(candle.high) &&
+          Number.isFinite(candle.low) &&
+          Number.isFinite(candle.close) &&
+          Number.isFinite(candle.volume)
+        );
+      })
+      .sort((first, second) => first.openTime - second.openTime);
+
+    if (candles.length < minimumKlineCandles) {
+      throw new Error(`${source.kind} returned only ${candles.length} candles`);
+    }
+
+    return {
+      candles,
+      source: source.kind,
+    };
+  }
+
   const klines = await readJsonResponse<BinanceKline[]>(response, source);
 
   const candles = klines.map(toCandle).filter((candle) => {
@@ -353,6 +453,18 @@ const klineVenues: KlineVenue[] = [
       path: "/v5/market/kline",
       requestType: "bybit-linear" as const,
     })),
+  },
+  {
+    kind: "bitget",
+    label: "Bitget Futures",
+    sources: [
+      {
+        baseUrl: bitgetBaseUrl,
+        kind: "bitget" as const,
+        path: "/api/v2/mix/market/candles",
+        requestType: "bitget-futures" as const,
+      },
+    ],
   },
   {
     kind: "okx",
@@ -402,12 +514,21 @@ async function fetchKlinesFromVenue(
   interval: MarketAnalysisTimeframe,
 ): Promise<KlineFetchData> {
   const errors: string[] = [];
+  const stopRetryStatuses = new Set([403, 429, 451]);
 
   for (const source of venue.sources) {
     try {
       return await fetchKlinesFromSource(source, symbol, interval);
     } catch (error) {
       errors.push(error instanceof Error ? error.message : `${source.kind} failed`);
+
+      if (
+        source.kind !== "bybit" &&
+        error instanceof KlineSourceHttpError &&
+        stopRetryStatuses.has(error.status)
+      ) {
+        break;
+      }
     }
   }
 
@@ -462,6 +583,24 @@ async function fetchVenueMarketPackage(
     symbol,
     selectedTimeframe,
   );
+
+  if (!selectedResult.data) {
+    return {
+      selectedData: null,
+      multiTimeframeCandles: {} as Partial<Record<MarketAnalysisTimeframe, Candle[]>>,
+      diagnostic: {
+        symbol,
+        venue: venue.label,
+        source: venue.kind,
+        status: "failed",
+        selectedTimeframe,
+        selectedCandleCount: 0,
+        selectedError: selectedResult.check.error,
+        checks: [selectedResult.check],
+      } satisfies MarketDataDiagnostic,
+    };
+  }
+
   const otherResults = await Promise.all(
     analysisTimeframes
       .filter((interval) => interval !== selectedTimeframe)

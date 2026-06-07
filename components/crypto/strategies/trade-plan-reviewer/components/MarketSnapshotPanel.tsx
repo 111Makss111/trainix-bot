@@ -46,9 +46,11 @@ export function MarketSnapshotPanel({
         ? "FUTURES"
         : market.source === "bybit"
           ? "BYBIT"
-          : market.source === "okx"
-            ? "OKX"
-            : "НЕМАЄ ДАНИХ";
+          : market.source === "bitget"
+            ? "BITGET"
+            : market.source === "okx"
+              ? "OKX"
+              : "НЕМАЄ ДАНИХ";
   const hasMarketData = market.source !== "fallback" && market.candleCount > 0;
 
   return (

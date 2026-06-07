@@ -86,7 +86,13 @@ export type PriceActionState = {
   takeProfit: number | null;
 };
 
-export type MarketSource = "spot" | "futures" | "bybit" | "okx" | "fallback";
+export type MarketSource =
+  | "spot"
+  | "futures"
+  | "bybit"
+  | "bitget"
+  | "okx"
+  | "fallback";
 
 export type MarketDataDiagnosticStatus = "ok" | "partial" | "failed";
 
