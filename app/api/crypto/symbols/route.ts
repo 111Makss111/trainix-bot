@@ -8,7 +8,7 @@ const binanceFuturesBaseUrls = [
   "https://fapi3.binance.com",
   "https://fapi4.binance.com",
 ];
-const bybitBaseUrl = "https://api.bybit.com";
+const bybitBaseUrls = ["https://api.bybit.com", "https://api.bytick.com"];
 const okxBaseUrl = "https://www.okx.com";
 const popularSymbols = [
   "BTCUSDT",
@@ -270,54 +270,62 @@ async function fetchFuturesAssets() {
 }
 
 async function fetchBybitAssets() {
-  const assets: CryptoAsset[] = [];
-  let cursor = "";
+  for (const baseUrl of bybitBaseUrls) {
+    try {
+      const assets: CryptoAsset[] = [];
+      let cursor = "";
 
-  for (let page = 0; page < 5; page += 1) {
-    const url = new URL("/v5/market/instruments-info", bybitBaseUrl);
-    url.searchParams.set("category", "linear");
-    url.searchParams.set("limit", "1000");
+      for (let page = 0; page < 5; page += 1) {
+        const url = new URL("/v5/market/instruments-info", baseUrl);
+        url.searchParams.set("category", "linear");
+        url.searchParams.set("limit", "1000");
 
-    if (cursor) {
-      url.searchParams.set("cursor", cursor);
-    }
+        if (cursor) {
+          url.searchParams.set("cursor", cursor);
+        }
 
-    const response = await fetch(url, {
-      next: { revalidate: 60 * 60 },
-      headers: {
-        Accept: "application/json",
-      },
-    });
+        const response = await fetch(url, {
+          next: { revalidate: 60 * 60 },
+          headers: {
+            Accept: "application/json",
+          },
+        });
 
-    if (!response.ok) {
-      throw new Error(`Bybit returned ${response.status}.`);
-    }
+        if (!response.ok) {
+          throw new Error(`Bybit returned ${response.status}.`);
+        }
 
-    const payload = (await response.json()) as BybitInstrumentsResponse;
+        const payload = (await response.json()) as BybitInstrumentsResponse;
 
-    if (payload.retCode !== 0) {
-      throw new Error(`Bybit ${payload.retCode}: ${payload.retMsg}`);
-    }
+        if (payload.retCode !== 0) {
+          throw new Error(`Bybit ${payload.retCode}: ${payload.retMsg}`);
+        }
 
-    assets.push(
-      ...(payload.result?.list ?? [])
-        .filter(isTradableBybitInstrument)
-        .map((instrument) => ({
-          symbol: instrument.symbol,
-          baseAsset: instrument.baseCoin,
-          quoteAsset: instrument.quoteCoin,
-          marketTypes: ["bybit"] as MarketType[],
-        })),
-    );
+        assets.push(
+          ...(payload.result?.list ?? [])
+            .filter(isTradableBybitInstrument)
+            .map((instrument) => ({
+              symbol: instrument.symbol,
+              baseAsset: instrument.baseCoin,
+              quoteAsset: instrument.quoteCoin,
+              marketTypes: ["bybit"] as MarketType[],
+            })),
+        );
 
-    cursor = payload.result?.nextPageCursor ?? "";
+        cursor = payload.result?.nextPageCursor ?? "";
 
-    if (!cursor) {
-      break;
+        if (!cursor) {
+          break;
+        }
+      }
+
+      return assets;
+    } catch {
+      continue;
     }
   }
 
-  return assets;
+  throw new Error("Bybit symbols unavailable.");
 }
 
 async function fetchOkxAssets() {
