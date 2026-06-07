@@ -1,6 +1,7 @@
 import { formatTradingViewPrice } from "../formatters";
 import type {
   DirectionCandidate,
+  MarketZoneReaction,
   DirectionPriority,
   ReviewStatus,
 } from "../types";
@@ -15,6 +16,13 @@ const statusClassName: Record<ReviewStatus, string> = {
   fail: "border-rose-300/18 bg-rose-300/8 text-rose-100",
 };
 
+const reactionClassName: Record<MarketZoneReaction["strength"], string> = {
+  strong: "border-emerald-300/18 bg-emerald-300/8 text-emerald-100",
+  medium: "border-sky-300/18 bg-sky-300/8 text-sky-100",
+  weak: "border-amber-300/18 bg-amber-300/8 text-amber-100",
+  none: "border-white/10 bg-white/[0.04] text-white/52",
+};
+
 function DirectionCard({
   candidate,
   isPreferred,
@@ -24,6 +32,7 @@ function DirectionCard({
 }) {
   const levels = candidate.review.levels;
   const rewardToRisk = levels.rewardToRisk;
+  const reaction = levels.zoneReaction;
 
   return (
     <div
@@ -83,7 +92,17 @@ function DirectionCard({
             ціль {levels.targetAtrMultiple.toFixed(1)} ATR
           </span>
         ) : null}
+        <span
+          className={[
+            "rounded-full border px-2.5 py-1",
+            reactionClassName[reaction.strength],
+          ].join(" ")}
+        >
+          реакція {reaction.summary}
+        </span>
       </div>
+
+      <ReactionDetails reaction={reaction} />
 
       <div className="mt-3 space-y-2">
         {candidate.reasons.map((reason) => (
@@ -96,6 +115,24 @@ function DirectionCard({
         ))}
       </div>
     </div>
+  );
+}
+
+function ReactionDetails({ reaction }: { reaction: MarketZoneReaction }) {
+  return (
+    <details className="mt-3 rounded-[0.85rem] border border-white/10 bg-black/14 px-3 py-2 text-xs text-white/52">
+      <summary className="cursor-pointer select-none text-white/64">
+        Деталі реакції
+      </summary>
+      <div className="mt-2 grid gap-1 leading-5">
+        <p>{reaction.detail}</p>
+        <p>
+          Зона: {reaction.zoneLabel} {formatTradingViewPrice(reaction.zoneLow)} -{" "}
+          {formatTradingViewPrice(reaction.zoneHigh)}
+        </p>
+        {reaction.touchedAt ? <p>Свічка: {reaction.touchedAt}</p> : null}
+      </div>
+    </details>
   );
 }
 

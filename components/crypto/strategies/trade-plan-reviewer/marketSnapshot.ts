@@ -8,6 +8,7 @@ import type {
   TrendDirection,
   VolatilityState,
 } from "./types";
+import { getZoneReaction } from "./zoneReaction";
 
 export type Candle = {
   openTime: number;
@@ -559,6 +560,10 @@ export function buildMarketSnapshotFromCandles({
     candles,
     multiTimeframeCandles,
   });
+  const zoneReactions = {
+    support: getZoneReaction(candles, zones.nearestSupport),
+    resistance: getZoneReaction(candles, zones.nearestResistance),
+  };
   const analyzedTimeframes = analysisTimeframeOrder.filter((analysisTimeframe) => {
     if (analysisTimeframe === timeframe) {
       return true;
@@ -589,6 +594,7 @@ export function buildMarketSnapshotFromCandles({
     volumeState: getVolumeState(candles),
     nearestSupport: zones.nearestSupport,
     nearestResistance: zones.nearestResistance,
+    zoneReactions,
     zones: zones.zones,
     updatedAt: new Date().toISOString(),
     source,
@@ -639,6 +645,36 @@ export function getFallbackMarketSnapshot(
       timeframes: [timeframe],
       sourceCount: 1,
       isMultiTimeframe: false,
+    },
+    zoneReactions: {
+      support: {
+        zoneKind: "support",
+        zoneLabel: "Орієнтовна підтримка",
+        zoneLow: currentPrice * 0.976,
+        zoneHigh: currentPrice * 0.984,
+        strength: "none",
+        behavior: "none",
+        score: 0,
+        touchedAt: null,
+        wickPercent: 0,
+        closeReturned: false,
+        summary: "реакції немає",
+        detail: "Реакція не рахується без живих свічок.",
+      },
+      resistance: {
+        zoneKind: "resistance",
+        zoneLabel: "Орієнтовний опір",
+        zoneLow: currentPrice * 1.016,
+        zoneHigh: currentPrice * 1.024,
+        strength: "none",
+        behavior: "none",
+        score: 0,
+        touchedAt: null,
+        wickPercent: 0,
+        closeReturned: false,
+        summary: "реакції немає",
+        detail: "Реакція не рахується без живих свічок.",
+      },
     },
     zones: [
       {

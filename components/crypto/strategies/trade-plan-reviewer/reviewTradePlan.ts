@@ -2,6 +2,7 @@ import type {
   EntryMode,
   MarketSnapshot,
   MarketZone,
+  MarketZoneReaction,
   ReviewGrade,
   ReviewItem,
   ReviewMetric,
@@ -344,6 +345,32 @@ function getMtfSignalDetail(zone: MarketZone) {
   return `Зона поки тільки на робочому таймфреймі ${formatTimeframes(zone.timeframes)}. Підтвердження зі старших ТФ немає.`;
 }
 
+function getReactionStatus(reaction: MarketZoneReaction): ReviewStatus {
+  if (reaction.behavior === "breakdown" || reaction.behavior === "breakout") {
+    return "fail";
+  }
+
+  if (reaction.strength === "strong" || reaction.strength === "medium") {
+    return "pass";
+  }
+
+  return "warning";
+}
+
+function getReactionSignalDetail(reaction: MarketZoneReaction) {
+  if (reaction.behavior === "none") {
+    return "Реакції біля робочої зони ще немає.";
+  }
+
+  if (reaction.behavior === "breakdown" || reaction.behavior === "breakout") {
+    return `${reaction.summary}. Зона пробита без швидкого повернення.`;
+  }
+
+  return `${reaction.summary}. Тінь ${reaction.wickPercent.toFixed(0)}%, ${
+    reaction.closeReturned ? "закриття повернулось" : "закриття слабке"
+  }.`;
+}
+
 function getEntrySignalDetail({
   direction,
   entryMode,
@@ -568,6 +595,11 @@ export function reviewTradePlan(
   const zoneStatus =
     zoneDistancePercent <= 1 ? "pass" : zoneDistancePercent <= 2.5 ? "warning" : "fail";
   const mtfStatus = getMtfStatus(setupZone);
+  const zoneReaction =
+    plan.direction === "long"
+      ? market.zoneReactions.support
+      : market.zoneReactions.resistance;
+  const reactionStatus = getReactionStatus(zoneReaction);
   const targetZone =
     plan.direction === "long"
       ? market.nearestResistance
@@ -653,6 +685,12 @@ export function reviewTradePlan(
       "MTF-підтвердження",
       getMtfSignalDetail(setupZone),
       mtfStatus,
+    ),
+    buildSignal(
+      "reaction",
+      "Реакція зони",
+      getReactionSignalDetail(zoneReaction),
+      reactionStatus,
     ),
     buildSignal(
       "noise",
@@ -742,6 +780,7 @@ export function reviewTradePlan(
       rewardToRisk,
       stopAtrMultiple,
       targetAtrMultiple,
+      zoneReaction,
     },
     metrics,
     signals,
