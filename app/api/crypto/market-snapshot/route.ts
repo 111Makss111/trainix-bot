@@ -316,6 +316,12 @@ async function fetchKlinesFromSource(
 async function fetchKlines(symbol: string, interval: MarketAnalysisTimeframe) {
   const sources: KlineSource[] = [
     {
+      baseUrl: bybitBaseUrl,
+      kind: "bybit" as const,
+      path: "/v5/market/kline",
+      requestType: "bybit-linear" as const,
+    },
+    {
       baseUrl: okxBaseUrl,
       kind: "okx" as const,
       path: "/api/v5/market/candles",
@@ -333,12 +339,6 @@ async function fetchKlines(symbol: string, interval: MarketAnalysisTimeframe) {
       path: "/fapi/v1/continuousKlines",
       requestType: "continuous" as const,
     })),
-    {
-      baseUrl: bybitBaseUrl,
-      kind: "bybit" as const,
-      path: "/v5/market/kline",
-      requestType: "bybit-linear" as const,
-    },
     ...binanceSpotBaseUrls.map((baseUrl) => ({
       baseUrl,
       kind: "spot" as const,
@@ -346,17 +346,24 @@ async function fetchKlines(symbol: string, interval: MarketAnalysisTimeframe) {
       requestType: "symbol" as const,
     })),
   ];
-  const errors: string[] = [];
+  const errorsByKind = new Map<KlineSource["kind"], string>();
 
   for (const source of sources) {
     try {
       return await fetchKlinesFromSource(source, symbol, interval);
     } catch (error) {
-      errors.push(error instanceof Error ? error.message : `${source.kind} failed`);
+      errorsByKind.set(
+        source.kind,
+        error instanceof Error ? error.message : `${source.kind} failed`,
+      );
     }
   }
 
-  throw new Error(errors.slice(-3).join("; ") || "No market data source returned candles.");
+  const details = Array.from(errorsByKind.entries())
+    .map(([kind, error]) => `${kind}: ${error}`)
+    .join("; ");
+
+  throw new Error(details || "No market data source returned candles.");
 }
 
 async function fetchOptionalKlines(
