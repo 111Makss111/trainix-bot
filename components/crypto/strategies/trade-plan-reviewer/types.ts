@@ -88,6 +88,27 @@ export type PriceActionState = {
 
 export type MarketSource = "spot" | "futures" | "bybit" | "okx" | "fallback";
 
+export type MarketDataDiagnosticStatus = "ok" | "partial" | "failed";
+
+export type MarketDataDiagnosticCheck = {
+  timeframe: MarketAnalysisTimeframe;
+  status: "ok" | "failed";
+  candleCount: number;
+  source: Exclude<MarketSource, "fallback"> | null;
+  error: string | null;
+};
+
+export type MarketDataDiagnostic = {
+  symbol: string;
+  venue: string;
+  source: Exclude<MarketSource, "fallback">;
+  status: MarketDataDiagnosticStatus;
+  selectedTimeframe: TradeTimeframe;
+  selectedCandleCount: number;
+  selectedError: string | null;
+  checks: MarketDataDiagnosticCheck[];
+};
+
 export type MarketSnapshot = {
   symbol: string;
   timeframe: TradeTimeframe;

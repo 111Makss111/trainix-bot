@@ -28,6 +28,7 @@ const analysisTimeframeOrder: MarketAnalysisTimeframe[] = [
   "4h",
   "1d",
 ];
+const minimumSnapshotCandles = 20;
 
 const timeframeLookbackCandles: Record<MarketAnalysisTimeframe, number> = {
   "5m": 120,
@@ -502,7 +503,7 @@ function buildConfirmedWorkingZones({
     .flatMap((timeframe) => {
       const timeframeCandles = candlesByTimeframe[timeframe];
 
-      if (!timeframeCandles || timeframeCandles.length < 30) {
+      if (!timeframeCandles || timeframeCandles.length < minimumSnapshotCandles) {
         return [];
       }
 
@@ -545,7 +546,11 @@ export function buildMarketSnapshotFromCandles({
 }): MarketSnapshot {
   const currentCandle = candles.at(-1);
 
-  if (!currentCandle || candles.length < 30 || btcCandles.length < 30) {
+  if (
+    !currentCandle ||
+    candles.length < minimumSnapshotCandles ||
+    btcCandles.length < minimumSnapshotCandles
+  ) {
     throw new Error("Not enough candle data to build market snapshot.");
   }
 
@@ -580,7 +585,10 @@ export function buildMarketSnapshotFromCandles({
       return true;
     }
 
-    return (multiTimeframeCandles?.[analysisTimeframe]?.length ?? 0) >= 30;
+    return (
+      (multiTimeframeCandles?.[analysisTimeframe]?.length ?? 0) >=
+      minimumSnapshotCandles
+    );
   });
   const rangeWidthPercent =
     ((zones.nearestResistance.price - zones.nearestSupport.price) /

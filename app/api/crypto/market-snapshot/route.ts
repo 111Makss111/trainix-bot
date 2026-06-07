@@ -4,7 +4,9 @@ import {
   type Candle,
 } from "@/components/crypto/strategies/trade-plan-reviewer/marketSnapshot";
 import type {
+  MarketDataDiagnostic,
   MarketAnalysisTimeframe,
+  MarketSource,
   TradeTimeframe,
 } from "@/components/crypto/strategies/trade-plan-reviewer/types";
 
@@ -55,6 +57,7 @@ const candleLimitByTimeframe: Record<MarketAnalysisTimeframe, string> = {
   "4h": "260",
   "1d": "300",
 };
+const minimumKlineCandles = 20;
 
 type KlineSource = {
   baseUrl: string;
@@ -68,6 +71,27 @@ type KlineVenue = {
   label: string;
   sources: KlineSource[];
 };
+
+type KlineFetchData = {
+  candles: Candle[];
+  source: Exclude<MarketSource, "fallback">;
+};
+
+type TimeframeFetchResult = {
+  interval: MarketAnalysisTimeframe;
+  data: KlineFetchData | null;
+  check: MarketDataDiagnostic["checks"][number];
+};
+
+class MarketDataFetchError extends Error {
+  diagnostics: MarketDataDiagnostic[];
+
+  constructor(message: string, diagnostics: MarketDataDiagnostic[]) {
+    super(message);
+    this.name = "MarketDataFetchError";
+    this.diagnostics = diagnostics;
+  }
+}
 
 type BinanceKline = [
   number,
@@ -257,7 +281,7 @@ async function fetchKlinesFromSource(
       })
       .sort((first, second) => first.openTime - second.openTime);
 
-    if (candles.length < 30) {
+    if (candles.length < minimumKlineCandles) {
       throw new Error(`${source.kind} returned only ${candles.length} candles`);
     }
 
@@ -287,7 +311,7 @@ async function fetchKlinesFromSource(
       })
       .sort((first, second) => first.openTime - second.openTime);
 
-    if (candles.length < 30) {
+    if (candles.length < minimumKlineCandles) {
       throw new Error(`${source.kind} returned only ${candles.length} candles`);
     }
 
@@ -309,7 +333,7 @@ async function fetchKlinesFromSource(
     );
   });
 
-  if (candles.length < 30) {
+  if (candles.length < minimumKlineCandles) {
     throw new Error(`${source.kind} returned only ${candles.length} candles`);
   }
 
@@ -376,7 +400,7 @@ async function fetchKlinesFromVenue(
   venue: KlineVenue,
   symbol: string,
   interval: MarketAnalysisTimeframe,
-) {
+): Promise<KlineFetchData> {
   const errors: string[] = [];
 
   for (const source of venue.sources) {
@@ -390,38 +414,87 @@ async function fetchKlinesFromVenue(
   throw new Error(`${venue.label}: ${errors.at(-1) ?? "no candles"}`);
 }
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "unknown market data error";
+}
+
+async function fetchTimeframeFromVenue(
+  venue: KlineVenue,
+  symbol: string,
+  interval: MarketAnalysisTimeframe,
+): Promise<TimeframeFetchResult> {
+  try {
+    const data = await fetchKlinesFromVenue(venue, symbol, interval);
+
+    return {
+      interval,
+      data,
+      check: {
+        timeframe: interval,
+        status: "ok",
+        candleCount: data.candles.length,
+        source: data.source,
+        error: null,
+      },
+    };
+  } catch (error) {
+    return {
+      interval,
+      data: null,
+      check: {
+        timeframe: interval,
+        status: "failed",
+        candleCount: 0,
+        source: null,
+        error: getErrorMessage(error),
+      },
+    };
+  }
+}
+
 async function fetchVenueMarketPackage(
   venue: KlineVenue,
   symbol: string,
   selectedTimeframe: TradeTimeframe,
 ) {
-  const selectedData = await fetchKlinesFromVenue(venue, symbol, selectedTimeframe);
+  const selectedResult = await fetchTimeframeFromVenue(
+    venue,
+    symbol,
+    selectedTimeframe,
+  );
   const otherResults = await Promise.all(
     analysisTimeframes
       .filter((interval) => interval !== selectedTimeframe)
-      .map(async (interval) => {
-        try {
-          return {
-            interval,
-            data: await fetchKlinesFromVenue(venue, symbol, interval),
-          };
-        } catch {
-          return {
-            interval,
-            data: null,
-          };
-        }
-      }),
+      .map((interval) => fetchTimeframeFromVenue(venue, symbol, interval)),
   );
+  const checks = [selectedResult, ...otherResults].map((result) => result.check);
+  const failedOptionalChecks = otherResults.filter((result) => !result.data);
+  const diagnostic: MarketDataDiagnostic = {
+    symbol,
+    venue: venue.label,
+    source: venue.kind,
+    status: selectedResult.data
+      ? failedOptionalChecks.length > 0
+        ? "partial"
+        : "ok"
+      : "failed",
+    selectedTimeframe,
+    selectedCandleCount: selectedResult.data?.candles.length ?? 0,
+    selectedError: selectedResult.check.error,
+    checks,
+  };
 
   return {
-    selectedData,
+    selectedData: selectedResult.data,
     multiTimeframeCandles: Object.fromEntries([
-      [selectedTimeframe, selectedData.candles],
-      ...otherResults
-        .filter((result) => result.data)
-        .map((result) => [result.interval, result.data?.candles]),
+      ...(selectedResult.data
+        ? ([[selectedTimeframe, selectedResult.data.candles]] as const)
+        : []),
+      ...otherResults.flatMap((result) =>
+        result.data ? [[result.interval, result.data.candles] as const] : [],
+      ),
     ]) as Partial<Record<MarketAnalysisTimeframe, Candle[]>>,
+    diagnostic,
   };
 }
 
@@ -429,23 +502,34 @@ async function fetchMarketPackage(
   symbol: string,
   selectedTimeframe: TradeTimeframe,
 ) {
-  const errors: string[] = [];
+  const diagnostics: MarketDataDiagnostic[] = [];
 
   for (const venue of klineVenues) {
-    try {
-      return await fetchVenueMarketPackage(venue, symbol, selectedTimeframe);
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : `${venue.label}: failed`);
+    const venuePackage = await fetchVenueMarketPackage(
+      venue,
+      symbol,
+      selectedTimeframe,
+    );
+
+    diagnostics.push(venuePackage.diagnostic);
+
+    if (venuePackage.selectedData) {
+      return {
+        ...venuePackage,
+        selectedData: venuePackage.selectedData,
+        diagnostics,
+      };
     }
   }
 
-  throw new Error(errors.join("; ") || "No exchange returned selected candles.");
+  throw new MarketDataFetchError(
+    "No exchange returned selected candles.",
+    diagnostics,
+  );
 }
 
 async function fetchBtcCandles(timeframe: TradeTimeframe) {
-  return fetchMarketPackage("BTCUSDT", timeframe).then(
-    (marketPackage) => marketPackage.selectedData,
-  );
+  return fetchMarketPackage("BTCUSDT", timeframe);
 }
 
 export async function GET(request: Request) {
@@ -460,31 +544,60 @@ export async function GET(request: Request) {
     );
   }
 
+  let diagnostics: MarketDataDiagnostic[] = [];
+
   try {
-    const [marketPackage, btcData] = await Promise.all([
+    const [marketResult, btcResult] = await Promise.allSettled([
       fetchMarketPackage(symbol, timeframe),
       fetchBtcCandles(timeframe),
     ]);
+
+    diagnostics = [
+      ...(marketResult.status === "fulfilled"
+        ? marketResult.value.diagnostics
+        : marketResult.reason instanceof MarketDataFetchError
+          ? marketResult.reason.diagnostics
+          : []),
+      ...(btcResult.status === "fulfilled"
+        ? btcResult.value.diagnostics
+        : btcResult.reason instanceof MarketDataFetchError
+          ? btcResult.reason.diagnostics
+          : []),
+    ];
+
+    if (marketResult.status === "rejected") {
+      throw new MarketDataFetchError(getErrorMessage(marketResult.reason), diagnostics);
+    }
+
+    if (btcResult.status === "rejected") {
+      throw new MarketDataFetchError(getErrorMessage(btcResult.reason), diagnostics);
+    }
+
+    const marketPackage = marketResult.value;
+    const btcPackage = btcResult.value;
 
     const market = buildMarketSnapshotFromCandles({
       symbol,
       timeframe,
       candles: marketPackage.selectedData.candles,
-      btcCandles: btcData.candles,
+      btcCandles: btcPackage.selectedData.candles,
       source: marketPackage.selectedData.source,
       multiTimeframeCandles: marketPackage.multiTimeframeCandles,
     });
 
-    return NextResponse.json({ market });
+    return NextResponse.json({ market, diagnostics });
   } catch (error) {
     const detail =
       error instanceof Error ? error.message : "Failed to load market data.";
+    const errorDiagnostics =
+      error instanceof MarketDataFetchError ? error.diagnostics : diagnostics;
 
     return NextResponse.json(
       {
         error:
           "Не вдалося отримати ринкові свічки для цього активу. Спробуй інший таймфрейм або актив.",
         detail,
+        diagnostics: errorDiagnostics,
       },
       { status: 502 },
     );

@@ -1,4 +1,5 @@
 import type {
+  MarketDataDiagnostic,
   MarketAnalysisTimeframe,
   MarketSnapshot,
   TrendDirection,
@@ -10,6 +11,7 @@ type MarketSnapshotPanelProps = {
   market: MarketSnapshot;
   isLoading: boolean;
   error: string | null;
+  diagnostics?: MarketDataDiagnostic[];
 };
 
 const trendLabel: Record<TrendDirection, string> = {
@@ -35,6 +37,7 @@ export function MarketSnapshotPanel({
   market,
   isLoading,
   error,
+  diagnostics = [],
 }: MarketSnapshotPanelProps) {
   const sourceLabel =
     market.source === "spot"
@@ -81,6 +84,13 @@ export function MarketSnapshotPanel({
           {error ??
             "Не вдалося отримати реальні свічки для цього активу. Авто-рівні не будуються без ринкових даних."}
         </div>
+      ) : null}
+
+      {diagnostics.length > 0 ? (
+        <MarketDataDiagnostics
+          diagnostics={diagnostics}
+          isOpenByDefault={!hasMarketData}
+        />
       ) : null}
 
       {hasMarketData ? (
@@ -177,6 +187,95 @@ export function MarketSnapshotPanel({
       ) : null}
     </section>
   );
+}
+
+function MarketDataDiagnostics({
+  diagnostics,
+  isOpenByDefault,
+}: {
+  diagnostics: MarketDataDiagnostic[];
+  isOpenByDefault: boolean;
+}) {
+  return (
+    <details
+      className="mt-4 rounded-[1.1rem] border border-white/10 bg-black/12 px-4 py-3"
+      open={isOpenByDefault}
+    >
+      <summary className="cursor-pointer list-none text-sm font-medium text-white/72">
+        Діагностика бірж
+        <span className="ml-2 text-xs font-normal text-white/38">
+          {diagnostics.length} перевірок
+        </span>
+      </summary>
+
+      <div className="mt-3 grid gap-2">
+        {diagnostics.map((diagnostic) => (
+          <div
+            key={`${diagnostic.symbol}-${diagnostic.venue}`}
+            className="rounded-[0.9rem] border border-white/8 bg-white/[0.03] px-3 py-2"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-medium text-white">
+                {diagnostic.symbol} · {diagnostic.venue}
+              </p>
+              <span
+                className={[
+                  "rounded-full border px-2.5 py-1 text-xs",
+                  diagnostic.status === "ok"
+                    ? "border-emerald-300/18 bg-emerald-300/8 text-emerald-100"
+                    : diagnostic.status === "partial"
+                      ? "border-amber-300/18 bg-amber-300/8 text-amber-100"
+                      : "border-rose-300/18 bg-rose-300/8 text-rose-100",
+                ].join(" ")}
+              >
+                {getDiagnosticStatusLabel(diagnostic.status)}
+              </span>
+            </div>
+
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {diagnostic.checks.map((check) => (
+                <span
+                  key={`${diagnostic.symbol}-${diagnostic.venue}-${check.timeframe}`}
+                  className={[
+                    "rounded-full border px-2 py-1 text-[0.7rem]",
+                    check.status === "ok"
+                      ? "border-white/10 bg-white/[0.04] text-white/68"
+                      : "border-rose-300/14 bg-rose-300/8 text-rose-100/78",
+                  ].join(" ")}
+                  title={check.error ?? undefined}
+                >
+                  {timeframeLabel[check.timeframe]}:{" "}
+                  {check.status === "ok" ? `${check.candleCount} свіч.` : "немає"}
+                </span>
+              ))}
+            </div>
+
+            {diagnostic.selectedError ? (
+              <p className="mt-2 text-xs leading-5 text-amber-100/72">
+                {shortenDiagnosticError(diagnostic.selectedError)}
+              </p>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function getDiagnosticStatusLabel(status: MarketDataDiagnostic["status"]) {
+  if (status === "ok") {
+    return "дані є";
+  }
+
+  if (status === "partial") {
+    return "частково";
+  }
+
+  return "немає";
+}
+
+function shortenDiagnosticError(error: string) {
+  return error.length > 180 ? `${error.slice(0, 180)}...` : error;
 }
 
 function SnapshotStat({

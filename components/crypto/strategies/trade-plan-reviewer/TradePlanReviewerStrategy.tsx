@@ -10,7 +10,7 @@ import { TradeLevelsPanel } from "./components/TradeLevelsPanel";
 import { initialTradePlan } from "./constants";
 import { getDirectionPriority } from "./directionPriority";
 import { getFallbackMarketSnapshot } from "./marketSnapshot";
-import type { MarketSnapshot, TradePlan } from "./types";
+import type { MarketDataDiagnostic, MarketSnapshot, TradePlan } from "./types";
 
 const savedMarketControlsKey = "trainix.tradePlanReviewer.marketControls";
 const autoRefreshMs = 30_000;
@@ -49,6 +49,9 @@ export function TradePlanReviewerStrategy() {
   );
   const [isMarketLoading, setIsMarketLoading] = useState(true);
   const [marketError, setMarketError] = useState<string | null>(null);
+  const [marketDiagnostics, setMarketDiagnostics] = useState<
+    MarketDataDiagnostic[]
+  >([]);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [hasLoadedSavedControls, setHasLoadedSavedControls] = useState(false);
 
@@ -100,6 +103,7 @@ export function TradePlanReviewerStrategy() {
 
     if (!/^[A-Z0-9]{5,20}$/.test(normalizedSymbol)) {
       setMarket(getFallbackMarketSnapshot(normalizedSymbol, plan.timeframe));
+      setMarketDiagnostics([]);
       setIsMarketLoading(false);
       setMarketError("Введи символ у форматі BTCUSDT.");
       return () => controller.abort();
@@ -107,6 +111,7 @@ export function TradePlanReviewerStrategy() {
 
     setIsMarketLoading(true);
     setMarketError(null);
+    setMarketDiagnostics([]);
 
     const timeoutId = window.setTimeout(async () => {
       try {
@@ -121,9 +126,11 @@ export function TradePlanReviewerStrategy() {
           market?: MarketSnapshot;
           error?: string;
           detail?: string;
+          diagnostics?: MarketDataDiagnostic[];
         };
 
         if (!response.ok || !payload.market) {
+          setMarketDiagnostics(payload.diagnostics ?? []);
           throw new Error(
             payload.detail
               ? `${payload.error ?? "Market data unavailable."} Деталі: ${payload.detail}`
@@ -132,6 +139,7 @@ export function TradePlanReviewerStrategy() {
         }
 
         setMarket(payload.market);
+        setMarketDiagnostics(payload.diagnostics ?? []);
         setMarketError(null);
       } catch (error) {
         if (controller.signal.aborted) {
@@ -215,6 +223,7 @@ export function TradePlanReviewerStrategy() {
           market={market}
           isLoading={isMarketLoading}
           error={marketError}
+          diagnostics={marketDiagnostics}
         />
 
         {hasMarketData ? <SignalPanel signals={activeCandidate.review.signals} /> : null}
