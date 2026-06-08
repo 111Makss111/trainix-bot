@@ -4,6 +4,7 @@ import type {
   MarketSnapshot,
   TrendDirection,
   ZoneKind,
+  ZoneVolumeProfile,
 } from "../types";
 import { formatTradingViewPrice } from "../formatters";
 
@@ -23,6 +24,13 @@ const trendLabel: Record<TrendDirection, string> = {
 const zoneClassName: Record<ZoneKind, string> = {
   support: "border-emerald-300/18 bg-emerald-300/8 text-emerald-100",
   resistance: "border-rose-300/18 bg-rose-300/8 text-rose-100",
+};
+
+const volumeClassName: Record<ZoneVolumeProfile["strength"], string> = {
+  strong: "border-emerald-300/18 bg-emerald-300/8 text-emerald-100",
+  normal: "border-sky-300/18 bg-sky-300/8 text-sky-100",
+  weak: "border-amber-300/18 bg-amber-300/8 text-amber-100",
+  unknown: "border-white/10 bg-white/[0.04] text-white/52",
 };
 
 const timeframeLabel: Record<MarketAnalysisTimeframe, string> = {
@@ -182,12 +190,46 @@ export function MarketSnapshotPanel({
             <p className="mt-1 text-xs opacity-60">
               {zone.isMultiTimeframe ? "MTF " : ""}міцність {zone.strength}/100
             </p>
+            <ZoneVolumeBadge market={market} zoneKind={zone.kind} zoneLow={zone.low} zoneHigh={zone.high} />
           </div>
         ))}
       </div>
       </>
       ) : null}
     </section>
+  );
+}
+
+function ZoneVolumeBadge({
+  market,
+  zoneKind,
+  zoneLow,
+  zoneHigh,
+}: {
+  market: MarketSnapshot;
+  zoneKind: ZoneKind;
+  zoneLow: number;
+  zoneHigh: number;
+}) {
+  const zoneVolume =
+    zoneKind === "support" ? market.zoneVolumes.support : market.zoneVolumes.resistance;
+  const isWorkingZone =
+    zoneVolume.zoneLow <= zoneHigh && zoneVolume.zoneHigh >= zoneLow;
+
+  if (!isWorkingZone) {
+    return null;
+  }
+
+  return (
+    <p
+      className={[
+        "mt-2 inline-flex rounded-full border px-2.5 py-1 text-[0.68rem]",
+        volumeClassName[zoneVolume.strength],
+      ].join(" ")}
+      title={zoneVolume.detail}
+    >
+      обсяг {zoneVolume.score}/100 · {zoneVolume.summary}
+    </p>
   );
 }
 

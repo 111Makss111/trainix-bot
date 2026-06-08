@@ -5,6 +5,7 @@ import type {
   PriceActionState,
   DirectionPriority,
   ReviewStatus,
+  ZoneVolumeProfile,
 } from "../types";
 
 type DirectionPriorityPanelProps = {
@@ -30,6 +31,13 @@ const priceActionClassName: Record<PriceActionState["direction"], string> = {
   neutral: "border-white/10 bg-white/[0.04] text-white/52",
 };
 
+const volumeClassName: Record<ZoneVolumeProfile["strength"], string> = {
+  strong: "border-emerald-300/18 bg-emerald-300/8 text-emerald-100",
+  normal: "border-sky-300/18 bg-sky-300/8 text-sky-100",
+  weak: "border-amber-300/18 bg-amber-300/8 text-amber-100",
+  unknown: "border-white/10 bg-white/[0.04] text-white/52",
+};
+
 function getScoreStatus(score: number): ReviewStatus {
   if (score >= 70) {
     return "pass";
@@ -52,6 +60,7 @@ function DirectionCard({
   const levels = candidate.review.levels;
   const rewardToRisk = levels.rewardToRisk;
   const reaction = levels.zoneReaction;
+  const zoneVolume = levels.zoneVolume;
   const priceAction = levels.priceAction;
   const review = candidate.review;
 
@@ -147,6 +156,14 @@ function DirectionCard({
         <span
           className={[
             "rounded-full border px-2.5 py-1",
+            volumeClassName[zoneVolume.strength],
+          ].join(" ")}
+        >
+          обсяг {zoneVolume.score}/100
+        </span>
+        <span
+          className={[
+            "rounded-full border px-2.5 py-1",
             priceActionClassName[priceAction.direction],
           ].join(" ")}
         >
@@ -154,7 +171,7 @@ function DirectionCard({
         </span>
       </div>
 
-      <ReactionDetails reaction={reaction} />
+      <ReactionDetails reaction={reaction} zoneVolume={zoneVolume} />
 
       <div className="mt-3 space-y-2">
         {candidate.reasons.map((reason) => (
@@ -194,14 +211,21 @@ function QualityStat({
   );
 }
 
-function ReactionDetails({ reaction }: { reaction: MarketZoneReaction }) {
+function ReactionDetails({
+  reaction,
+  zoneVolume,
+}: {
+  reaction: MarketZoneReaction;
+  zoneVolume: ZoneVolumeProfile;
+}) {
   return (
     <details className="mt-3 rounded-[0.85rem] border border-white/10 bg-black/14 px-3 py-2 text-xs text-white/52">
       <summary className="cursor-pointer select-none text-white/64">
-        Деталі реакції
+        Деталі зони
       </summary>
       <div className="mt-2 grid gap-1 leading-5">
         <p>{reaction.detail}</p>
+        <p>{zoneVolume.detail}</p>
         <p>
           Зона: {reaction.zoneLabel} {formatTradingViewPrice(reaction.zoneLow)} -{" "}
           {formatTradingViewPrice(reaction.zoneHigh)}

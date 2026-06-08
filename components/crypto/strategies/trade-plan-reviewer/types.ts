@@ -60,6 +60,21 @@ export type MarketZone = {
   isMultiTimeframe: boolean;
 };
 
+export type ZoneVolumeStrength = "strong" | "normal" | "weak" | "unknown";
+
+export type ZoneVolumeProfile = {
+  zoneKind: ZoneKind;
+  zoneLow: number;
+  zoneHigh: number;
+  strength: ZoneVolumeStrength;
+  score: number;
+  zoneVolumeRatio: number;
+  touchVolumeRatio: number;
+  touchedCandles: number;
+  summary: string;
+  detail: string;
+};
+
 export type MarketZoneReaction = {
   zoneKind: ZoneKind;
   zoneLabel: string;
@@ -136,6 +151,10 @@ export type MarketSnapshot = {
     support: MarketZoneReaction;
     resistance: MarketZoneReaction;
   };
+  zoneVolumes: {
+    support: ZoneVolumeProfile;
+    resistance: ZoneVolumeProfile;
+  };
   zones: MarketZone[];
   updatedAt: string;
   source: MarketSource;
@@ -196,6 +215,7 @@ export type ReviewLevels = {
   targetAtrMultiple: number | null;
   priceAction: PriceActionState;
   zoneReaction: MarketZoneReaction;
+  zoneVolume: ZoneVolumeProfile;
 };
 
 export type ReviewResult = {

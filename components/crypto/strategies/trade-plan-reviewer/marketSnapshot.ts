@@ -7,6 +7,8 @@ import type {
   TradeTimeframe,
   TrendDirection,
   VolatilityState,
+  ZoneKind,
+  ZoneVolumeProfile,
 } from "./types";
 import { getPriceActionState } from "./priceAction";
 import { getZoneReaction } from "./zoneReaction";
@@ -131,6 +133,104 @@ function getVolumeState(candles: Candle[]) {
   }
 
   return "обсяг у нормі";
+}
+
+function getVolumeStrength(score: number): ZoneVolumeProfile["strength"] {
+  if (score >= 70) {
+    return "strong";
+  }
+
+  if (score >= 45) {
+    return "normal";
+  }
+
+  return "weak";
+}
+
+function getZoneVolumeSummary(strength: ZoneVolumeProfile["strength"]) {
+  if (strength === "strong") {
+    return "обсяг сильний";
+  }
+
+  if (strength === "normal") {
+    return "обсяг нормальний";
+  }
+
+  if (strength === "weak") {
+    return "обсяг слабкий";
+  }
+
+  return "обсяг невідомий";
+}
+
+function getUnknownZoneVolume(zone: MarketZone): ZoneVolumeProfile {
+  return {
+    zoneKind: zone.kind,
+    zoneLow: zone.low,
+    zoneHigh: zone.high,
+    strength: "unknown",
+    score: 0,
+    zoneVolumeRatio: 0,
+    touchVolumeRatio: 0,
+    touchedCandles: 0,
+    summary: "обсяг невідомий",
+    detail: "Обсяг у зоні не рахується без достатньої кількості свічок.",
+  };
+}
+
+function getZoneVolumeProfile(candles: Candle[], zone: MarketZone): ZoneVolumeProfile {
+  const baselineCandles = getRecentCandles(candles, 30);
+  const baselineVolume = average(baselineCandles.map((candle) => candle.volume));
+
+  if (baselineVolume <= 0) {
+    return getUnknownZoneVolume(zone);
+  }
+
+  const recentCandles = getRecentCandles(candles, 80);
+  const zoneCandles = recentCandles.filter(
+    (candle) => candle.high >= zone.low && candle.low <= zone.high,
+  );
+  const touchCandles = getRecentCandles(candles, 12).filter(
+    (candle) => candle.high >= zone.low && candle.low <= zone.high,
+  );
+
+  if (zoneCandles.length === 0) {
+    return getUnknownZoneVolume(zone);
+  }
+
+  const zoneVolumeRatio =
+    average(zoneCandles.map((candle) => candle.volume)) / baselineVolume;
+  const touchVolumeRatio =
+    touchCandles.length > 0
+      ? average(touchCandles.map((candle) => candle.volume)) / baselineVolume
+      : 0;
+  const score = Math.round(
+    clamp(
+      zoneVolumeRatio * 34 +
+        touchVolumeRatio * 36 +
+        Math.min(zoneCandles.length, 10) * 3,
+      0,
+      100,
+    ),
+  );
+  const strength = getVolumeStrength(score);
+  const touchText =
+    touchCandles.length > 0
+      ? `останній підхід ${touchVolumeRatio.toFixed(1)}x`
+      : "останній підхід не торкався зони";
+
+  return {
+    zoneKind: zone.kind,
+    zoneLow: zone.low,
+    zoneHigh: zone.high,
+    strength,
+    score,
+    zoneVolumeRatio,
+    touchVolumeRatio,
+    touchedCandles: zoneCandles.length,
+    summary: getZoneVolumeSummary(strength),
+    detail: `Свічок у зоні: ${zoneCandles.length}. Обсяг зони ${zoneVolumeRatio.toFixed(1)}x, ${touchText} від середнього.`,
+  };
 }
 
 function getAverageRangePercent(candles: Candle[]) {
@@ -570,6 +670,10 @@ export function buildMarketSnapshotFromCandles({
     support: getZoneReaction(candles, zones.nearestSupport),
     resistance: getZoneReaction(candles, zones.nearestResistance),
   };
+  const zoneVolumes = {
+    support: getZoneVolumeProfile(candles, zones.nearestSupport),
+    resistance: getZoneVolumeProfile(candles, zones.nearestResistance),
+  };
   const priceAction = getPriceActionState({
     candles,
     currentPrice,
@@ -615,6 +719,7 @@ export function buildMarketSnapshotFromCandles({
     nearestResistance: zones.nearestResistance,
     priceAction,
     zoneReactions,
+    zoneVolumes,
     zones: zones.zones,
     updatedAt: new Date().toISOString(),
     source,
@@ -629,6 +734,28 @@ export function getFallbackMarketSnapshot(
 ): MarketSnapshot {
   const normalizedSymbol = symbol.trim().toUpperCase() || "BTCUSDT";
   const currentPrice = normalizedSymbol === "ETHUSDT" ? 3820 : 100;
+  const fallbackSupport = {
+    kind: "support" as ZoneKind,
+    label: "Орієнтовна підтримка",
+    low: currentPrice * 0.976,
+    high: currentPrice * 0.984,
+    price: currentPrice * 0.98,
+    strength: 45,
+    timeframes: [timeframe],
+    sourceCount: 1,
+    isMultiTimeframe: false,
+  };
+  const fallbackResistance = {
+    kind: "resistance" as ZoneKind,
+    label: "Орієнтовний опір",
+    low: currentPrice * 1.016,
+    high: currentPrice * 1.024,
+    price: currentPrice * 1.02,
+    strength: 45,
+    timeframes: [timeframe],
+    sourceCount: 1,
+    isMultiTimeframe: false,
+  };
 
   return {
     symbol: normalizedSymbol,
@@ -644,28 +771,8 @@ export function getFallbackMarketSnapshot(
     rangeToNoiseRatio: 0,
     volatilityState: "normal",
     volumeState: "очікуємо живі дані",
-    nearestSupport: {
-      kind: "support",
-      label: "Орієнтовна підтримка",
-      low: currentPrice * 0.976,
-      high: currentPrice * 0.984,
-      price: currentPrice * 0.98,
-      strength: 45,
-      timeframes: [timeframe],
-      sourceCount: 1,
-      isMultiTimeframe: false,
-    },
-    nearestResistance: {
-      kind: "resistance",
-      label: "Орієнтовний опір",
-      low: currentPrice * 1.016,
-      high: currentPrice * 1.024,
-      price: currentPrice * 1.02,
-      strength: 45,
-      timeframes: [timeframe],
-      sourceCount: 1,
-      isMultiTimeframe: false,
-    },
+    nearestSupport: fallbackSupport,
+    nearestResistance: fallbackResistance,
     priceAction: {
       mode: "range",
       direction: "neutral",
@@ -680,8 +787,8 @@ export function getFallbackMarketSnapshot(
       support: {
         zoneKind: "support",
         zoneLabel: "Орієнтовна підтримка",
-        zoneLow: currentPrice * 0.976,
-        zoneHigh: currentPrice * 0.984,
+        zoneLow: fallbackSupport.low,
+        zoneHigh: fallbackSupport.high,
         strength: "none",
         behavior: "none",
         score: 0,
@@ -694,8 +801,8 @@ export function getFallbackMarketSnapshot(
       resistance: {
         zoneKind: "resistance",
         zoneLabel: "Орієнтовний опір",
-        zoneLow: currentPrice * 1.016,
-        zoneHigh: currentPrice * 1.024,
+        zoneLow: fallbackResistance.low,
+        zoneHigh: fallbackResistance.high,
         strength: "none",
         behavior: "none",
         score: 0,
@@ -706,30 +813,11 @@ export function getFallbackMarketSnapshot(
         detail: "Реакція не рахується без живих свічок.",
       },
     },
-    zones: [
-      {
-        kind: "support",
-        label: "Орієнтовна підтримка",
-        low: currentPrice * 0.976,
-        high: currentPrice * 0.984,
-        price: currentPrice * 0.98,
-        strength: 45,
-        timeframes: [timeframe],
-        sourceCount: 1,
-        isMultiTimeframe: false,
-      },
-      {
-        kind: "resistance",
-        label: "Орієнтовний опір",
-        low: currentPrice * 1.016,
-        high: currentPrice * 1.024,
-        price: currentPrice * 1.02,
-        strength: 45,
-        timeframes: [timeframe],
-        sourceCount: 1,
-        isMultiTimeframe: false,
-      },
-    ],
+    zoneVolumes: {
+      support: getUnknownZoneVolume(fallbackSupport),
+      resistance: getUnknownZoneVolume(fallbackResistance),
+    },
+    zones: [fallbackSupport, fallbackResistance],
     updatedAt: "fallback",
     source: "fallback",
     candleCount: 0,

@@ -13,6 +13,7 @@ import type {
   TradeDirection,
   TradePlan,
   TradeVerdict,
+  ZoneVolumeProfile,
 } from "./types";
 import { formatTradingViewPrice } from "./formatters";
 
@@ -412,6 +413,22 @@ function getReactionSignalDetail(reaction: MarketZoneReaction) {
   }.`;
 }
 
+function getZoneVolumeStatus(zoneVolume: ZoneVolumeProfile): ReviewStatus {
+  if (zoneVolume.strength === "strong") {
+    return "pass";
+  }
+
+  return "warning";
+}
+
+function getZoneVolumeSignalDetail(zoneVolume: ZoneVolumeProfile) {
+  if (zoneVolume.strength === "unknown") {
+    return "Обсяг у зоні ще не підтверджений.";
+  }
+
+  return `Обсяг ${zoneVolume.score}/100: ${zoneVolume.summary}.`;
+}
+
 function getPriceActionStatus(
   direction: TradeDirection,
   priceAction: PriceActionState,
@@ -587,6 +604,7 @@ function getMarketScore({
   priceActionStatus,
   mtfStatus,
   reactionStatus,
+  zoneVolumeStatus,
   volatilityStatus,
   market,
 }: {
@@ -595,15 +613,17 @@ function getMarketScore({
   priceActionStatus: ReviewStatus;
   mtfStatus: ReviewStatus;
   reactionStatus: ReviewStatus;
+  zoneVolumeStatus: ReviewStatus;
   volatilityStatus: ReviewStatus;
   market: MarketSnapshot;
 }) {
   const rawScore =
-    getStatusWeight(trendStatus) * 24 +
-    getStatusWeight(btcStatus) * 18 +
-    getStatusWeight(priceActionStatus) * 24 +
-    getStatusWeight(mtfStatus) * 14 +
+    getStatusWeight(trendStatus) * 22 +
+    getStatusWeight(btcStatus) * 17 +
+    getStatusWeight(priceActionStatus) * 22 +
+    getStatusWeight(mtfStatus) * 13 +
     getStatusWeight(reactionStatus) * 10 +
+    getStatusWeight(zoneVolumeStatus) * 6 +
     getStatusWeight(volatilityStatus) * 10;
   const strengthBonus = market.trend === "sideways" ? 0 : market.trendStrength * 0.1;
 
@@ -951,6 +971,9 @@ export function reviewTradePlan(
       ? market.zoneReactions.support
       : market.zoneReactions.resistance;
   const reactionStatus = getReactionStatus(zoneReaction);
+  const zoneVolume =
+    plan.direction === "long" ? market.zoneVolumes.support : market.zoneVolumes.resistance;
+  const zoneVolumeStatus = getZoneVolumeStatus(zoneVolume);
   const targetSpacePercent = rewardDistancePercent;
   const rangeWidth = market.nearestResistance.price - market.nearestSupport.price;
   const pricePositionPercent =
@@ -982,6 +1005,7 @@ export function reviewTradePlan(
     priceActionStatus,
     mtfStatus,
     reactionStatus,
+    zoneVolumeStatus,
     volatilityStatus,
     market,
   });
@@ -1021,7 +1045,7 @@ export function reviewTradePlan(
     targetSpacePercent <= market.averageRangePercent
       ? `Ціль ${targetSpacePercent.toFixed(2)}%, шум ${market.averageRangePercent.toFixed(2)}%. Рух менший за шум.`
       : `${rrText}. Ціль ${targetSpacePercent.toFixed(2)}%, шум ${market.averageRangePercent.toFixed(2)}%, простір/шум ${market.rangeToNoiseRatio.toFixed(1)}x.`;
-  const zoneDetail = `${getMtfSignalDetail(setupZone)} ${getReactionSignalDetail(zoneReaction)} Реакція ${zoneReaction.score}/100.`;
+  const zoneDetail = `${getMtfSignalDetail(setupZone)} ${getReactionSignalDetail(zoneReaction)} ${getZoneVolumeSignalDetail(zoneVolume)} Реакція ${zoneReaction.score}/100.`;
   const levelsDetail =
     priceSideStatus === "pass"
       ? `Вхід ${formatTradingViewPrice(entryPrice)}, стоп ${formatTradingViewPrice(stopLoss)}, ціль ${formatTradingViewPrice(takeProfit)}. Ризик ${
@@ -1070,7 +1094,7 @@ export function reviewTradePlan(
       "zone-confirmation",
       "Зона і реакція",
       zoneDetail,
-      getWorstStatus([zoneStatus, mtfStatus, reactionStatus]),
+      getWorstStatus([zoneStatus, mtfStatus, reactionStatus, zoneVolumeStatus]),
     ),
     buildSignal(
       "levels-risk",
@@ -1144,6 +1168,7 @@ export function reviewTradePlan(
       targetAtrMultiple,
       priceAction: market.priceAction,
       zoneReaction,
+      zoneVolume,
     },
     metrics,
     signals,
