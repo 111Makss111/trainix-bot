@@ -9,8 +9,10 @@ import type {
   ReviewMetric,
   ReviewResult,
   ReviewStatus,
+  TradeSignalInfo,
   TradeDirection,
   TradePlan,
+  TradeVerdict,
 } from "./types";
 import { formatTradingViewPrice } from "./formatters";
 
@@ -432,30 +434,6 @@ function getPriceActionStatus(
   return "pass";
 }
 
-function getPriceActionSignalDetail(
-  direction: TradeDirection,
-  priceAction: PriceActionState,
-) {
-  if (priceAction.direction === "neutral") {
-    return priceAction.summary;
-  }
-
-  if (priceAction.direction !== direction) {
-    return direction === "long"
-      ? "Зараз рух не на боці Long."
-      : "Зараз рух не на боці Short.";
-  }
-
-  if (
-    priceAction.mode === "overextended-up" ||
-    priceAction.mode === "overextended-down"
-  ) {
-    return `${priceAction.summary} Але ціна вже близько до цільової зони.`;
-  }
-
-  return priceAction.summary;
-}
-
 function getEntrySignalDetail({
   direction,
   entryMode,
@@ -490,34 +468,6 @@ function getEntrySignalDetail({
       : `, ${entryDistanceFromMarketAtr.toFixed(1)} ATR`;
 
   return `Ціна відійшла від нормальної зони. Вхід краще чекати ${sideText} поточної на ${entryDistanceFromMarketPercent.toFixed(2)}%${atrText}.`;
-}
-
-function getAtrSignalDetail(
-  stopAtrMultiple: number | null,
-  targetAtrMultiple: number | null,
-  market: MarketSnapshot,
-) {
-  if (stopAtrMultiple === null || targetAtrMultiple === null) {
-    return "ATR ще не пораховано. Без нього стоп і ціль не можна порівняти з нормальним рухом активу.";
-  }
-
-  if (stopAtrMultiple < 0.7) {
-    return `Стоп лише ${stopAtrMultiple.toFixed(1)} ATR. Його може вибити звичайним ринковим шумом.`;
-  }
-
-  if (targetAtrMultiple < 1) {
-    return `Ціль лише ${targetAtrMultiple.toFixed(1)} ATR. Потенціал менший за нормальний рух активу.`;
-  }
-
-  if (stopAtrMultiple > 3) {
-    return `Стоп ${stopAtrMultiple.toFixed(1)} ATR. Він занадто широкий для поточного шуму.`;
-  }
-
-  if (targetAtrMultiple < 1.5) {
-    return `Ціль ${targetAtrMultiple.toFixed(1)} ATR. Запас руху є, але він ще слабкий.`;
-  }
-
-  return `ATR ${market.atrPercent.toFixed(2)}%. Стоп ${stopAtrMultiple.toFixed(1)} ATR, ціль ${targetAtrMultiple.toFixed(1)} ATR.`;
 }
 
 function getSpaceStatus(targetSpacePercent: number, market: MarketSnapshot) {
@@ -595,22 +545,280 @@ function getZoneStatus(
       : "fail";
 }
 
-function getZoneSignalDetail({
-  entryMode,
-  zoneDistancePercent,
-  setupZone,
-  priceAction,
-}: {
-  entryMode: EntryMode;
-  zoneDistancePercent: number;
-  setupZone: MarketZone;
-  priceAction: PriceActionState;
-}) {
-  if (entryMode === "momentum") {
-    return `${priceAction.label}: вхід не прив'язаний до старої зони. База сценарію - поточний рух і мікро-відкат.`;
+function getStatusWeight(status: ReviewStatus) {
+  if (status === "pass") {
+    return 1;
   }
 
-  return `Вхід на ${zoneDistancePercent.toFixed(2)}% від зони ${setupZone.label} (${formatTradingViewPrice(setupZone.low)} - ${formatTradingViewPrice(setupZone.high)}).`;
+  if (status === "warning") {
+    return 0.55;
+  }
+
+  return 0;
+}
+
+function getStatusByScore(score: number): ReviewStatus {
+  if (score >= 70) {
+    return "pass";
+  }
+
+  if (score >= 45) {
+    return "warning";
+  }
+
+  return "fail";
+}
+
+function getWorstStatus(statuses: ReviewStatus[]): ReviewStatus {
+  if (statuses.includes("fail")) {
+    return "fail";
+  }
+
+  if (statuses.includes("warning")) {
+    return "warning";
+  }
+
+  return "pass";
+}
+
+function getMarketScore({
+  trendStatus,
+  btcStatus,
+  priceActionStatus,
+  mtfStatus,
+  reactionStatus,
+  volatilityStatus,
+  market,
+}: {
+  trendStatus: ReviewStatus;
+  btcStatus: ReviewStatus;
+  priceActionStatus: ReviewStatus;
+  mtfStatus: ReviewStatus;
+  reactionStatus: ReviewStatus;
+  volatilityStatus: ReviewStatus;
+  market: MarketSnapshot;
+}) {
+  const rawScore =
+    getStatusWeight(trendStatus) * 24 +
+    getStatusWeight(btcStatus) * 18 +
+    getStatusWeight(priceActionStatus) * 24 +
+    getStatusWeight(mtfStatus) * 14 +
+    getStatusWeight(reactionStatus) * 10 +
+    getStatusWeight(volatilityStatus) * 10;
+  const strengthBonus = market.trend === "sideways" ? 0 : market.trendStrength * 0.1;
+
+  return Math.round(Math.min(rawScore + strengthBonus, 100));
+}
+
+function getEntryScore({
+  entryStatus,
+  rewardStatus,
+  atrStatus,
+  spaceStatus,
+  positionStatus,
+  zoneStatus,
+  riskStatus,
+  priceSideStatus,
+}: {
+  entryStatus: ReviewStatus;
+  rewardStatus: ReviewStatus;
+  atrStatus: ReviewStatus;
+  spaceStatus: ReviewStatus;
+  positionStatus: ReviewStatus;
+  zoneStatus: ReviewStatus;
+  riskStatus: ReviewStatus;
+  priceSideStatus: ReviewStatus;
+}) {
+  const rawScore =
+    getStatusWeight(entryStatus) * 18 +
+    getStatusWeight(rewardStatus) * 24 +
+    getStatusWeight(atrStatus) * 18 +
+    getStatusWeight(spaceStatus) * 14 +
+    getStatusWeight(positionStatus) * 12 +
+    getStatusWeight(zoneStatus) * 8 +
+    getStatusWeight(riskStatus) * 4 +
+    getStatusWeight(priceSideStatus) * 2;
+
+  return Math.round(Math.min(rawScore, 100));
+}
+
+function getMoveExhaustion({
+  direction,
+  market,
+  targetAtrMultiple,
+  rewardToRisk,
+}: {
+  direction: TradeDirection;
+  market: MarketSnapshot;
+  targetAtrMultiple: number | null;
+  rewardToRisk: number | null;
+}) {
+  const isAlignedMove =
+    market.priceAction.direction === direction &&
+    (market.priceAction.mode === "impulse-up" ||
+      market.priceAction.mode === "impulse-down" ||
+      market.priceAction.mode === "overextended-up" ||
+      market.priceAction.mode === "overextended-down");
+  const isOverextended =
+    market.priceAction.mode === "overextended-up" ||
+    market.priceAction.mode === "overextended-down";
+  const score = Math.round(
+    Math.min(
+      (isAlignedMove ? market.priceAction.strength * 0.35 : 0) +
+        (isOverextended ? 30 : 0) +
+        (targetAtrMultiple !== null && targetAtrMultiple < 1 ? 25 : 0) +
+        (rewardToRisk !== null && rewardToRisk < 1.2 ? 15 : 0),
+      100,
+    ),
+  );
+  const status: ReviewStatus =
+    score >= 70 ? "fail" : score >= 45 ? "warning" : "pass";
+  const detail =
+    score >= 70
+      ? `Перегрів ${score}/100. Рух уже частково реалізований, переслідувати ціну небезпечно.`
+      : score >= 45
+        ? `Перегрів ${score}/100. Напрям є, але краще чекати відкат або кращий RR.`
+        : `Перегрів ${score}/100. Рух ще не виглядає занадто пізнім.`;
+
+  return { score, status, detail };
+}
+
+function getSignalInfo({
+  direction,
+  entryMode,
+  market,
+  moveExhaustionScore,
+  reaction,
+}: {
+  direction: TradeDirection;
+  entryMode: EntryMode;
+  market: MarketSnapshot;
+  moveExhaustionScore: number;
+  reaction: MarketZoneReaction;
+}): TradeSignalInfo {
+  if (moveExhaustionScore >= 70) {
+    return {
+      type: "late-entry",
+      label: "Пізній трендовий вхід",
+      detail: "Напрям сильний, але рух уже пройшов значну частину потенціалу.",
+    };
+  }
+
+  if (entryMode === "limit") {
+    return {
+      type: "pullback",
+      label: "Вхід від відкату",
+      detail: "Система не женеться за ціною, а чекає кращу точку біля робочої зони.",
+    };
+  }
+
+  if (isPriceActionAligned(direction, market.priceAction)) {
+    return {
+      type: "trend-following",
+      label: "Трендовий рух",
+      detail: "Напрям підтримують поточний рух, тренд і ринковий контекст.",
+    };
+  }
+
+  if (reaction.behavior === "breakout" || reaction.behavior === "breakdown") {
+    return {
+      type: "breakout",
+      label: "Пробій зони",
+      detail: "Ідея базується на пробої, а не на класичному вході від підтримки чи опору.",
+    };
+  }
+
+  if (market.trend === "sideways") {
+    return {
+      type: "range-bounce",
+      label: "Відбій у діапазоні",
+      detail: "Ринок більше схожий на боковик, тому важливі реакція зони і RR.",
+    };
+  }
+
+  return {
+    type: "mixed",
+    label: "Змішаний сигнал",
+    detail: "Частина факторів підтримує напрям, але вхід ще не має чистої структури.",
+  };
+}
+
+function getVerdict({
+  marketScore,
+  entryScore,
+  rewardToRisk,
+  moveExhaustion,
+  priceSideStatus,
+}: {
+  marketScore: number;
+  entryScore: number;
+  rewardToRisk: number | null;
+  moveExhaustion: { score: number; status: ReviewStatus };
+  priceSideStatus: ReviewStatus;
+}): TradeVerdict {
+  if (priceSideStatus === "fail") {
+    return {
+      label: "Не входити",
+      detail: "Стоп або ціль стоять не з того боку від входу.",
+      status: "fail",
+    };
+  }
+
+  if (moveExhaustion.status === "fail") {
+    return {
+      label: "Рух уже реалізований",
+      detail: "Тренд може бути сильним, але поточна точка схожа на пізній вхід.",
+      status: "fail",
+    };
+  }
+
+  if (rewardToRisk !== null && rewardToRisk < 1.2) {
+    return {
+      label: "Поганий RR",
+      detail: `Потенціал лише ${rewardToRisk.toFixed(2)}R. Ризик не окупається.`,
+      status: "fail",
+    };
+  }
+
+  if (marketScore >= 65 && entryScore < 45) {
+    return {
+      label: "Напрям є, вхід слабкий",
+      detail: "Ринок підтримує ідею, але конкретна точка входу зараз неякісна.",
+      status: "warning",
+    };
+  }
+
+  if (marketScore >= 65 && entryScore >= 65) {
+    return {
+      label: "Вхід можна розглядати",
+      detail: "Ринок і точка входу не конфліктують між собою.",
+      status: "pass",
+    };
+  }
+
+  if (marketScore < 55) {
+    return {
+      label: "Ринок слабкий",
+      detail: "Напрям ще не має достатньої переваги.",
+      status: "warning",
+    };
+  }
+
+  return {
+    label: "Почекати точку",
+    detail: "Потрібен кращий відкат, сильніша реакція або чистіший простір до цілі.",
+    status: "warning",
+  };
+}
+
+function getPrimaryIssues(signals: ReviewItem[]) {
+  const weakSignals = signals.filter((signal) => signal.status !== "pass");
+
+  if (weakSignals.length === 0) {
+    return ["Ринок і вхід не мають явних конфліктів."];
+  }
+
+  return weakSignals.slice(0, 4).map((signal) => signal.detail);
 }
 
 function buildMetric(
@@ -735,12 +943,6 @@ export function reviewTradePlan(
       ? market.zoneReactions.support
       : market.zoneReactions.resistance;
   const reactionStatus = getReactionStatus(zoneReaction);
-  const targetZone =
-    plan.direction === "long"
-      ? market.nearestResistance
-      : market.nearestSupport;
-  const nearestTargetZoneDistancePercent =
-    (Math.abs(targetZone.price - entryPrice) / entryPrice) * 100;
   const targetSpacePercent = rewardDistancePercent;
   const rangeWidth = market.nearestResistance.price - market.nearestSupport.price;
   const pricePositionPercent =
@@ -760,150 +962,147 @@ export function reviewTradePlan(
     market.priceAction,
   );
   const volatilityStatus = getVolatilityStatus(market);
+  const moveExhaustion = getMoveExhaustion({
+    direction: plan.direction,
+    market,
+    targetAtrMultiple,
+    rewardToRisk,
+  });
+  const marketScore = getMarketScore({
+    trendStatus,
+    btcStatus,
+    priceActionStatus,
+    mtfStatus,
+    reactionStatus,
+    volatilityStatus,
+    market,
+  });
+  const entryScore = getEntryScore({
+    entryStatus,
+    rewardStatus,
+    atrStatus,
+    spaceStatus,
+    positionStatus,
+    zoneStatus,
+    riskStatus,
+    priceSideStatus,
+  });
+  const signal = getSignalInfo({
+    direction: plan.direction,
+    entryMode: entry.mode,
+    market,
+    moveExhaustionScore: moveExhaustion.score,
+    reaction: zoneReaction,
+  });
+  const verdict = getVerdict({
+    marketScore,
+    entryScore,
+    rewardToRisk,
+    moveExhaustion,
+    priceSideStatus,
+  });
+
+  const entryDetail = getEntrySignalDetail({
+    direction: plan.direction,
+    entryMode: entry.mode,
+    entryDistanceFromMarketPercent: entry.distanceFromMarketPercent,
+    entryDistanceFromMarketAtr: entry.distanceFromMarketAtr,
+  });
+  const rrText = rewardToRisk === null ? "RR не пораховано" : `RR ${rewardToRisk.toFixed(2)}R`;
+  const noiseDetail =
+    targetSpacePercent <= market.averageRangePercent
+      ? `Ціль ${targetSpacePercent.toFixed(2)}%, шум ${market.averageRangePercent.toFixed(2)}%. Рух менший за шум.`
+      : `${rrText}. Ціль ${targetSpacePercent.toFixed(2)}%, шум ${market.averageRangePercent.toFixed(2)}%, простір/шум ${market.rangeToNoiseRatio.toFixed(1)}x.`;
+  const zoneDetail = `${getMtfSignalDetail(setupZone)} ${getReactionSignalDetail(zoneReaction)} Реакція ${zoneReaction.score}/100.`;
+  const levelsDetail =
+    priceSideStatus === "pass"
+      ? `Вхід ${formatTradingViewPrice(entryPrice)}, стоп ${formatTradingViewPrice(stopLoss)}, ціль ${formatTradingViewPrice(takeProfit)}. Ризик ${
+          accountRiskPercent === null
+            ? "не пораховано"
+            : `${accountRiskPercent.toFixed(2)}% акаунту`
+        }.`
+      : "Стоп або ціль стоять не з того боку від входу.";
 
   const signals = [
     buildSignal(
-      "trend",
-      "Тренд",
-      market.trend === "sideways"
-        ? `Ринок у боковику, сила ${market.trendStrength}/100.`
-        : `Тренд ${market.trend === "up" ? "вгору" : "вниз"}, сила ${market.trendStrength}/100.`,
-      trendStatus,
+      "market-quality",
+      "Якість ринку",
+      `Оцінка ${marketScore}/100. ${
+        market.trend === "sideways"
+          ? "Ринок у боковику"
+          : `Тренд ${market.trend === "up" ? "вгору" : "вниз"}`
+      }, рух ${market.priceAction.label}, BTC ${
+        market.btcBias === "bullish"
+          ? "підтримує ріст"
+          : market.btcBias === "bearish"
+            ? "тисне вниз"
+            : "нейтральний"
+      }.`,
+      getStatusByScore(marketScore),
     ),
     buildSignal(
-      "price-action",
-      "Рух ціни",
-      getPriceActionSignalDetail(plan.direction, market.priceAction),
-      priceActionStatus,
+      "entry-quality",
+      "Якість входу",
+      `Оцінка ${entryScore}/100. ${entryDetail}`,
+      getStatusByScore(entryScore),
     ),
     buildSignal(
-      "btc",
-      "BTC",
-      `BTC зараз ${market.btcBias === "bullish" ? "підтримує ріст" : market.btcBias === "bearish" ? "тисне вниз" : "нейтральний"}.`,
-      btcStatus,
+      "rr-noise",
+      "RR / шум",
+      noiseDetail,
+      getWorstStatus([rewardStatus, spaceStatus, volatilityStatus]),
     ),
     buildSignal(
-      "entry",
-      "Вхід",
-      getEntrySignalDetail({
-        direction: plan.direction,
-        entryMode: entry.mode,
-        entryDistanceFromMarketPercent: entry.distanceFromMarketPercent,
-        entryDistanceFromMarketAtr: entry.distanceFromMarketAtr,
-      }),
-      entryStatus,
+      "move-exhaustion",
+      "Перегрів руху",
+      moveExhaustion.detail,
+      moveExhaustion.status,
     ),
     buildSignal(
-      "space",
-      "Простір до цілі",
-      targetSpacePercent <= market.averageRangePercent
-        ? `Ціль занадто близько: ${targetSpacePercent.toFixed(2)}%, а середній шум свічки ${market.averageRangePercent.toFixed(2)}%. Рух менший за шум.`
-        : `Ціль ${targetSpacePercent.toFixed(2)}% від входу. Найближча зона ${targetZone.label} на ${nearestTargetZoneDistancePercent.toFixed(2)}%. Шум ${market.averageRangePercent.toFixed(2)}%.`,
-      spaceStatus,
+      "zone-confirmation",
+      "Зона і реакція",
+      zoneDetail,
+      getWorstStatus([zoneStatus, mtfStatus, reactionStatus]),
     ),
     buildSignal(
-      "atr",
-      "ATR",
-      getAtrSignalDetail(stopAtrMultiple, targetAtrMultiple, market),
-      atrStatus,
-    ),
-    buildSignal(
-      "position",
-      "Позиція в діапазоні",
-      plan.direction === "long"
-        ? pricePositionPercent > 55
-          ? `Ціна вже на ${pricePositionPercent.toFixed(0)}% діапазону. Для Long краще чекати ближче до підтримки.`
-          : `Ціна на ${pricePositionPercent.toFixed(0)}% діапазону. Для Long краще нижня третина.`
-        : pricePositionPercent < 45
-          ? `Ціна лише на ${pricePositionPercent.toFixed(0)}% діапазону. Для Short краще чекати ближче до опору.`
-          : `Ціна на ${pricePositionPercent.toFixed(0)}% діапазону. Для Short краще верхня третина.`,
-      positionStatus,
-    ),
-    buildSignal(
-      "zone",
-      "Близькість до зони",
-      getZoneSignalDetail({
-        entryMode: entry.mode,
-        zoneDistancePercent,
-        setupZone,
-        priceAction: market.priceAction,
-      }),
-      zoneStatus,
-    ),
-    buildSignal(
-      "mtf",
-      "MTF-підтвердження",
-      getMtfSignalDetail(setupZone),
-      mtfStatus,
-    ),
-    buildSignal(
-      "reaction",
-      "Реакція зони",
-      getReactionSignalDetail(zoneReaction),
-      reactionStatus,
-    ),
-    buildSignal(
-      "noise",
-      "Ринковий шум",
-      `Волатильність ${market.volatilityState === "extreme" ? "екстремальна" : market.volatilityState === "high" ? "висока" : market.volatilityState === "quiet" ? "тиха" : "нормальна"}, середній шум свічки ${market.averageRangePercent.toFixed(2)}%.`,
-      volatilityStatus,
-    ),
-    buildSignal(
-      "levels",
-      "Рівні угоди",
-      priceSideStatus === "pass"
-        ? `Вхід ${formatTradingViewPrice(entryPrice)}, стоп ${formatTradingViewPrice(stopLoss)}, ціль ${formatTradingViewPrice(takeProfit)}.`
-        : "Стоп або ціль стоять не з того боку від входу.",
-      priceSideStatus,
-    ),
-    buildSignal(
-      "risk",
-      "Ризик",
-      accountRiskPercent === null
-        ? "Додай баланс і позицію, щоб порахувати ризик."
-        : accountRiskPercent > 3
-          ? `Ризик ${accountRiskPercent.toFixed(2)}% вище ліміту.`
-          : `Ризик ${accountRiskPercent.toFixed(2)}% акаунту.`,
-      riskStatus,
-    ),
-    buildSignal(
-      "reward",
-      "Потенціал",
-      rewardToRisk === null
-        ? "Не можу порахувати співвідношення потенціалу до ризику."
-        : rewardToRisk < 1.2
-          ? `Потенціал ${rewardToRisk.toFixed(2)}R. Ризик більший за потенціал, угоду краще не брати.`
-          : `Потенціал ${rewardToRisk.toFixed(2)}R.`,
-      rewardStatus,
+      "levels-risk",
+      "Рівні і ризик",
+      levelsDetail,
+      getWorstStatus([priceSideStatus, riskStatus, atrStatus]),
     ),
   ];
 
   const metrics = [
     buildMetric(
-      "Тренд ринку",
-      market.trend === "up" ? "ВГОРУ" : market.trend === "down" ? "ВНИЗ" : "БОКОВИК",
-      `сила ${market.trendStrength}/100`,
-      trendStatus,
+      "Якість ринку",
+      `${marketScore}/100`,
+      signal.label,
+      getStatusByScore(marketScore),
     ),
     buildMetric(
-      "Простір до цілі",
-      `${targetSpacePercent.toFixed(2)}%`,
-      `${market.rangeToNoiseRatio.toFixed(1)}x шум`,
-      spaceStatus,
+      "Якість входу",
+      `${entryScore}/100`,
+      verdict.label,
+      getStatusByScore(entryScore),
     ),
     buildMetric(
-      "Потенціал / ризик",
+      "RR",
       formatRatio(rewardToRisk),
-      "потенціал",
+      `${targetSpacePercent.toFixed(2)}% до цілі`,
       rewardStatus,
     ),
+    buildMetric(
+      "Перегрів",
+      `${moveExhaustion.score}/100`,
+      moveExhaustion.score >= 70 ? "пізній рух" : "контроль руху",
+      moveExhaustion.status,
+    ),
   ];
+  const primaryIssues = getPrimaryIssues(signals);
 
   const nextActions =
-    signals.filter((item) => item.status !== "pass").length > 0
-      ? signals
-          .filter((item) => item.status !== "pass")
-          .map((item) => item.detail)
+    primaryIssues.length > 0
+      ? primaryIssues
       : ["Ідею можна розглядати, але без автоторгівлі."];
 
   const grade = getGrade(signals, accountRiskPercent);
@@ -913,6 +1112,11 @@ export function reviewTradePlan(
     grade,
     title: gradeCopy.title,
     summary: gradeCopy.summary,
+    marketScore,
+    entryScore,
+    signal,
+    verdict,
+    primaryIssues,
     levels: {
       currentPrice: market.currentPrice,
       entryPrice,

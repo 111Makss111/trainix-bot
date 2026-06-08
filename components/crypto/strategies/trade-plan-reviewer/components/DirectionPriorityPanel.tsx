@@ -30,6 +30,18 @@ const priceActionClassName: Record<PriceActionState["direction"], string> = {
   neutral: "border-white/10 bg-white/[0.04] text-white/52",
 };
 
+function getScoreStatus(score: number): ReviewStatus {
+  if (score >= 70) {
+    return "pass";
+  }
+
+  if (score >= 45) {
+    return "warning";
+  }
+
+  return "fail";
+}
+
 function DirectionCard({
   candidate,
   isPreferred,
@@ -41,6 +53,7 @@ function DirectionCard({
   const rewardToRisk = levels.rewardToRisk;
   const reaction = levels.zoneReaction;
   const priceAction = levels.priceAction;
+  const review = candidate.review;
 
   return (
     <div
@@ -56,18 +69,39 @@ function DirectionCard({
           <p className="text-[0.62rem] uppercase tracking-[0.22em] text-white/36">
             Варіант
           </p>
-          <h3 className="mt-2 text-xl font-semibold text-white">
-            {candidate.label}
-          </h3>
+          <h3 className="mt-2 text-xl font-semibold text-white">{candidate.label}</h3>
+          <p className="mt-1 text-sm text-white/50">{review.signal.label}</p>
         </div>
         <span
           className={[
             "rounded-full border px-3 py-1 text-sm",
-            statusClassName[candidate.status],
+            statusClassName[review.verdict.status],
           ].join(" ")}
         >
-          {candidate.score}/100
+          {review.verdict.label}
         </span>
+      </div>
+
+      <p className="mt-3 rounded-[0.9rem] border border-white/10 bg-black/14 px-3 py-2 text-sm leading-5 text-white/62">
+        {review.verdict.detail}
+      </p>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <QualityStat
+          label="Ринок"
+          value={`${review.marketScore}/100`}
+          status={getScoreStatus(review.marketScore)}
+        />
+        <QualityStat
+          label="Вхід"
+          value={`${review.entryScore}/100`}
+          status={getScoreStatus(review.entryScore)}
+        />
+        <QualityStat
+          label="Баланс"
+          value={`${candidate.score}/100`}
+          status={candidate.status}
+        />
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-2">
@@ -78,7 +112,7 @@ function DirectionCard({
 
       <div className="mt-3 flex flex-wrap gap-2 text-xs text-white/52">
         <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
-          R/R {rewardToRisk === null ? "авто" : `${rewardToRisk.toFixed(2)}R`}
+          RR {rewardToRisk === null ? "авто" : `${rewardToRisk.toFixed(2)}R`}
         </span>
         <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
           зона {levels.zoneDistancePercent.toFixed(2)}%
@@ -132,6 +166,30 @@ function DirectionCard({
           </p>
         ))}
       </div>
+    </div>
+  );
+}
+
+function QualityStat({
+  label,
+  value,
+  status,
+}: {
+  label: string;
+  value: string;
+  status: ReviewStatus;
+}) {
+  return (
+    <div
+      className={[
+        "rounded-[0.85rem] border px-3 py-2",
+        statusClassName[status],
+      ].join(" ")}
+    >
+      <p className="text-[0.58rem] uppercase tracking-[0.18em] opacity-60">
+        {label}
+      </p>
+      <p className="mt-1 font-mono text-sm font-semibold text-white">{value}</p>
     </div>
   );
 }

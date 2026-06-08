@@ -7,7 +7,7 @@ type SignalPanelProps = {
 const statusLabel: Record<ReviewStatus, string> = {
   pass: "ОК",
   warning: "УВАГА",
-  fail: "СТОП",
+  fail: "НЕ ВХІД",
 };
 
 const statusClassName: Record<ReviewStatus, string> = {

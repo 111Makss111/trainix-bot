@@ -150,6 +150,26 @@ export type ReviewMetric = {
   status: ReviewStatus;
 };
 
+export type TradeSignalType =
+  | "trend-following"
+  | "pullback"
+  | "breakout"
+  | "range-bounce"
+  | "late-entry"
+  | "mixed";
+
+export type TradeSignalInfo = {
+  type: TradeSignalType;
+  label: string;
+  detail: string;
+};
+
+export type TradeVerdict = {
+  label: string;
+  detail: string;
+  status: ReviewStatus;
+};
+
 export type ReviewItem = {
   id: string;
   label: string;
@@ -182,6 +202,11 @@ export type ReviewResult = {
   grade: ReviewGrade;
   title: string;
   summary: string;
+  marketScore: number;
+  entryScore: number;
+  signal: TradeSignalInfo;
+  verdict: TradeVerdict;
+  primaryIssues: string[];
   levels: ReviewLevels;
   metrics: ReviewMetric[];
   signals: ReviewItem[];

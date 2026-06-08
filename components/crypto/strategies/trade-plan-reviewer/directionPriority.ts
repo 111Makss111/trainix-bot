@@ -47,56 +47,27 @@ function getGradeCap(grade: ReviewGrade) {
   return 45;
 }
 
-function getRewardBonus(review: ReviewResult) {
+function getEntryPenalty(review: ReviewResult) {
   const rewardToRisk = review.levels.rewardToRisk;
+  const moveIsLate = review.verdict.label === "Рух уже реалізований";
+  let penalty = moveIsLate ? 12 : 0;
 
-  if (rewardToRisk === null) {
-    return 0;
+  if (rewardToRisk !== null && rewardToRisk < 1.2) {
+    penalty += 12;
   }
 
-  if (rewardToRisk >= 2) {
-    return 10;
-  }
-
-  if (rewardToRisk >= 1.5) {
-    return 5;
-  }
-
-  if (rewardToRisk < 1.2) {
-    return -12;
-  }
-
-  return 0;
+  return penalty;
 }
 
 function getScore(review: ReviewResult) {
-  const passCount = review.signals.filter((signal) => signal.status === "pass").length;
-  const warningCount = review.signals.filter(
-    (signal) => signal.status === "warning",
-  ).length;
-  const failCount = review.signals.filter((signal) => signal.status === "fail").length;
   const rawScore =
-    45 + passCount * 6 - warningCount * 5 - failCount * 16 + getRewardBonus(review);
+    review.marketScore * 0.52 + review.entryScore * 0.48 - getEntryPenalty(review);
 
   return Math.round(clamp(rawScore, 0, getGradeCap(review.grade)));
 }
 
 function getReasons(review: ReviewResult) {
-  const blockedSignals = review.signals.filter((signal) => signal.status === "fail");
-  const warningSignals = review.signals.filter(
-    (signal) => signal.status === "warning",
-  );
-  const strongSignals = review.signals.filter((signal) => signal.status === "pass");
-
-  if (blockedSignals.length > 0) {
-    return blockedSignals.slice(0, 2).map((signal) => signal.detail);
-  }
-
-  if (warningSignals.length > 0) {
-    return warningSignals.slice(0, 2).map((signal) => signal.detail);
-  }
-
-  return strongSignals.slice(0, 2).map((signal) => signal.detail);
+  return review.primaryIssues.slice(0, 3);
 }
 
 function buildAutoPlan(
@@ -140,14 +111,23 @@ export function getDirectionPriority(
   ].sort((first, second) => second.score - first.score);
   const [bestCandidate, secondCandidate] = candidates;
   const scoreGap = bestCandidate.score - secondCandidate.score;
-  const shouldWait = bestCandidate.score < 55 || (scoreGap < 6 && bestCandidate.score < 75);
+  const bestMarketScore = bestCandidate.review.marketScore;
+  const bestEntryScore = bestCandidate.review.entryScore;
+  const hasDirectionButWeakEntry = bestMarketScore >= 65 && bestEntryScore < 50;
+  const shouldWait =
+    hasDirectionButWeakEntry ||
+    bestCandidate.score < 55 ||
+    (scoreGap < 6 && bestCandidate.score < 75);
 
   if (shouldWait) {
     return {
       preferredDirection: "wait",
-      title: "Краще почекати",
-      summary:
-        "Long і Short не дають чистої переваги. Зараз важливіше дочекатися кращої зони або сильнішого руху.",
+      title: hasDirectionButWeakEntry
+        ? "Напрям є, вхід слабкий"
+        : "Краще почекати",
+      summary: hasDirectionButWeakEntry
+        ? `${bestCandidate.label} має кращий ринок (${bestMarketScore}/100), але точка входу лише ${bestEntryScore}/100. Краще чекати відкат, чистіший RR або реакцію.`
+        : "Long і Short не дають чистої переваги. Зараз важливіше дочекатися кращої зони або сильнішого руху.",
       candidates,
     };
   }
@@ -157,8 +137,8 @@ export function getDirectionPriority(
     title: `Пріоритет: ${bestCandidate.label}`,
     summary:
       bestCandidate.direction === "long"
-        ? "Long зараз має кращу суму по тренду, зоні, простору до цілі та ризику."
-        : "Short зараз має кращу суму по тренду, зоні, простору до цілі та ризику.",
+        ? `Long має кращий баланс ринку (${bestCandidate.review.marketScore}/100) і входу (${bestCandidate.review.entryScore}/100).`
+        : `Short має кращий баланс ринку (${bestCandidate.review.marketScore}/100) і входу (${bestCandidate.review.entryScore}/100).`,
     candidates,
   };
 }
