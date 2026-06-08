@@ -2,6 +2,8 @@ import type {
   BtcBias,
   MarketAnalysisTimeframe,
   MarketSnapshot,
+  OpenInterestPoint,
+  OpenInterestState,
   MarketSource,
   MarketZone,
   TradeTimeframe,
@@ -58,6 +60,182 @@ function getPercentChange(from: number, to: number) {
   }
 
   return ((to - from) / from) * 100;
+}
+
+function getOpenInterestLabel(signal: OpenInterestState["signal"]) {
+  if (signal === "new-longs") {
+    return "лонги додаються";
+  }
+
+  if (signal === "new-shorts") {
+    return "шорти додаються";
+  }
+
+  if (signal === "longs-closing") {
+    return "лонги закривають";
+  }
+
+  if (signal === "short-squeeze") {
+    return "можливий squeeze";
+  }
+
+  if (signal === "neutral") {
+    return "нейтрально";
+  }
+
+  return "OI невідомий";
+}
+
+function getFallbackOpenInterest(
+  source: MarketSource = "fallback",
+): OpenInterestState {
+  return {
+    status: "unavailable",
+    source,
+    current: null,
+    previous: null,
+    changePercent: null,
+    direction: "unknown",
+    signal: "unknown",
+    score: 0,
+    label: "OI недоступний",
+    summary: "Open Interest ще не завантажений.",
+    detail: "Система не враховує фʼючерсний інтерес без даних біржі.",
+    updatedAt: null,
+    samples: 0,
+  };
+}
+
+function getOpenInterestDirection(changePercent: number): OpenInterestState["direction"] {
+  if (changePercent >= 1.5) {
+    return "rising";
+  }
+
+  if (changePercent <= -1.5) {
+    return "falling";
+  }
+
+  return "flat";
+}
+
+function getPriceDirection(changePercent: number) {
+  if (changePercent >= 0.25) {
+    return "up";
+  }
+
+  if (changePercent <= -0.25) {
+    return "down";
+  }
+
+  return "flat";
+}
+
+function getOpenInterestSignal({
+  oiDirection,
+  priceDirection,
+}: {
+  oiDirection: OpenInterestState["direction"];
+  priceDirection: "up" | "down" | "flat";
+}): OpenInterestState["signal"] {
+  if (priceDirection === "up" && oiDirection === "rising") {
+    return "new-longs";
+  }
+
+  if (priceDirection === "down" && oiDirection === "rising") {
+    return "new-shorts";
+  }
+
+  if (priceDirection === "down" && oiDirection === "falling") {
+    return "longs-closing";
+  }
+
+  if (priceDirection === "up" && oiDirection === "falling") {
+    return "short-squeeze";
+  }
+
+  return "neutral";
+}
+
+function getOpenInterestScore(signal: OpenInterestState["signal"]) {
+  if (signal === "new-longs" || signal === "new-shorts") {
+    return 78;
+  }
+
+  if (signal === "longs-closing" || signal === "short-squeeze") {
+    return 52;
+  }
+
+  if (signal === "neutral") {
+    return 45;
+  }
+
+  return 0;
+}
+
+function getOpenInterestState({
+  candles,
+  points,
+  source,
+}: {
+  candles: Candle[];
+  points?: OpenInterestPoint[] | null;
+  source: Exclude<MarketSource, "fallback">;
+}): OpenInterestState {
+  const sortedPoints = [...(points ?? [])]
+    .filter((point) => Number.isFinite(point.value) && Number.isFinite(point.timestamp))
+    .sort((first, second) => first.timestamp - second.timestamp);
+  const lastPoint = sortedPoints.at(-1);
+
+  if (!lastPoint) {
+    return getFallbackOpenInterest(source);
+  }
+
+  if (sortedPoints.length < 2) {
+    return {
+      status: "partial",
+      source,
+      current: lastPoint.value,
+      previous: null,
+      changePercent: null,
+      direction: "unknown",
+      signal: "unknown",
+      score: 20,
+      label: "OI частково",
+      summary: "Є тільки поточний Open Interest без динаміки.",
+      detail: "Поточне значення OI є, але немає історії для висновку по руху.",
+      updatedAt: new Date(lastPoint.timestamp).toISOString(),
+      samples: sortedPoints.length,
+    };
+  }
+
+  const recentPoints = sortedPoints.slice(Math.max(0, sortedPoints.length - 12));
+  const firstPoint = recentPoints[0];
+  const changePercent = getPercentChange(firstPoint.value, lastPoint.value);
+  const oiDirection = getOpenInterestDirection(changePercent);
+  const candleLookback = Math.min(recentPoints.length, candles.length - 1);
+  const referenceCandle = candles.at(-1 - candleLookback) ?? candles[0];
+  const currentCandle = candles.at(-1) ?? referenceCandle;
+  const priceChangePercent = getPercentChange(referenceCandle.close, currentCandle.close);
+  const priceDirection = getPriceDirection(priceChangePercent);
+  const signal = getOpenInterestSignal({ oiDirection, priceDirection });
+  const label = getOpenInterestLabel(signal);
+  const score = getOpenInterestScore(signal);
+
+  return {
+    status: "ok",
+    source,
+    current: lastPoint.value,
+    previous: firstPoint.value,
+    changePercent,
+    direction: oiDirection,
+    signal,
+    score,
+    label,
+    summary: `OI ${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(1)}%, ціна ${priceChangePercent >= 0 ? "+" : ""}${priceChangePercent.toFixed(1)}%.`,
+    detail: `${label}. Якщо ціна рухається разом зі зростанням OI, рух частіше підтриманий новими позиціями. Якщо OI падає, рух може бути закриттям позицій або squeeze.`,
+    updatedAt: new Date(lastPoint.timestamp).toISOString(),
+    samples: sortedPoints.length,
+  };
 }
 
 function getRecentCandles(candles: Candle[], count: number) {
@@ -636,6 +814,7 @@ export function buildMarketSnapshotFromCandles({
   btcCandles,
   source,
   multiTimeframeCandles,
+  openInterestPoints,
 }: {
   symbol: string;
   timeframe: TradeTimeframe;
@@ -643,6 +822,7 @@ export function buildMarketSnapshotFromCandles({
   btcCandles: Candle[];
   source: Exclude<MarketSource, "fallback">;
   multiTimeframeCandles?: Partial<Record<MarketAnalysisTimeframe, Candle[]>>;
+  openInterestPoints?: OpenInterestPoint[] | null;
 }): MarketSnapshot {
   const currentCandle = candles.at(-1);
 
@@ -715,6 +895,11 @@ export function buildMarketSnapshotFromCandles({
     rangeToNoiseRatio,
     volatilityState: getVolatilityState(averageRangePercent),
     volumeState: getVolumeState(candles),
+    openInterest: getOpenInterestState({
+      candles,
+      points: openInterestPoints,
+      source,
+    }),
     nearestSupport: zones.nearestSupport,
     nearestResistance: zones.nearestResistance,
     priceAction,
@@ -771,6 +956,7 @@ export function getFallbackMarketSnapshot(
     rangeToNoiseRatio: 0,
     volatilityState: "normal",
     volumeState: "очікуємо живі дані",
+    openInterest: getFallbackOpenInterest(),
     nearestSupport: fallbackSupport,
     nearestResistance: fallbackResistance,
     priceAction: {

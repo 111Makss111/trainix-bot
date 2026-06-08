@@ -3,6 +3,7 @@ import type {
   MarketSnapshot,
   MarketZone,
   MarketZoneReaction,
+  OpenInterestState,
   PriceActionState,
   ReviewGrade,
   ReviewItem,
@@ -429,6 +430,37 @@ function getZoneVolumeSignalDetail(zoneVolume: ZoneVolumeProfile) {
   return `Обсяг ${zoneVolume.score}/100: ${zoneVolume.summary}.`;
 }
 
+function getOpenInterestStatus(
+  direction: TradeDirection,
+  openInterest: OpenInterestState,
+): ReviewStatus {
+  if (openInterest.status !== "ok") {
+    return "warning";
+  }
+
+  if (direction === "long" && openInterest.signal === "new-longs") {
+    return "pass";
+  }
+
+  if (direction === "short" && openInterest.signal === "new-shorts") {
+    return "pass";
+  }
+
+  return "warning";
+}
+
+function getOpenInterestSignalDetail(openInterest: OpenInterestState) {
+  if (openInterest.status === "unavailable") {
+    return "Open Interest не завантажився для цієї біржі.";
+  }
+
+  if (openInterest.status === "partial") {
+    return `${openInterest.summary} Показуємо без оцінки динаміки.`;
+  }
+
+  return `${openInterest.label}. ${openInterest.summary}`;
+}
+
 function getPriceActionStatus(
   direction: TradeDirection,
   priceAction: PriceActionState,
@@ -605,6 +637,7 @@ function getMarketScore({
   mtfStatus,
   reactionStatus,
   zoneVolumeStatus,
+  openInterestStatus,
   volatilityStatus,
   market,
 }: {
@@ -614,17 +647,19 @@ function getMarketScore({
   mtfStatus: ReviewStatus;
   reactionStatus: ReviewStatus;
   zoneVolumeStatus: ReviewStatus;
+  openInterestStatus: ReviewStatus;
   volatilityStatus: ReviewStatus;
   market: MarketSnapshot;
 }) {
   const rawScore =
-    getStatusWeight(trendStatus) * 22 +
-    getStatusWeight(btcStatus) * 17 +
-    getStatusWeight(priceActionStatus) * 22 +
-    getStatusWeight(mtfStatus) * 13 +
-    getStatusWeight(reactionStatus) * 10 +
+    getStatusWeight(trendStatus) * 20 +
+    getStatusWeight(btcStatus) * 16 +
+    getStatusWeight(priceActionStatus) * 20 +
+    getStatusWeight(mtfStatus) * 12 +
+    getStatusWeight(reactionStatus) * 9 +
     getStatusWeight(zoneVolumeStatus) * 6 +
-    getStatusWeight(volatilityStatus) * 10;
+    getStatusWeight(openInterestStatus) * 8 +
+    getStatusWeight(volatilityStatus) * 9;
   const strengthBonus = market.trend === "sideways" ? 0 : market.trendStrength * 0.1;
 
   return Math.round(Math.min(rawScore + strengthBonus, 100));
@@ -974,6 +1009,10 @@ export function reviewTradePlan(
   const zoneVolume =
     plan.direction === "long" ? market.zoneVolumes.support : market.zoneVolumes.resistance;
   const zoneVolumeStatus = getZoneVolumeStatus(zoneVolume);
+  const openInterestStatus = getOpenInterestStatus(
+    plan.direction,
+    market.openInterest,
+  );
   const targetSpacePercent = rewardDistancePercent;
   const rangeWidth = market.nearestResistance.price - market.nearestSupport.price;
   const pricePositionPercent =
@@ -1006,6 +1045,7 @@ export function reviewTradePlan(
     mtfStatus,
     reactionStatus,
     zoneVolumeStatus,
+    openInterestStatus,
     volatilityStatus,
     market,
   });
@@ -1077,6 +1117,12 @@ export function reviewTradePlan(
       "Якість входу",
       `Оцінка ${entryScore}/100. ${entryDetail}`,
       getStatusByScore(entryScore),
+    ),
+    buildSignal(
+      "open-interest",
+      "Фʼючерсний інтерес",
+      getOpenInterestSignalDetail(market.openInterest),
+      openInterestStatus,
     ),
     buildSignal(
       "rr-noise",
@@ -1169,6 +1215,7 @@ export function reviewTradePlan(
       priceAction: market.priceAction,
       zoneReaction,
       zoneVolume,
+      openInterest: market.openInterest,
     },
     metrics,
     signals,

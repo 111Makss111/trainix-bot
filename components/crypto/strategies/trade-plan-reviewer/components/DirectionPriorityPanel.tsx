@@ -2,6 +2,7 @@ import { formatTradingViewPrice } from "../formatters";
 import type {
   DirectionCandidate,
   MarketZoneReaction,
+  OpenInterestState,
   PriceActionState,
   DirectionPriority,
   ReviewStatus,
@@ -38,6 +39,12 @@ const volumeClassName: Record<ZoneVolumeProfile["strength"], string> = {
   unknown: "border-white/10 bg-white/[0.04] text-white/52",
 };
 
+const openInterestClassName: Record<OpenInterestState["status"], string> = {
+  ok: "border-sky-300/18 bg-sky-300/8 text-sky-100",
+  partial: "border-amber-300/18 bg-amber-300/8 text-amber-100",
+  unavailable: "border-white/10 bg-white/[0.04] text-white/52",
+};
+
 function getScoreStatus(score: number): ReviewStatus {
   if (score >= 70) {
     return "pass";
@@ -61,6 +68,7 @@ function DirectionCard({
   const rewardToRisk = levels.rewardToRisk;
   const reaction = levels.zoneReaction;
   const zoneVolume = levels.zoneVolume;
+  const openInterest = levels.openInterest;
   const priceAction = levels.priceAction;
   const review = candidate.review;
 
@@ -164,6 +172,14 @@ function DirectionCard({
         <span
           className={[
             "rounded-full border px-2.5 py-1",
+            openInterestClassName[openInterest.status],
+          ].join(" ")}
+        >
+          OI {openInterest.status === "ok" ? openInterest.label : openInterest.status === "partial" ? "частково" : "немає"}
+        </span>
+        <span
+          className={[
+            "rounded-full border px-2.5 py-1",
             priceActionClassName[priceAction.direction],
           ].join(" ")}
         >
@@ -171,7 +187,11 @@ function DirectionCard({
         </span>
       </div>
 
-      <ReactionDetails reaction={reaction} zoneVolume={zoneVolume} />
+      <ReactionDetails
+        reaction={reaction}
+        zoneVolume={zoneVolume}
+        openInterest={openInterest}
+      />
 
       <div className="mt-3 space-y-2">
         {candidate.reasons.map((reason) => (
@@ -214,9 +234,11 @@ function QualityStat({
 function ReactionDetails({
   reaction,
   zoneVolume,
+  openInterest,
 }: {
   reaction: MarketZoneReaction;
   zoneVolume: ZoneVolumeProfile;
+  openInterest: OpenInterestState;
 }) {
   return (
     <details className="mt-3 rounded-[0.85rem] border border-white/10 bg-black/14 px-3 py-2 text-xs text-white/52">
@@ -226,6 +248,7 @@ function ReactionDetails({
       <div className="mt-2 grid gap-1 leading-5">
         <p>{reaction.detail}</p>
         <p>{zoneVolume.detail}</p>
+        <p>{openInterest.detail}</p>
         <p>
           Зона: {reaction.zoneLabel} {formatTradingViewPrice(reaction.zoneLow)} -{" "}
           {formatTradingViewPrice(reaction.zoneHigh)}

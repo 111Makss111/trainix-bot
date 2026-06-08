@@ -109,6 +109,39 @@ export type MarketSource =
   | "okx"
   | "fallback";
 
+export type OpenInterestStatus = "ok" | "partial" | "unavailable";
+
+export type OpenInterestDirection = "rising" | "falling" | "flat" | "unknown";
+
+export type OpenInterestSignal =
+  | "new-longs"
+  | "new-shorts"
+  | "longs-closing"
+  | "short-squeeze"
+  | "neutral"
+  | "unknown";
+
+export type OpenInterestPoint = {
+  timestamp: number;
+  value: number;
+};
+
+export type OpenInterestState = {
+  status: OpenInterestStatus;
+  source: MarketSource;
+  current: number | null;
+  previous: number | null;
+  changePercent: number | null;
+  direction: OpenInterestDirection;
+  signal: OpenInterestSignal;
+  score: number;
+  label: string;
+  summary: string;
+  detail: string;
+  updatedAt: string | null;
+  samples: number;
+};
+
 export type MarketDataDiagnosticStatus = "ok" | "partial" | "failed";
 
 export type MarketDataDiagnosticCheck = {
@@ -144,6 +177,7 @@ export type MarketSnapshot = {
   rangeToNoiseRatio: number;
   volatilityState: VolatilityState;
   volumeState: string;
+  openInterest: OpenInterestState;
   nearestSupport: MarketZone;
   nearestResistance: MarketZone;
   priceAction: PriceActionState;
@@ -216,6 +250,7 @@ export type ReviewLevels = {
   priceAction: PriceActionState;
   zoneReaction: MarketZoneReaction;
   zoneVolume: ZoneVolumeProfile;
+  openInterest: OpenInterestState;
 };
 
 export type ReviewResult = {

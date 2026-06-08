@@ -128,7 +128,7 @@ export function MarketSnapshotPanel({
         />
       </div>
 
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <SnapshotStat
           label="Діапазон"
           value={`${market.rangeWidthPercent.toFixed(2)}%`}
@@ -151,6 +151,11 @@ export function MarketSnapshotPanel({
           label="ATR"
           value={`${market.atrPercent.toFixed(2)}%`}
           detail={`рух ${formatTradingViewPrice(market.atr)}`}
+        />
+        <SnapshotStat
+          label="Open Interest"
+          value={getOpenInterestValue(market)}
+          detail={getOpenInterestDetail(market)}
         />
         <SnapshotStat
           label="Простір / шум"
@@ -316,6 +321,26 @@ function getDiagnosticStatusLabel(status: MarketDataDiagnostic["status"]) {
   }
 
   return "немає";
+}
+
+function getOpenInterestValue(market: MarketSnapshot) {
+  if (market.openInterest.status === "ok") {
+    return market.openInterest.label.toUpperCase();
+  }
+
+  if (market.openInterest.status === "partial") {
+    return "ЧАСТКОВО";
+  }
+
+  return "НЕМАЄ";
+}
+
+function getOpenInterestDetail(market: MarketSnapshot) {
+  if (market.openInterest.status === "unavailable") {
+    return "без даних біржі";
+  }
+
+  return market.openInterest.summary;
 }
 
 function shortenDiagnosticError(error: string) {

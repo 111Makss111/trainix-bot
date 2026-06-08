@@ -7,6 +7,7 @@ import type {
   MarketDataDiagnostic,
   MarketAnalysisTimeframe,
   MarketSource,
+  OpenInterestPoint,
   TradeTimeframe,
 } from "@/components/crypto/strategies/trade-plan-reviewer/types";
 
@@ -43,6 +44,24 @@ const bybitIntervalByTimeframe: Record<MarketAnalysisTimeframe, string> = {
   "1h": "60",
   "4h": "240",
   "1d": "D",
+};
+const bybitOpenInterestIntervalByTimeframe: Record<TradeTimeframe, string> = {
+  "5m": "5min",
+  "15m": "15min",
+  "1h": "1h",
+  "4h": "4h",
+};
+const binanceOpenInterestPeriodByTimeframe: Record<TradeTimeframe, string> = {
+  "5m": "5m",
+  "15m": "15m",
+  "1h": "1h",
+  "4h": "4h",
+};
+const okxOpenInterestPeriodByTimeframe: Record<TradeTimeframe, string> = {
+  "5m": "5m",
+  "15m": "15m",
+  "1h": "1H",
+  "4h": "4H",
 };
 const okxBarByTimeframe: Record<MarketAnalysisTimeframe, string> = {
   "5m": "5m",
@@ -87,6 +106,11 @@ type KlineVenue = {
 
 type KlineFetchData = {
   candles: Candle[];
+  source: Exclude<MarketSource, "fallback">;
+};
+
+type OpenInterestFetchData = {
+  points: OpenInterestPoint[];
   source: Exclude<MarketSource, "fallback">;
 };
 
@@ -149,6 +173,17 @@ type BybitKlineResponse = {
   };
 };
 
+type BybitOpenInterestResponse = {
+  retCode: number;
+  retMsg: string;
+  result?: {
+    list?: Array<{
+      openInterest?: string;
+      timestamp?: string;
+    }>;
+  };
+};
+
 type OkxKline = [
   string,
   string,
@@ -167,6 +202,12 @@ type OkxKlineResponse = {
   data?: OkxKline[];
 };
 
+type OkxOpenInterestResponse = {
+  code: string;
+  msg: string;
+  data?: unknown[];
+};
+
 type BitgetKline = [
   string,
   string,
@@ -181,6 +222,30 @@ type BitgetKlineResponse = {
   code: string;
   msg: string;
   data?: BitgetKline[];
+};
+
+type BitgetOpenInterestResponse = {
+  code: string;
+  msg: string;
+  data?: {
+    openInterestList?: Array<{
+      size?: string;
+    }>;
+    list?: Array<{
+      openInterest?: string;
+    }>;
+    ts?: string;
+  };
+};
+
+type BinanceOpenInterestHistoryPoint = {
+  sumOpenInterest?: string;
+  timestamp?: number;
+};
+
+type BinanceOpenInterestResponse = {
+  openInterest?: string;
+  time?: number;
 };
 
 function normalizeSymbol(value: string | null) {
@@ -259,7 +324,10 @@ function toBitgetCandle(kline: BitgetKline): Candle {
   };
 }
 
-async function readJsonResponse<T>(response: Response, source: KlineSource) {
+async function readJsonResponse<T>(
+  response: Response,
+  source: { kind: string; path: string },
+) {
   const responseText = await response.text();
 
   if (!responseText.trim()) {
@@ -273,6 +341,342 @@ async function readJsonResponse<T>(response: Response, source: KlineSource) {
       `${source.kind} ${source.path} returned invalid JSON: ${responseText.slice(0, 120)}`,
     );
   }
+}
+
+function getOkxOpenInterestPoint(item: unknown): OpenInterestPoint | null {
+  if (Array.isArray(item)) {
+    const timestamp = Number(item[0]);
+    const value = Number(item[1]);
+
+    return Number.isFinite(timestamp) && Number.isFinite(value)
+      ? { timestamp, value }
+      : null;
+  }
+
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+
+  const record = item as Record<string, unknown>;
+  const timestamp = Number(record.ts ?? record.timestamp ?? record[0]);
+  const value = Number(
+    record.oi ??
+      record.openInterest ??
+      record.openInterestValue ??
+      record.oiCcy ??
+      record[1],
+  );
+
+  return Number.isFinite(timestamp) && Number.isFinite(value)
+    ? { timestamp, value }
+    : null;
+}
+
+async function fetchBybitOpenInterest(
+  symbol: string,
+  timeframe: TradeTimeframe,
+): Promise<OpenInterestFetchData> {
+  const errors: string[] = [];
+
+  for (const baseUrl of bybitBaseUrls) {
+    const source = {
+      baseUrl,
+      kind: "bybit" as const,
+      path: "/v5/market/open-interest",
+    };
+    const url = new URL(source.path, source.baseUrl);
+
+    url.searchParams.set("category", "linear");
+    url.searchParams.set("symbol", symbol);
+    url.searchParams.set("intervalTime", bybitOpenInterestIntervalByTimeframe[timeframe]);
+    url.searchParams.set("limit", "30");
+
+    try {
+      const response = await fetch(url, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+
+      if (!response.ok) {
+        throw new Error(`bybit OI ${response.status}: ${(await response.text()).slice(0, 120)}`);
+      }
+
+      const payload = await readJsonResponse<BybitOpenInterestResponse>(
+        response,
+        source,
+      );
+
+      if (payload.retCode !== 0) {
+        throw new Error(`bybit OI ${payload.retCode}: ${payload.retMsg}`);
+      }
+
+      const points = (payload.result?.list ?? [])
+        .map((item) => ({
+          timestamp: Number(item.timestamp),
+          value: Number(item.openInterest),
+        }))
+        .filter(
+          (point) =>
+            Number.isFinite(point.timestamp) && Number.isFinite(point.value),
+        )
+        .sort((first, second) => first.timestamp - second.timestamp);
+
+      if (points.length === 0) {
+        throw new Error("bybit OI returned empty list");
+      }
+
+      return { points, source: "bybit" };
+    } catch (error) {
+      errors.push(getErrorMessage(error));
+    }
+  }
+
+  throw new Error(errors.at(-1) ?? "Bybit OI unavailable");
+}
+
+async function fetchOkxOpenInterest(
+  symbol: string,
+  timeframe: TradeTimeframe,
+): Promise<OpenInterestFetchData> {
+  const historySource = {
+    baseUrl: okxBaseUrl,
+    kind: "okx" as const,
+    path: "/api/v5/rubik/stat/contracts/open-interest-history",
+  };
+  const historyUrl = new URL(historySource.path, historySource.baseUrl);
+
+  historyUrl.searchParams.set("instId", toOkxSymbol(symbol));
+  historyUrl.searchParams.set("period", okxOpenInterestPeriodByTimeframe[timeframe]);
+  historyUrl.searchParams.set("limit", "30");
+
+  try {
+    const response = await fetch(historyUrl, {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    });
+
+    if (!response.ok) {
+      throw new Error(`okx OI history ${response.status}: ${(await response.text()).slice(0, 120)}`);
+    }
+
+    const payload = await readJsonResponse<OkxOpenInterestResponse>(
+      response,
+      historySource,
+    );
+
+    if (payload.code !== "0") {
+      throw new Error(`okx OI history ${payload.code}: ${payload.msg}`);
+    }
+
+    const points = (payload.data ?? [])
+      .map(getOkxOpenInterestPoint)
+      .filter((point): point is OpenInterestPoint => point !== null)
+      .sort((first, second) => first.timestamp - second.timestamp);
+
+    if (points.length > 0) {
+      return { points, source: "okx" };
+    }
+  } catch {
+    // OKX can still provide a current OI snapshot, so keep trying below.
+  }
+
+  const currentSource = {
+    baseUrl: okxBaseUrl,
+    kind: "okx" as const,
+    path: "/api/v5/public/open-interest",
+  };
+  const currentUrl = new URL(currentSource.path, currentSource.baseUrl);
+
+  currentUrl.searchParams.set("instType", "SWAP");
+  currentUrl.searchParams.set("instId", toOkxSymbol(symbol));
+
+  const response = await fetch(currentUrl, {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    throw new Error(`okx OI ${response.status}: ${(await response.text()).slice(0, 120)}`);
+  }
+
+  const payload = await readJsonResponse<OkxOpenInterestResponse>(
+    response,
+    currentSource,
+  );
+
+  if (payload.code !== "0") {
+    throw new Error(`okx OI ${payload.code}: ${payload.msg}`);
+  }
+
+  const point = (payload.data ?? [])
+    .map(getOkxOpenInterestPoint)
+    .find((item): item is OpenInterestPoint => item !== null);
+
+  if (!point) {
+    throw new Error("okx OI returned empty data");
+  }
+
+  return { points: [point], source: "okx" };
+}
+
+async function fetchBitgetOpenInterest(
+  symbol: string,
+): Promise<OpenInterestFetchData> {
+  const source = {
+    baseUrl: bitgetBaseUrl,
+    kind: "bitget" as const,
+    path: "/api/v2/mix/market/open-interest",
+  };
+  const url = new URL(source.path, source.baseUrl);
+
+  url.searchParams.set("symbol", symbol);
+  url.searchParams.set("productType", "usdt-futures");
+
+  const response = await fetch(url, {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    throw new Error(`bitget OI ${response.status}: ${(await response.text()).slice(0, 120)}`);
+  }
+
+  const payload = await readJsonResponse<BitgetOpenInterestResponse>(
+    response,
+    source,
+  );
+
+  if (payload.code !== "00000") {
+    throw new Error(`bitget OI ${payload.code}: ${payload.msg}`);
+  }
+
+  const currentValue = Number(
+    payload.data?.openInterestList?.[0]?.size ??
+      payload.data?.list?.[0]?.openInterest,
+  );
+  const timestamp = Number(payload.data?.ts ?? Date.now());
+
+  if (!Number.isFinite(currentValue)) {
+    throw new Error("bitget OI returned empty data");
+  }
+
+  return {
+    points: [{ timestamp, value: currentValue }],
+    source: "bitget",
+  };
+}
+
+async function fetchBinanceOpenInterest(
+  symbol: string,
+  timeframe: TradeTimeframe,
+): Promise<OpenInterestFetchData> {
+  const historyErrors: string[] = [];
+
+  for (const baseUrl of binanceFuturesBaseUrls) {
+    const source = {
+      baseUrl,
+      kind: "futures" as const,
+      path: "/futures/data/openInterestHist",
+    };
+    const url = new URL(source.path, source.baseUrl);
+
+    url.searchParams.set("symbol", symbol);
+    url.searchParams.set("period", binanceOpenInterestPeriodByTimeframe[timeframe]);
+    url.searchParams.set("limit", "30");
+
+    try {
+      const response = await fetch(url, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+
+      if (!response.ok) {
+        throw new Error(`futures OI history ${response.status}: ${(await response.text()).slice(0, 120)}`);
+      }
+
+      const payload = await readJsonResponse<BinanceOpenInterestHistoryPoint[]>(
+        response,
+        source,
+      );
+      const points = payload
+        .map((item) => ({
+          timestamp: Number(item.timestamp),
+          value: Number(item.sumOpenInterest),
+        }))
+        .filter(
+          (point) =>
+            Number.isFinite(point.timestamp) && Number.isFinite(point.value),
+        )
+        .sort((first, second) => first.timestamp - second.timestamp);
+
+      if (points.length > 0) {
+        return { points, source: "futures" };
+      }
+    } catch (error) {
+      historyErrors.push(getErrorMessage(error));
+    }
+  }
+
+  for (const baseUrl of binanceFuturesBaseUrls) {
+    const source = {
+      baseUrl,
+      kind: "futures" as const,
+      path: "/fapi/v1/openInterest",
+    };
+    const url = new URL(source.path, source.baseUrl);
+
+    url.searchParams.set("symbol", symbol);
+
+    try {
+      const response = await fetch(url, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+
+      if (!response.ok) {
+        throw new Error(`futures OI ${response.status}: ${(await response.text()).slice(0, 120)}`);
+      }
+
+      const payload = await readJsonResponse<BinanceOpenInterestResponse>(
+        response,
+        source,
+      );
+      const value = Number(payload.openInterest);
+      const timestamp = Number(payload.time ?? Date.now());
+
+      if (Number.isFinite(value)) {
+        return { points: [{ timestamp, value }], source: "futures" };
+      }
+    } catch {
+      // Keep trying the next Binance base URL.
+    }
+  }
+
+  throw new Error(historyErrors.at(-1) ?? "Binance OI unavailable");
+}
+
+async function fetchOpenInterestFromVenue(
+  venue: KlineVenue,
+  symbol: string,
+  timeframe: TradeTimeframe,
+) {
+  if (venue.kind === "bybit") {
+    return fetchBybitOpenInterest(symbol, timeframe);
+  }
+
+  if (venue.kind === "okx") {
+    return fetchOkxOpenInterest(symbol, timeframe);
+  }
+
+  if (venue.kind === "bitget") {
+    return fetchBitgetOpenInterest(symbol);
+  }
+
+  if (venue.kind === "futures") {
+    return fetchBinanceOpenInterest(symbol, timeframe);
+  }
+
+  return null;
 }
 
 async function fetchKlinesFromSource(
@@ -588,6 +992,7 @@ async function fetchVenueMarketPackage(
     return {
       selectedData: null,
       multiTimeframeCandles: {} as Partial<Record<MarketAnalysisTimeframe, Candle[]>>,
+      openInterestPoints: null,
       diagnostic: {
         symbol,
         venue: venue.label,
@@ -601,11 +1006,14 @@ async function fetchVenueMarketPackage(
     };
   }
 
-  const otherResults = await Promise.all(
-    analysisTimeframes
-      .filter((interval) => interval !== selectedTimeframe)
-      .map((interval) => fetchTimeframeFromVenue(venue, symbol, interval)),
-  );
+  const [otherResults, openInterestResult] = await Promise.all([
+    Promise.all(
+      analysisTimeframes
+        .filter((interval) => interval !== selectedTimeframe)
+        .map((interval) => fetchTimeframeFromVenue(venue, symbol, interval)),
+    ),
+    fetchOpenInterestFromVenue(venue, symbol, selectedTimeframe).catch(() => null),
+  ]);
   const checks = [selectedResult, ...otherResults].map((result) => result.check);
   const failedOptionalChecks = otherResults.filter((result) => !result.data);
   const diagnostic: MarketDataDiagnostic = {
@@ -633,6 +1041,7 @@ async function fetchVenueMarketPackage(
         result.data ? [[result.interval, result.data.candles] as const] : [],
       ),
     ]) as Partial<Record<MarketAnalysisTimeframe, Candle[]>>,
+    openInterestPoints: openInterestResult?.points ?? null,
     diagnostic,
   };
 }
@@ -722,6 +1131,7 @@ export async function GET(request: Request) {
       btcCandles: btcPackage.selectedData.candles,
       source: marketPackage.selectedData.source,
       multiTimeframeCandles: marketPackage.multiTimeframeCandles,
+      openInterestPoints: marketPackage.openInterestPoints,
     });
 
     return NextResponse.json({ market, diagnostics });
