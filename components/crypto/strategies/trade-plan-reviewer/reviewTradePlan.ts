@@ -780,10 +780,18 @@ function getVerdict({
     };
   }
 
-  if (marketScore >= 65 && entryScore < 45) {
+  if (marketScore >= 65 && entryScore < 65) {
     return {
-      label: "Напрям є, вхід слабкий",
-      detail: "Ринок підтримує ідею, але конкретна точка входу зараз неякісна.",
+      label: "Ринок сильний, точка слабка",
+      detail: "Напрям має перевагу, але конкретний вхід ще не дає достатньої якості.",
+      status: "warning",
+    };
+  }
+
+  if (entryScore >= 65 && marketScore < 60) {
+    return {
+      label: "Точка цікава, ринок не підтвердив",
+      detail: "Ціна біля хорошої зони, але напрям і реакція ще не дають переваги.",
       status: "warning",
     };
   }

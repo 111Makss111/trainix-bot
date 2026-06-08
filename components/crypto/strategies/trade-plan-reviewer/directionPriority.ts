@@ -113,9 +113,15 @@ export function getDirectionPriority(
   const scoreGap = bestCandidate.score - secondCandidate.score;
   const bestMarketScore = bestCandidate.review.marketScore;
   const bestEntryScore = bestCandidate.review.entryScore;
-  const hasDirectionButWeakEntry = bestMarketScore >= 65 && bestEntryScore < 50;
+  const hasDirectionButWeakEntry = bestMarketScore >= 65 && bestEntryScore < 65;
+  const entryIsInterestingButMarketWeak =
+    bestEntryScore >= 65 && bestMarketScore < 60;
+  const oppositeEntryIsInterestingButMarketWeak =
+    secondCandidate.review.entryScore >= 65 &&
+    secondCandidate.review.marketScore < 60;
   const shouldWait =
     hasDirectionButWeakEntry ||
+    entryIsInterestingButMarketWeak ||
     bestCandidate.score < 55 ||
     (scoreGap < 6 && bestCandidate.score < 75);
 
@@ -123,11 +129,19 @@ export function getDirectionPriority(
     return {
       preferredDirection: "wait",
       title: hasDirectionButWeakEntry
-        ? "Напрям є, вхід слабкий"
+        ? "Ринок є, точка слабка"
+        : entryIsInterestingButMarketWeak
+          ? "Точка є, ринок слабкий"
         : "Краще почекати",
       summary: hasDirectionButWeakEntry
-        ? `${bestCandidate.label} має кращий ринок (${bestMarketScore}/100), але точка входу лише ${bestEntryScore}/100. Краще чекати відкат, чистіший RR або реакцію.`
-        : "Long і Short не дають чистої переваги. Зараз важливіше дочекатися кращої зони або сильнішого руху.",
+        ? `${bestCandidate.label}: ринок ${bestMarketScore}/100, але вхід ${bestEntryScore}/100. Краще чекати відкат, чистіший RR або реакцію.${
+            oppositeEntryIsInterestingButMarketWeak
+              ? ` ${secondCandidate.label}: точка цікава, але ринок ${secondCandidate.review.marketScore}/100 ще не підтвердив.`
+              : ""
+          }`
+        : entryIsInterestingButMarketWeak
+          ? `${bestCandidate.label}: точка входу ${bestEntryScore}/100, але ринок лише ${bestMarketScore}/100. Потрібне підтвердження напрямку.`
+          : "Long і Short не дають чистої переваги. Зараз важливіше дочекатися кращої зони або сильнішого руху.",
       candidates,
     };
   }
