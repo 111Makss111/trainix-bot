@@ -341,15 +341,59 @@ function getZoneVolumeSummary(strength: ZoneVolumeProfile["strength"]) {
   return "обсяг невідомий";
 }
 
+function getZoneVolumePressure({
+  buyingVolume,
+  sellingVolume,
+}: {
+  buyingVolume: number;
+  sellingVolume: number;
+}): {
+  pressure: ZoneVolumeProfile["pressure"];
+  pressureScore: number;
+} {
+  const totalVolume = buyingVolume + sellingVolume;
+
+  if (totalVolume <= 0) {
+    return { pressure: "unknown", pressureScore: 0 };
+  }
+
+  const imbalancePercent =
+    (Math.abs(buyingVolume - sellingVolume) / totalVolume) * 100;
+
+  if (imbalancePercent < 12) {
+    return {
+      pressure: "balanced",
+      pressureScore: Math.round(imbalancePercent),
+    };
+  }
+
+  return {
+    pressure: buyingVolume > sellingVolume ? "buying" : "selling",
+    pressureScore: Math.round(imbalancePercent),
+  };
+}
+
+function sumCandleVolume(candles: Candle[], direction: "buying" | "selling") {
+  return candles.reduce((sum, candle) => {
+    const candleDirection = candle.close >= candle.open ? "buying" : "selling";
+
+    return candleDirection === direction ? sum + candle.volume : sum;
+  }, 0);
+}
+
 function getUnknownZoneVolume(zone: MarketZone): ZoneVolumeProfile {
   return {
     zoneKind: zone.kind,
     zoneLow: zone.low,
     zoneHigh: zone.high,
     strength: "unknown",
+    pressure: "unknown",
     score: 0,
+    pressureScore: 0,
     zoneVolumeRatio: 0,
     touchVolumeRatio: 0,
+    buyingVolumeRatio: 0,
+    sellingVolumeRatio: 0,
     touchedCandles: 0,
     summary: "обсяг невідомий",
     detail: "Обсяг у зоні не рахується без достатньої кількості свічок.",
@@ -382,6 +426,15 @@ function getZoneVolumeProfile(candles: Candle[], zone: MarketZone): ZoneVolumePr
     touchCandles.length > 0
       ? average(touchCandles.map((candle) => candle.volume)) / baselineVolume
       : 0;
+  const pressureCandles = touchCandles.length >= 2 ? touchCandles : zoneCandles;
+  const buyingVolume = sumCandleVolume(pressureCandles, "buying");
+  const sellingVolume = sumCandleVolume(pressureCandles, "selling");
+  const buyingVolumeRatio = buyingVolume / baselineVolume;
+  const sellingVolumeRatio = sellingVolume / baselineVolume;
+  const { pressure, pressureScore } = getZoneVolumePressure({
+    buyingVolume,
+    sellingVolume,
+  });
   const score = Math.round(
     clamp(
       zoneVolumeRatio * 34 +
@@ -402,13 +455,33 @@ function getZoneVolumeProfile(candles: Candle[], zone: MarketZone): ZoneVolumePr
     zoneLow: zone.low,
     zoneHigh: zone.high,
     strength,
+    pressure,
     score,
+    pressureScore,
     zoneVolumeRatio,
     touchVolumeRatio,
+    buyingVolumeRatio,
+    sellingVolumeRatio,
     touchedCandles: zoneCandles.length,
     summary: getZoneVolumeSummary(strength),
-    detail: `Свічок у зоні: ${zoneCandles.length}. Обсяг зони ${zoneVolumeRatio.toFixed(1)}x, ${touchText} від середнього.`,
+    detail: `Свічок у зоні: ${zoneCandles.length}. Обсяг зони ${zoneVolumeRatio.toFixed(1)}x, ${touchText} від середнього. Тиск: ${getVolumePressureLabel(pressure)} ${pressureScore}/100.`,
   };
+}
+
+function getVolumePressureLabel(pressure: ZoneVolumeProfile["pressure"]) {
+  if (pressure === "buying") {
+    return "покупець";
+  }
+
+  if (pressure === "selling") {
+    return "продавець";
+  }
+
+  if (pressure === "balanced") {
+    return "баланс";
+  }
+
+  return "невідомо";
 }
 
 function getAverageRangePercent(candles: Candle[]) {

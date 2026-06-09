@@ -1,5 +1,6 @@
 import { formatTradingViewPrice } from "../formatters";
 import type {
+  DirectionalZoneVolume,
   DirectionCandidate,
   MarketZoneReaction,
   OpenInterestState,
@@ -32,10 +33,10 @@ const priceActionClassName: Record<PriceActionState["direction"], string> = {
   neutral: "border-white/10 bg-white/[0.04] text-white/52",
 };
 
-const volumeClassName: Record<ZoneVolumeProfile["strength"], string> = {
-  strong: "border-emerald-300/18 bg-emerald-300/8 text-emerald-100",
-  normal: "border-sky-300/18 bg-sky-300/8 text-sky-100",
-  weak: "border-amber-300/18 bg-amber-300/8 text-amber-100",
+const directionalVolumeClassName: Record<DirectionalZoneVolume["alignment"], string> = {
+  supports: "border-emerald-300/18 bg-emerald-300/8 text-emerald-100",
+  neutral: "border-amber-300/18 bg-amber-300/8 text-amber-100",
+  against: "border-rose-300/18 bg-rose-300/8 text-rose-100",
   unknown: "border-white/10 bg-white/[0.04] text-white/52",
 };
 
@@ -68,6 +69,7 @@ function DirectionCard({
   const rewardToRisk = levels.rewardToRisk;
   const reaction = levels.zoneReaction;
   const zoneVolume = levels.zoneVolume;
+  const directionalVolume = levels.directionalVolume;
   const openInterest = levels.openInterest;
   const priceAction = levels.priceAction;
   const review = candidate.review;
@@ -164,10 +166,10 @@ function DirectionCard({
         <span
           className={[
             "rounded-full border px-2.5 py-1",
-            volumeClassName[zoneVolume.strength],
+            directionalVolumeClassName[directionalVolume.alignment],
           ].join(" ")}
         >
-          обсяг {zoneVolume.score}/100
+          {directionalVolume.label} {directionalVolume.score}/100
         </span>
         {openInterest.status === "ok" ? (
           <span
@@ -192,6 +194,7 @@ function DirectionCard({
       <ReactionDetails
         reaction={reaction}
         zoneVolume={zoneVolume}
+        directionalVolume={directionalVolume}
         openInterest={openInterest}
       />
 
@@ -236,10 +239,12 @@ function QualityStat({
 function ReactionDetails({
   reaction,
   zoneVolume,
+  directionalVolume,
   openInterest,
 }: {
   reaction: MarketZoneReaction;
   zoneVolume: ZoneVolumeProfile;
+  directionalVolume: DirectionalZoneVolume;
   openInterest: OpenInterestState;
 }) {
   return (
@@ -249,6 +254,7 @@ function ReactionDetails({
       </summary>
       <div className="mt-2 grid gap-1 leading-5">
         <p>{reaction.detail}</p>
+        <p>{directionalVolume.detail}</p>
         <p>{zoneVolume.detail}</p>
         {openInterest.status === "ok" ? <p>{openInterest.detail}</p> : null}
         <p>

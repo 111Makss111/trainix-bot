@@ -62,17 +62,34 @@ export type MarketZone = {
 
 export type ZoneVolumeStrength = "strong" | "normal" | "weak" | "unknown";
 
+export type ZoneVolumePressure = "buying" | "selling" | "balanced" | "unknown";
+
+export type ZoneVolumeAlignment = "supports" | "neutral" | "against" | "unknown";
+
 export type ZoneVolumeProfile = {
   zoneKind: ZoneKind;
   zoneLow: number;
   zoneHigh: number;
   strength: ZoneVolumeStrength;
+  pressure: ZoneVolumePressure;
   score: number;
+  pressureScore: number;
   zoneVolumeRatio: number;
   touchVolumeRatio: number;
+  buyingVolumeRatio: number;
+  sellingVolumeRatio: number;
   touchedCandles: number;
   summary: string;
   detail: string;
+};
+
+export type DirectionalZoneVolume = {
+  alignment: ZoneVolumeAlignment;
+  score: number;
+  label: string;
+  summary: string;
+  detail: string;
+  status: ReviewStatus;
 };
 
 export type MarketZoneReaction = {
@@ -250,6 +267,7 @@ export type ReviewLevels = {
   priceAction: PriceActionState;
   zoneReaction: MarketZoneReaction;
   zoneVolume: ZoneVolumeProfile;
+  directionalVolume: DirectionalZoneVolume;
   openInterest: OpenInterestState;
 };
 

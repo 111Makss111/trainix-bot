@@ -1,5 +1,6 @@
 import type {
   EntryMode,
+  DirectionalZoneVolume,
   MarketSnapshot,
   MarketZone,
   MarketZoneReaction,
@@ -414,20 +415,118 @@ function getReactionSignalDetail(reaction: MarketZoneReaction) {
   }.`;
 }
 
-function getZoneVolumeStatus(zoneVolume: ZoneVolumeProfile): ReviewStatus {
-  if (zoneVolume.strength === "strong") {
-    return "pass";
-  }
-
-  return "warning";
+function isVolumePressureAligned(
+  direction: TradeDirection,
+  zoneVolume: ZoneVolumeProfile,
+) {
+  return (
+    (direction === "long" && zoneVolume.pressure === "buying") ||
+    (direction === "short" && zoneVolume.pressure === "selling")
+  );
 }
 
-function getZoneVolumeSignalDetail(zoneVolume: ZoneVolumeProfile) {
+function isVolumePressureAgainst(
+  direction: TradeDirection,
+  zoneVolume: ZoneVolumeProfile,
+) {
+  return (
+    (direction === "long" && zoneVolume.pressure === "selling") ||
+    (direction === "short" && zoneVolume.pressure === "buying")
+  );
+}
+
+function isReactionAligned(
+  direction: TradeDirection,
+  reaction: MarketZoneReaction,
+) {
+  return (
+    (direction === "long" && reaction.behavior === "buyback") ||
+    (direction === "short" && reaction.behavior === "rejection")
+  );
+}
+
+function isReactionAgainst(
+  direction: TradeDirection,
+  reaction: MarketZoneReaction,
+) {
+  return (
+    (direction === "long" && reaction.behavior === "breakdown") ||
+    (direction === "short" && reaction.behavior === "breakout")
+  );
+}
+
+function getDirectionalZoneVolume({
+  direction,
+  zoneVolume,
+  reaction,
+}: {
+  direction: TradeDirection;
+  zoneVolume: ZoneVolumeProfile;
+  reaction: MarketZoneReaction;
+}): DirectionalZoneVolume {
   if (zoneVolume.strength === "unknown") {
-    return "Обсяг у зоні ще не підтверджений.";
+    return {
+      alignment: "unknown",
+      score: 0,
+      label: "обсяг неясний",
+      summary: "Обсяг зони не підтверджений.",
+      detail: "Система не може оцінити, чи обсяг підтримує цей напрям.",
+      status: "warning",
+    };
   }
 
-  return `Обсяг ${zoneVolume.score}/100: ${zoneVolume.summary}.`;
+  const pressureAligned = isVolumePressureAligned(direction, zoneVolume);
+  const pressureAgainst = isVolumePressureAgainst(direction, zoneVolume);
+  const reactionAligned = isReactionAligned(direction, reaction);
+  const reactionAgainst = isReactionAgainst(direction, reaction);
+  const pressureBase = pressureAligned
+    ? 65 + zoneVolume.pressureScore * 0.25
+    : pressureAgainst
+      ? 35 - zoneVolume.pressureScore * 0.2
+      : 45;
+  const reactionBase = reactionAligned
+    ? 65 + reaction.score * 0.25
+    : reactionAgainst
+      ? 25
+      : 45;
+  const score = Math.round(
+    Math.min(zoneVolume.score * 0.35 + pressureBase * 0.35 + reactionBase * 0.3, 100),
+  );
+  const alignment: DirectionalZoneVolume["alignment"] =
+    score >= 65 && (pressureAligned || reactionAligned)
+      ? "supports"
+      : score <= 38 && (pressureAgainst || reactionAgainst)
+        ? "against"
+        : "neutral";
+  const status: ReviewStatus =
+    alignment === "supports" ? "pass" : alignment === "against" ? "fail" : "warning";
+  const label =
+    alignment === "supports"
+      ? "обсяг підтримує"
+      : alignment === "against"
+        ? "обсяг проти"
+        : "обсяг неясний";
+  const pressureText =
+    zoneVolume.pressure === "buying"
+      ? "перевага покупця"
+      : zoneVolume.pressure === "selling"
+        ? "перевага продавця"
+        : zoneVolume.pressure === "balanced"
+          ? "баланс покупця і продавця"
+          : "тиск невідомий";
+
+  return {
+    alignment,
+    score,
+    label,
+    summary: `${label} ${score}/100.`,
+    detail: `Обсяг зони ${zoneVolume.score}/100, ${pressureText} ${zoneVolume.pressureScore}/100. Реакція зони ${reaction.score}/100: ${reaction.summary}.`,
+    status,
+  };
+}
+
+function getZoneVolumeSignalDetail(directionalVolume: DirectionalZoneVolume) {
+  return directionalVolume.detail;
 }
 
 function getOpenInterestStatus(
@@ -1010,7 +1109,12 @@ export function reviewTradePlan(
   const reactionStatus = getReactionStatus(zoneReaction);
   const zoneVolume =
     plan.direction === "long" ? market.zoneVolumes.support : market.zoneVolumes.resistance;
-  const zoneVolumeStatus = getZoneVolumeStatus(zoneVolume);
+  const directionalVolume = getDirectionalZoneVolume({
+    direction: plan.direction,
+    zoneVolume,
+    reaction: zoneReaction,
+  });
+  const zoneVolumeStatus = directionalVolume.status;
   const openInterestStatus = getOpenInterestStatus(
     plan.direction,
     market.openInterest,
@@ -1087,7 +1191,7 @@ export function reviewTradePlan(
     targetSpacePercent <= market.averageRangePercent
       ? `Ціль ${targetSpacePercent.toFixed(2)}%, шум ${market.averageRangePercent.toFixed(2)}%. Рух менший за шум.`
       : `${rrText}. Ціль ${targetSpacePercent.toFixed(2)}%, шум ${market.averageRangePercent.toFixed(2)}%, простір/шум ${market.rangeToNoiseRatio.toFixed(1)}x.`;
-  const zoneDetail = `${getMtfSignalDetail(setupZone)} ${getReactionSignalDetail(zoneReaction)} ${getZoneVolumeSignalDetail(zoneVolume)} Реакція ${zoneReaction.score}/100.`;
+  const zoneDetail = `${getMtfSignalDetail(setupZone)} ${getReactionSignalDetail(zoneReaction)} ${getZoneVolumeSignalDetail(directionalVolume)}`;
   const levelsDetail =
     priceSideStatus === "pass"
       ? `Вхід ${formatTradingViewPrice(entryPrice)}, стоп ${formatTradingViewPrice(stopLoss)}, ціль ${formatTradingViewPrice(takeProfit)}. Ризик ${
@@ -1221,6 +1325,7 @@ export function reviewTradePlan(
       priceAction: market.priceAction,
       zoneReaction,
       zoneVolume,
+      directionalVolume,
       openInterest: market.openInterest,
     },
     metrics,

@@ -233,7 +233,7 @@ function ZoneVolumeBadge({
       ].join(" ")}
       title={zoneVolume.detail}
     >
-      обсяг {zoneVolume.score}/100 · {zoneVolume.summary}
+      обсяг зони {zoneVolume.score}/100 · {zoneVolume.summary}
     </p>
   );
 }
