@@ -679,6 +679,44 @@ async function fetchOpenInterestFromVenue(
   return null;
 }
 
+function hasOpenInterestHistory(openInterest: OpenInterestFetchData | null) {
+  return (openInterest?.points.length ?? 0) >= 2;
+}
+
+async function fetchOpenInterestFromAvailableVenues(
+  preferredVenue: KlineVenue,
+  symbol: string,
+  timeframe: TradeTimeframe,
+) {
+  const preferredOpenInterest = await fetchOpenInterestFromVenue(
+    preferredVenue,
+    symbol,
+    timeframe,
+  ).catch(() => null);
+
+  if (hasOpenInterestHistory(preferredOpenInterest)) {
+    return preferredOpenInterest;
+  }
+
+  for (const venue of klineVenues) {
+    if (venue.kind === preferredVenue.kind || venue.kind === "spot") {
+      continue;
+    }
+
+    const openInterest = await fetchOpenInterestFromVenue(
+      venue,
+      symbol,
+      timeframe,
+    ).catch(() => null);
+
+    if (hasOpenInterestHistory(openInterest)) {
+      return openInterest;
+    }
+  }
+
+  return preferredOpenInterest;
+}
+
 async function fetchKlinesFromSource(
   source: KlineSource,
   symbol: string,
@@ -993,6 +1031,7 @@ async function fetchVenueMarketPackage(
       selectedData: null,
       multiTimeframeCandles: {} as Partial<Record<MarketAnalysisTimeframe, Candle[]>>,
       openInterestPoints: null,
+      openInterestSource: null,
       diagnostic: {
         symbol,
         venue: venue.label,
@@ -1012,7 +1051,11 @@ async function fetchVenueMarketPackage(
         .filter((interval) => interval !== selectedTimeframe)
         .map((interval) => fetchTimeframeFromVenue(venue, symbol, interval)),
     ),
-    fetchOpenInterestFromVenue(venue, symbol, selectedTimeframe).catch(() => null),
+    fetchOpenInterestFromAvailableVenues(
+      venue,
+      symbol,
+      selectedTimeframe,
+    ).catch(() => null),
   ]);
   const checks = [selectedResult, ...otherResults].map((result) => result.check);
   const failedOptionalChecks = otherResults.filter((result) => !result.data);
@@ -1042,6 +1085,7 @@ async function fetchVenueMarketPackage(
       ),
     ]) as Partial<Record<MarketAnalysisTimeframe, Candle[]>>,
     openInterestPoints: openInterestResult?.points ?? null,
+    openInterestSource: openInterestResult?.source ?? null,
     diagnostic,
   };
 }
@@ -1132,6 +1176,7 @@ export async function GET(request: Request) {
       source: marketPackage.selectedData.source,
       multiTimeframeCandles: marketPackage.multiTimeframeCandles,
       openInterestPoints: marketPackage.openInterestPoints,
+      openInterestSource: marketPackage.openInterestSource,
     });
 
     return NextResponse.json({ market, diagnostics });

@@ -435,7 +435,7 @@ function getOpenInterestStatus(
   openInterest: OpenInterestState,
 ): ReviewStatus {
   if (openInterest.status !== "ok") {
-    return "warning";
+    return "pass";
   }
 
   if (direction === "long" && openInterest.signal === "new-longs") {
@@ -651,6 +651,8 @@ function getMarketScore({
   volatilityStatus: ReviewStatus;
   market: MarketSnapshot;
 }) {
+  const openInterestWeight = market.openInterest.status === "ok" ? 8 : 0;
+  const availableWeight = 92 + openInterestWeight;
   const rawScore =
     getStatusWeight(trendStatus) * 20 +
     getStatusWeight(btcStatus) * 16 +
@@ -658,11 +660,11 @@ function getMarketScore({
     getStatusWeight(mtfStatus) * 12 +
     getStatusWeight(reactionStatus) * 9 +
     getStatusWeight(zoneVolumeStatus) * 6 +
-    getStatusWeight(openInterestStatus) * 8 +
+    getStatusWeight(openInterestStatus) * openInterestWeight +
     getStatusWeight(volatilityStatus) * 9;
   const strengthBonus = market.trend === "sideways" ? 0 : market.trendStrength * 0.1;
 
-  return Math.round(Math.min(rawScore + strengthBonus, 100));
+  return Math.round(Math.min((rawScore / availableWeight) * 100 + strengthBonus, 100));
 }
 
 function getEntryScore({
@@ -1118,12 +1120,16 @@ export function reviewTradePlan(
       `Оцінка ${entryScore}/100. ${entryDetail}`,
       getStatusByScore(entryScore),
     ),
-    buildSignal(
-      "open-interest",
-      "Фʼючерсний інтерес",
-      getOpenInterestSignalDetail(market.openInterest),
-      openInterestStatus,
-    ),
+    ...(market.openInterest.status === "ok"
+      ? [
+          buildSignal(
+            "open-interest",
+            "Фʼючерсний інтерес",
+            getOpenInterestSignalDetail(market.openInterest),
+            openInterestStatus,
+          ),
+        ]
+      : []),
     buildSignal(
       "rr-noise",
       "RR / шум",

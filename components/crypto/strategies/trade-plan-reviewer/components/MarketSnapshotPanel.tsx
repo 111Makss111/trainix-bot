@@ -329,7 +329,7 @@ function getOpenInterestValue(market: MarketSnapshot) {
   }
 
   if (market.openInterest.status === "partial") {
-    return "ЧАСТКОВО";
+    return "ПОТОЧНИЙ";
   }
 
   return "НЕМАЄ";
@@ -338,6 +338,10 @@ function getOpenInterestValue(market: MarketSnapshot) {
 function getOpenInterestDetail(market: MarketSnapshot) {
   if (market.openInterest.status === "unavailable") {
     return "без даних біржі";
+  }
+
+  if (market.openInterest.status === "partial") {
+    return "є значення без історії";
   }
 
   return market.openInterest.summary;

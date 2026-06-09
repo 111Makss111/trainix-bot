@@ -200,7 +200,7 @@ function getOpenInterestState({
       direction: "unknown",
       signal: "unknown",
       score: 20,
-      label: "OI частково",
+      label: "Поточний OI",
       summary: "Є тільки поточний Open Interest без динаміки.",
       detail: "Поточне значення OI є, але немає історії для висновку по руху.",
       updatedAt: new Date(lastPoint.timestamp).toISOString(),
@@ -815,6 +815,7 @@ export function buildMarketSnapshotFromCandles({
   source,
   multiTimeframeCandles,
   openInterestPoints,
+  openInterestSource,
 }: {
   symbol: string;
   timeframe: TradeTimeframe;
@@ -823,6 +824,7 @@ export function buildMarketSnapshotFromCandles({
   source: Exclude<MarketSource, "fallback">;
   multiTimeframeCandles?: Partial<Record<MarketAnalysisTimeframe, Candle[]>>;
   openInterestPoints?: OpenInterestPoint[] | null;
+  openInterestSource?: Exclude<MarketSource, "fallback"> | null;
 }): MarketSnapshot {
   const currentCandle = candles.at(-1);
 
@@ -898,7 +900,7 @@ export function buildMarketSnapshotFromCandles({
     openInterest: getOpenInterestState({
       candles,
       points: openInterestPoints,
-      source,
+      source: openInterestSource ?? source,
     }),
     nearestSupport: zones.nearestSupport,
     nearestResistance: zones.nearestResistance,

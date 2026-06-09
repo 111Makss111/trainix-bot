@@ -169,14 +169,16 @@ function DirectionCard({
         >
           обсяг {zoneVolume.score}/100
         </span>
-        <span
-          className={[
-            "rounded-full border px-2.5 py-1",
-            openInterestClassName[openInterest.status],
-          ].join(" ")}
-        >
-          OI {openInterest.status === "ok" ? openInterest.label : openInterest.status === "partial" ? "частково" : "немає"}
-        </span>
+        {openInterest.status === "ok" ? (
+          <span
+            className={[
+              "rounded-full border px-2.5 py-1",
+              openInterestClassName[openInterest.status],
+            ].join(" ")}
+          >
+            OI {openInterest.label}
+          </span>
+        ) : null}
         <span
           className={[
             "rounded-full border px-2.5 py-1",
@@ -248,7 +250,7 @@ function ReactionDetails({
       <div className="mt-2 grid gap-1 leading-5">
         <p>{reaction.detail}</p>
         <p>{zoneVolume.detail}</p>
-        <p>{openInterest.detail}</p>
+        {openInterest.status === "ok" ? <p>{openInterest.detail}</p> : null}
         <p>
           Зона: {reaction.zoneLabel} {formatTradingViewPrice(reaction.zoneLow)} -{" "}
           {formatTradingViewPrice(reaction.zoneHigh)}
