@@ -27,6 +27,15 @@ export type PriceActionMode =
   | "overextended-up"
   | "overextended-down";
 
+export type MoveStagePhase =
+  | "base"
+  | "early"
+  | "active"
+  | "heated"
+  | "late"
+  | "trap"
+  | "unknown";
+
 export type ZoneReactionStrength = "strong" | "medium" | "weak" | "none";
 
 export type ZoneReactionBehavior =
@@ -118,6 +127,20 @@ export type PriceActionState = {
   takeProfit: number | null;
 };
 
+export type MoveStageState = {
+  phase: MoveStagePhase;
+  direction: TradeDirection | "neutral";
+  riskScore: number;
+  moveAtr: number;
+  pullbackAtr: number;
+  counterCandles: number;
+  strongCandles: number;
+  label: string;
+  summary: string;
+  detail: string;
+  status: ReviewStatus;
+};
+
 export type MarketSource =
   | "spot"
   | "futures"
@@ -198,6 +221,7 @@ export type MarketSnapshot = {
   nearestSupport: MarketZone;
   nearestResistance: MarketZone;
   priceAction: PriceActionState;
+  moveStage: MoveStageState;
   zoneReactions: {
     support: MarketZoneReaction;
     resistance: MarketZoneReaction;
@@ -265,6 +289,7 @@ export type ReviewLevels = {
   stopAtrMultiple: number | null;
   targetAtrMultiple: number | null;
   priceAction: PriceActionState;
+  moveStage: MoveStageState;
   zoneReaction: MarketZoneReaction;
   zoneVolume: ZoneVolumeProfile;
   directionalVolume: DirectionalZoneVolume;

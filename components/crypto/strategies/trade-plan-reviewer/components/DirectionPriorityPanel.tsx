@@ -3,6 +3,7 @@ import type {
   DirectionalZoneVolume,
   DirectionCandidate,
   MarketZoneReaction,
+  MoveStageState,
   OpenInterestState,
   PriceActionState,
   DirectionPriority,
@@ -72,6 +73,7 @@ function DirectionCard({
   const directionalVolume = levels.directionalVolume;
   const openInterest = levels.openInterest;
   const priceAction = levels.priceAction;
+  const moveStage = levels.moveStage;
   const review = candidate.review;
 
   return (
@@ -189,12 +191,21 @@ function DirectionCard({
         >
           рух {priceAction.label}
         </span>
+        <span
+          className={[
+            "rounded-full border px-2.5 py-1",
+            statusClassName[moveStage.status],
+          ].join(" ")}
+        >
+          стадія {moveStage.label}
+        </span>
       </div>
 
       <ReactionDetails
         reaction={reaction}
         zoneVolume={zoneVolume}
         directionalVolume={directionalVolume}
+        moveStage={moveStage}
         openInterest={openInterest}
       />
 
@@ -240,11 +251,13 @@ function ReactionDetails({
   reaction,
   zoneVolume,
   directionalVolume,
+  moveStage,
   openInterest,
 }: {
   reaction: MarketZoneReaction;
   zoneVolume: ZoneVolumeProfile;
   directionalVolume: DirectionalZoneVolume;
+  moveStage: MoveStageState;
   openInterest: OpenInterestState;
 }) {
   return (
@@ -254,6 +267,7 @@ function ReactionDetails({
       </summary>
       <div className="mt-2 grid gap-1 leading-5">
         <p>{reaction.detail}</p>
+        <p>{moveStage.detail}</p>
         <p>{directionalVolume.detail}</p>
         <p>{zoneVolume.detail}</p>
         {openInterest.status === "ok" ? <p>{openInterest.detail}</p> : null}

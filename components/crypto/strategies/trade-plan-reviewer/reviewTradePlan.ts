@@ -6,6 +6,7 @@ import type {
   MarketZoneReaction,
   OpenInterestState,
   PriceActionState,
+  MoveStageState,
   ReviewGrade,
   ReviewItem,
   ReviewMetric,
@@ -582,6 +583,25 @@ function getPriceActionStatus(
   return "pass";
 }
 
+function getMoveStageEntryStatus(
+  direction: TradeDirection,
+  moveStage: MoveStageState,
+): ReviewStatus {
+  if (moveStage.direction !== direction) {
+    return "pass";
+  }
+
+  if (moveStage.phase === "trap" || moveStage.phase === "late") {
+    return "fail";
+  }
+
+  if (moveStage.phase === "heated") {
+    return "warning";
+  }
+
+  return "pass";
+}
+
 function getEntrySignalDetail({
   direction,
   entryMode,
@@ -775,6 +795,7 @@ function getEntryScore({
   zoneStatus,
   riskStatus,
   priceSideStatus,
+  moveStageStatus,
 }: {
   entryStatus: ReviewStatus;
   rewardStatus: ReviewStatus;
@@ -784,16 +805,18 @@ function getEntryScore({
   zoneStatus: ReviewStatus;
   riskStatus: ReviewStatus;
   priceSideStatus: ReviewStatus;
+  moveStageStatus: ReviewStatus;
 }) {
   const rawScore =
-    getStatusWeight(entryStatus) * 18 +
-    getStatusWeight(rewardStatus) * 24 +
-    getStatusWeight(atrStatus) * 18 +
-    getStatusWeight(spaceStatus) * 14 +
-    getStatusWeight(positionStatus) * 12 +
-    getStatusWeight(zoneStatus) * 8 +
-    getStatusWeight(riskStatus) * 4 +
-    getStatusWeight(priceSideStatus) * 2;
+    getStatusWeight(entryStatus) * 16 +
+    getStatusWeight(rewardStatus) * 22 +
+    getStatusWeight(atrStatus) * 15 +
+    getStatusWeight(spaceStatus) * 12 +
+    getStatusWeight(positionStatus) * 10 +
+    getStatusWeight(zoneStatus) * 7 +
+    getStatusWeight(moveStageStatus) * 14 +
+    getStatusWeight(riskStatus) * 3 +
+    getStatusWeight(priceSideStatus) * 1;
 
   return Math.round(Math.min(rawScore, 100));
 }
@@ -818,7 +841,7 @@ function getMoveExhaustion({
   const isOverextended =
     market.priceAction.mode === "overextended-up" ||
     market.priceAction.mode === "overextended-down";
-  const score = Math.round(
+  const baseScore = Math.round(
     Math.min(
       (isAlignedMove ? market.priceAction.strength * 0.35 : 0) +
         (isOverextended ? 30 : 0) +
@@ -827,14 +850,25 @@ function getMoveExhaustion({
       100,
     ),
   );
+  const stageRisk =
+    market.moveStage.direction === direction ? market.moveStage.riskScore : 0;
+  const score = Math.max(baseScore, stageRisk);
   const status: ReviewStatus =
     score >= 70 ? "fail" : score >= 45 ? "warning" : "pass";
+  const stageDetail =
+    market.moveStage.direction === direction
+      ? market.moveStage.detail
+      : "Стадія руху не проти цього напрямку.";
+  const stageSummary =
+    market.moveStage.direction === direction
+      ? market.moveStage.summary
+      : "Рух не виглядає пізнім саме для цього напрямку.";
   const detail =
     score >= 70
-      ? `Перегрів ${score}/100. Рух уже частково реалізований, переслідувати ціну небезпечно.`
+      ? `Перегрів ${score}/100. ${stageDetail}`
       : score >= 45
-        ? `Перегрів ${score}/100. Напрям є, але краще чекати відкат або кращий RR.`
-        : `Перегрів ${score}/100. Рух ще не виглядає занадто пізнім.`;
+        ? `Перегрів ${score}/100. ${stageSummary} Краще чекати відкат або кращий RR.`
+        : `Перегрів ${score}/100. ${stageSummary}`;
 
   return { score, status, detail };
 }
@@ -1088,6 +1122,10 @@ export function reviewTradePlan(
   const atrStatus = getAtrStatus(stopAtrMultiple, targetAtrMultiple);
   const entryStatus = getEntryStatus(entry.mode);
   const priceActionStatus = getPriceActionStatus(plan.direction, market.priceAction);
+  const moveStageStatus = getMoveStageEntryStatus(
+    plan.direction,
+    market.moveStage,
+  );
 
   const setupZone =
     plan.direction === "long"
@@ -1164,6 +1202,7 @@ export function reviewTradePlan(
     zoneStatus,
     riskStatus,
     priceSideStatus,
+    moveStageStatus,
   });
   const signal = getSignalInfo({
     direction: plan.direction,
@@ -1221,7 +1260,7 @@ export function reviewTradePlan(
     buildSignal(
       "entry-quality",
       "Якість входу",
-      `Оцінка ${entryScore}/100. ${entryDetail}`,
+      `Оцінка ${entryScore}/100. ${entryDetail} ${market.moveStage.direction === plan.direction ? market.moveStage.summary : ""}`.trim(),
       getStatusByScore(entryScore),
     ),
     ...(market.openInterest.status === "ok"
@@ -1242,7 +1281,7 @@ export function reviewTradePlan(
     ),
     buildSignal(
       "move-exhaustion",
-      "Перегрів руху",
+      "Стадія руху",
       moveExhaustion.detail,
       moveExhaustion.status,
     ),
@@ -1280,9 +1319,9 @@ export function reviewTradePlan(
       rewardStatus,
     ),
     buildMetric(
-      "Перегрів",
+      "Стадія",
       `${moveExhaustion.score}/100`,
-      moveExhaustion.score >= 70 ? "пізній рух" : "контроль руху",
+      market.moveStage.label,
       moveExhaustion.status,
     ),
   ];
@@ -1323,6 +1362,7 @@ export function reviewTradePlan(
       stopAtrMultiple,
       targetAtrMultiple,
       priceAction: market.priceAction,
+      moveStage: market.moveStage,
       zoneReaction,
       zoneVolume,
       directionalVolume,

@@ -2,8 +2,11 @@ import type {
   BtcBias,
   MarketAnalysisTimeframe,
   MarketSnapshot,
+  MoveStageState,
   OpenInterestPoint,
   OpenInterestState,
+  PriceActionState,
+  ReviewStatus,
   MarketSource,
   MarketZone,
   TradeTimeframe,
@@ -242,8 +245,217 @@ function getRecentCandles(candles: Candle[], count: number) {
   return candles.slice(Math.max(0, candles.length - count));
 }
 
+function getClosedCandles(candles: Candle[]) {
+  if (candles.length > 35) {
+    return candles.slice(0, -1);
+  }
+
+  return candles;
+}
+
 function getSma(candles: Candle[], count: number) {
   return average(getRecentCandles(candles, count).map((candle) => candle.close));
+}
+
+function getCandleBodyRatio(candle: Candle) {
+  const range = candle.high - candle.low;
+
+  if (range <= 0) {
+    return 0;
+  }
+
+  return Math.abs(candle.close - candle.open) / range;
+}
+
+function getMoveStageLabel(phase: MoveStageState["phase"]) {
+  if (phase === "trap") {
+    return "можлива пастка";
+  }
+
+  if (phase === "late") {
+    return "пізній вхід";
+  }
+
+  if (phase === "heated") {
+    return "рух розігрітий";
+  }
+
+  if (phase === "active") {
+    return "рух активний";
+  }
+
+  if (phase === "early") {
+    return "початок руху";
+  }
+
+  if (phase === "base") {
+    return "база";
+  }
+
+  return "стадія невідома";
+}
+
+function getMoveStageStatus(phase: MoveStageState["phase"]): ReviewStatus {
+  if (phase === "trap" || phase === "late") {
+    return "fail";
+  }
+
+  if (phase === "heated") {
+    return "warning";
+  }
+
+  return "pass";
+}
+
+function getMoveStageRiskScore({
+  phase,
+  moveAtr,
+  pullbackAtr,
+  counterCandles,
+}: {
+  phase: MoveStageState["phase"];
+  moveAtr: number;
+  pullbackAtr: number;
+  counterCandles: number;
+}) {
+  const phaseBase: Record<MoveStageState["phase"], number> = {
+    base: 8,
+    early: 18,
+    active: 34,
+    heated: 56,
+    late: 76,
+    trap: 90,
+    unknown: 0,
+  };
+
+  return Math.round(
+    clamp(
+      phaseBase[phase] + Math.max(0, moveAtr - 3) * 5 + pullbackAtr * 6 + counterCandles * 3,
+      0,
+      100,
+    ),
+  );
+}
+
+function getMoveStage({
+  candles,
+  currentPrice,
+  atr,
+  priceAction,
+}: {
+  candles: Candle[];
+  currentPrice: number;
+  atr: number;
+  priceAction: PriceActionState;
+}): MoveStageState {
+  const closedCandles = getClosedCandles(candles);
+  const recentCandles = getRecentCandles(closedCandles, 18);
+  const lastSixCandles = getRecentCandles(closedCandles, 6);
+
+  if (atr <= 0 || recentCandles.length < 8) {
+    return {
+      phase: "unknown",
+      direction: "neutral",
+      riskScore: 0,
+      moveAtr: 0,
+      pullbackAtr: 0,
+      counterCandles: 0,
+      strongCandles: 0,
+      label: "стадія невідома",
+      summary: "Стадія руху не рахується без ATR і достатньої кількості свічок.",
+      detail: "Недостатньо даних, щоб зрозуміти, чи рух на початку, у середині або вже пізній.",
+      status: "warning",
+    };
+  }
+
+  const direction = priceAction.direction;
+
+  if (direction === "neutral") {
+    return {
+      phase: "base",
+      direction,
+      riskScore: 8,
+      moveAtr: 0,
+      pullbackAtr: 0,
+      counterCandles: 0,
+      strongCandles: 0,
+      label: "база",
+      summary: "Немає чистого імпульсу, ціна більше схожа на базу або боковик.",
+      detail: "Система не бачить руху, який треба переслідувати.",
+      status: "pass",
+    };
+  }
+
+  const moveStart =
+    direction === "long"
+      ? Math.min(...recentCandles.map((candle) => candle.low))
+      : Math.max(...recentCandles.map((candle) => candle.high));
+  const moveAtr =
+    direction === "long"
+      ? Math.max(0, currentPrice - moveStart) / atr
+      : Math.max(0, moveStart - currentPrice) / atr;
+  const recentExtreme =
+    direction === "long"
+      ? Math.max(...lastSixCandles.map((candle) => candle.high))
+      : Math.min(...lastSixCandles.map((candle) => candle.low));
+  const pullbackAtr =
+    direction === "long"
+      ? Math.max(0, recentExtreme - currentPrice) / atr
+      : Math.max(0, currentPrice - recentExtreme) / atr;
+  const counterCandles = lastSixCandles.filter((candle) =>
+    direction === "long" ? candle.close < candle.open : candle.close > candle.open,
+  ).length;
+  const strongCandles = recentCandles.filter((candle) => {
+    const isDirectionCandle =
+      direction === "long" ? candle.close > candle.open : candle.close < candle.open;
+
+    return isDirectionCandle && getCandleBodyRatio(candle) >= 0.55;
+  }).length;
+  const lastTwoAreCounter = getRecentCandles(closedCandles, 2).every((candle) =>
+    direction === "long" ? candle.close < candle.open : candle.close > candle.open,
+  );
+  const phase: MoveStageState["phase"] =
+    moveAtr >= 4.2 && (pullbackAtr >= 0.9 || lastTwoAreCounter)
+      ? "trap"
+      : moveAtr >= 3.6 || (moveAtr >= 3 && counterCandles >= 2)
+        ? "late"
+        : moveAtr >= 2.4
+          ? "heated"
+          : moveAtr >= 1.1
+            ? "active"
+            : moveAtr >= 0.5
+              ? "early"
+              : "base";
+  const riskScore = getMoveStageRiskScore({
+    phase,
+    moveAtr,
+    pullbackAtr,
+    counterCandles,
+  });
+  const label = getMoveStageLabel(phase);
+  const sideText = direction === "long" ? "вгору" : "вниз";
+  const dangerText =
+    phase === "trap"
+      ? "Після сильного руху вже є зустрічні свічки. Це схоже на пізній натовп або пастку."
+      : phase === "late"
+        ? "Рух уже пройшов багато ATR. Краще чекати відкат або нову базу."
+        : phase === "heated"
+          ? "Рух сильний, але вже розігрітий. Вхід по ринку треба перевіряти жорсткіше."
+          : "Рух ще не виглядає занадто пізнім.";
+
+  return {
+    phase,
+    direction,
+    riskScore,
+    moveAtr,
+    pullbackAtr,
+    counterCandles,
+    strongCandles,
+    label,
+    summary: `${label}: рух ${sideText} ${moveAtr.toFixed(1)} ATR, відкат ${pullbackAtr.toFixed(1)} ATR.`,
+    detail: `${dangerText} Сильних свічок: ${strongCandles}, зустрічних останнім часом: ${counterCandles}.`,
+    status: getMoveStageStatus(phase),
+  };
 }
 
 function getTrend(candles: Candle[]): {
@@ -939,6 +1151,12 @@ export function buildMarketSnapshotFromCandles({
     supportReaction: zoneReactions.support,
     resistanceReaction: zoneReactions.resistance,
   });
+  const moveStage = getMoveStage({
+    candles,
+    currentPrice,
+    atr,
+    priceAction,
+  });
   const analyzedTimeframes = analysisTimeframeOrder.filter((analysisTimeframe) => {
     if (analysisTimeframe === timeframe) {
       return true;
@@ -978,6 +1196,7 @@ export function buildMarketSnapshotFromCandles({
     nearestSupport: zones.nearestSupport,
     nearestResistance: zones.nearestResistance,
     priceAction,
+    moveStage,
     zoneReactions,
     zoneVolumes,
     zones: zones.zones,
@@ -1043,6 +1262,19 @@ export function getFallbackMarketSnapshot(
       entryPrice: null,
       stopLoss: null,
       takeProfit: null,
+    },
+    moveStage: {
+      phase: "unknown",
+      direction: "neutral",
+      riskScore: 0,
+      moveAtr: 0,
+      pullbackAtr: 0,
+      counterCandles: 0,
+      strongCandles: 0,
+      label: "стадія невідома",
+      summary: "Стадія руху не рахується без живих свічок.",
+      detail: "Потрібні ринкові дані, щоб зрозуміти, чи рух уже пізній.",
+      status: "warning",
     },
     zoneReactions: {
       support: {
