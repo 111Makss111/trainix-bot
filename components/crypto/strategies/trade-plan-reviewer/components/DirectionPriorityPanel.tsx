@@ -119,9 +119,9 @@ function DirectionCard({
           status={getScoreStatus(review.entryScore)}
         />
         <QualityStat
-          label="Баланс"
-          value={`${candidate.score}/100`}
-          status={candidate.status}
+          label="Зона"
+          value={`${review.zoneScore}/100`}
+          status={getScoreStatus(review.zoneScore)}
         />
       </div>
 

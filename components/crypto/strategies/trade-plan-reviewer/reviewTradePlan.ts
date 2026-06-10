@@ -753,9 +753,6 @@ function getMarketScore({
   trendStatus,
   btcStatus,
   priceActionStatus,
-  mtfStatus,
-  reactionStatus,
-  zoneVolumeStatus,
   openInterestStatus,
   volatilityStatus,
   market,
@@ -763,27 +760,45 @@ function getMarketScore({
   trendStatus: ReviewStatus;
   btcStatus: ReviewStatus;
   priceActionStatus: ReviewStatus;
-  mtfStatus: ReviewStatus;
-  reactionStatus: ReviewStatus;
-  zoneVolumeStatus: ReviewStatus;
   openInterestStatus: ReviewStatus;
   volatilityStatus: ReviewStatus;
   market: MarketSnapshot;
 }) {
-  const openInterestWeight = market.openInterest.status === "ok" ? 8 : 0;
-  const availableWeight = 92 + openInterestWeight;
+  const openInterestWeight = market.openInterest.status === "ok" ? 12 : 0;
+  const availableWeight = 78 + openInterestWeight;
   const rawScore =
-    getStatusWeight(trendStatus) * 20 +
-    getStatusWeight(btcStatus) * 16 +
-    getStatusWeight(priceActionStatus) * 20 +
-    getStatusWeight(mtfStatus) * 12 +
-    getStatusWeight(reactionStatus) * 9 +
-    getStatusWeight(zoneVolumeStatus) * 6 +
+    getStatusWeight(trendStatus) * 25 +
+    getStatusWeight(priceActionStatus) * 25 +
+    getStatusWeight(btcStatus) * 18 +
     getStatusWeight(openInterestStatus) * openInterestWeight +
-    getStatusWeight(volatilityStatus) * 9;
-  const strengthBonus = market.trend === "sideways" ? 0 : market.trendStrength * 0.1;
+    getStatusWeight(volatilityStatus) * 10;
+  const strengthBonus = market.trend === "sideways" ? 0 : market.trendStrength * 0.08;
 
   return Math.round(Math.min((rawScore / availableWeight) * 100 + strengthBonus, 100));
+}
+
+function getZoneScore({
+  zoneStatus,
+  mtfStatus,
+  reactionStatus,
+  zoneVolumeStatus,
+  setupZone,
+}: {
+  zoneStatus: ReviewStatus;
+  mtfStatus: ReviewStatus;
+  reactionStatus: ReviewStatus;
+  zoneVolumeStatus: ReviewStatus;
+  setupZone: MarketZone;
+}) {
+  const zoneStrengthWeight = Math.min(Math.max(setupZone.strength, 0), 100) / 100;
+  const rawScore =
+    getStatusWeight(reactionStatus) * 28 +
+    getStatusWeight(zoneVolumeStatus) * 24 +
+    getStatusWeight(mtfStatus) * 20 +
+    zoneStrengthWeight * 16 +
+    getStatusWeight(zoneStatus) * 12;
+
+  return Math.round(Math.min(rawScore, 100));
 }
 
 function getEntryScore({
@@ -936,12 +951,14 @@ function getSignalInfo({
 function getVerdict({
   marketScore,
   entryScore,
+  zoneScore,
   rewardToRisk,
   moveExhaustion,
   priceSideStatus,
 }: {
   marketScore: number;
   entryScore: number;
+  zoneScore: number;
   rewardToRisk: number | null;
   moveExhaustion: { score: number; status: ReviewStatus };
   priceSideStatus: ReviewStatus;
@@ -970,6 +987,14 @@ function getVerdict({
     };
   }
 
+  if (zoneScore < 45 && entryScore >= 60) {
+    return {
+      label: "Зона слабка",
+      detail: "Точка може виглядати цікаво, але зона ще не має нормальної реакції або обсягу.",
+      status: "warning",
+    };
+  }
+
   if (marketScore >= 65 && entryScore < 65) {
     return {
       label: "Ринок сильний, точка слабка",
@@ -989,8 +1014,10 @@ function getVerdict({
   if (marketScore >= 65 && entryScore >= 65) {
     return {
       label: "Вхід можна розглядати",
-      detail: "Ринок і точка входу не конфліктують між собою.",
-      status: "pass",
+      detail: zoneScore >= 60
+        ? "Ринок, точка входу і зона не конфліктують між собою."
+        : "Ринок і вхід нормальні, але зона ще потребує сильнішої реакції.",
+      status: zoneScore >= 60 ? "pass" : "warning",
     };
   }
 
@@ -1013,7 +1040,7 @@ function getPrimaryIssues(signals: ReviewItem[]) {
   const weakSignals = signals.filter((signal) => signal.status !== "pass");
 
   if (weakSignals.length === 0) {
-    return ["Ринок і вхід не мають явних конфліктів."];
+    return ["Ринок, вхід і зона не мають явних конфліктів."];
   }
 
   return weakSignals.slice(0, 4).map((signal) => signal.detail);
@@ -1186,12 +1213,16 @@ export function reviewTradePlan(
     trendStatus,
     btcStatus,
     priceActionStatus,
-    mtfStatus,
-    reactionStatus,
-    zoneVolumeStatus,
     openInterestStatus,
     volatilityStatus,
     market,
+  });
+  const zoneScore = getZoneScore({
+    zoneStatus,
+    mtfStatus,
+    reactionStatus,
+    zoneVolumeStatus,
+    setupZone,
   });
   const entryScore = getEntryScore({
     entryStatus,
@@ -1214,6 +1245,7 @@ export function reviewTradePlan(
   const verdict = getVerdict({
     marketScore,
     entryScore,
+    zoneScore,
     rewardToRisk,
     moveExhaustion,
     priceSideStatus,
@@ -1254,7 +1286,7 @@ export function reviewTradePlan(
           : market.btcBias === "bearish"
             ? "тисне вниз"
             : "нейтральний"
-      }.`,
+      }, волатильність ${market.volatilityState === "extreme" ? "екстремальна" : market.volatilityState === "high" ? "висока" : market.volatilityState === "quiet" ? "тиха" : "нормальна"}.`,
       getStatusByScore(marketScore),
     ),
     buildSignal(
@@ -1262,6 +1294,12 @@ export function reviewTradePlan(
       "Якість входу",
       `Оцінка ${entryScore}/100. ${entryDetail} ${market.moveStage.direction === plan.direction ? market.moveStage.summary : ""}`.trim(),
       getStatusByScore(entryScore),
+    ),
+    buildSignal(
+      "zone-quality",
+      "Якість зони",
+      `Оцінка ${zoneScore}/100. ${zoneDetail}`,
+      getStatusByScore(zoneScore),
     ),
     ...(market.openInterest.status === "ok"
       ? [
@@ -1286,12 +1324,6 @@ export function reviewTradePlan(
       moveExhaustion.status,
     ),
     buildSignal(
-      "zone-confirmation",
-      "Зона і реакція",
-      zoneDetail,
-      getWorstStatus([zoneStatus, mtfStatus, reactionStatus, zoneVolumeStatus]),
-    ),
-    buildSignal(
       "levels-risk",
       "Рівні і ризик",
       levelsDetail,
@@ -1311,6 +1343,12 @@ export function reviewTradePlan(
       `${entryScore}/100`,
       verdict.label,
       getStatusByScore(entryScore),
+    ),
+    buildMetric(
+      "Якість зони",
+      `${zoneScore}/100`,
+      zoneReaction.summary,
+      getStatusByScore(zoneScore),
     ),
     buildMetric(
       "RR",
@@ -1341,6 +1379,7 @@ export function reviewTradePlan(
     summary: gradeCopy.summary,
     marketScore,
     entryScore,
+    zoneScore,
     signal,
     verdict,
     primaryIssues,

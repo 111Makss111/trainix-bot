@@ -61,7 +61,10 @@ function getEntryPenalty(review: ReviewResult) {
 
 function getScore(review: ReviewResult) {
   const rawScore =
-    review.marketScore * 0.52 + review.entryScore * 0.48 - getEntryPenalty(review);
+    review.marketScore * 0.42 +
+    review.entryScore * 0.38 +
+    review.zoneScore * 0.2 -
+    getEntryPenalty(review);
 
   return Math.round(clamp(rawScore, 0, getGradeCap(review.grade)));
 }
@@ -113,15 +116,19 @@ export function getDirectionPriority(
   const scoreGap = bestCandidate.score - secondCandidate.score;
   const bestMarketScore = bestCandidate.review.marketScore;
   const bestEntryScore = bestCandidate.review.entryScore;
+  const bestZoneScore = bestCandidate.review.zoneScore;
   const hasDirectionButWeakEntry = bestMarketScore >= 65 && bestEntryScore < 65;
   const entryIsInterestingButMarketWeak =
     bestEntryScore >= 65 && bestMarketScore < 60;
+  const entryIsInterestingButZoneWeak =
+    bestEntryScore >= 65 && bestZoneScore < 55;
   const oppositeEntryIsInterestingButMarketWeak =
     secondCandidate.review.entryScore >= 65 &&
     secondCandidate.review.marketScore < 60;
   const shouldWait =
     hasDirectionButWeakEntry ||
     entryIsInterestingButMarketWeak ||
+    entryIsInterestingButZoneWeak ||
     bestCandidate.score < 55 ||
     (scoreGap < 6 && bestCandidate.score < 75);
 
@@ -132,6 +139,8 @@ export function getDirectionPriority(
         ? "Ринок є, точка слабка"
         : entryIsInterestingButMarketWeak
           ? "Точка є, ринок слабкий"
+          : entryIsInterestingButZoneWeak
+            ? "Точка є, зона слабка"
         : "Краще почекати",
       summary: hasDirectionButWeakEntry
         ? `${bestCandidate.label}: ринок ${bestMarketScore}/100, але вхід ${bestEntryScore}/100. Краще чекати відкат, чистіший RR або реакцію.${
@@ -141,6 +150,8 @@ export function getDirectionPriority(
           }`
         : entryIsInterestingButMarketWeak
           ? `${bestCandidate.label}: точка входу ${bestEntryScore}/100, але ринок лише ${bestMarketScore}/100. Потрібне підтвердження напрямку.`
+          : entryIsInterestingButZoneWeak
+            ? `${bestCandidate.label}: вхід ${bestEntryScore}/100, але зона лише ${bestZoneScore}/100. Потрібна сильніша реакція або обсяг у зоні.`
           : "Long і Short не дають чистої переваги. Зараз важливіше дочекатися кращої зони або сильнішого руху.",
       candidates,
     };
@@ -151,8 +162,8 @@ export function getDirectionPriority(
     title: `Пріоритет: ${bestCandidate.label}`,
     summary:
       bestCandidate.direction === "long"
-        ? `Long має кращий баланс ринку (${bestCandidate.review.marketScore}/100) і входу (${bestCandidate.review.entryScore}/100).`
-        : `Short має кращий баланс ринку (${bestCandidate.review.marketScore}/100) і входу (${bestCandidate.review.entryScore}/100).`,
+        ? `Long має кращу трійку: ринок ${bestCandidate.review.marketScore}/100, вхід ${bestCandidate.review.entryScore}/100, зона ${bestCandidate.review.zoneScore}/100.`
+        : `Short має кращу трійку: ринок ${bestCandidate.review.marketScore}/100, вхід ${bestCandidate.review.entryScore}/100, зона ${bestCandidate.review.zoneScore}/100.`,
     candidates,
   };
 }

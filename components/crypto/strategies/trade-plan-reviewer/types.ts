@@ -302,6 +302,7 @@ export type ReviewResult = {
   summary: string;
   marketScore: number;
   entryScore: number;
+  zoneScore: number;
   signal: TradeSignalInfo;
   verdict: TradeVerdict;
   primaryIssues: string[];
