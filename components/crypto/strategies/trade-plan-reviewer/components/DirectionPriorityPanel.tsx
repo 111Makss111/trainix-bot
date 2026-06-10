@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { formatTradingViewPrice } from "../formatters";
 import type {
   DirectionalZoneVolume,
@@ -14,6 +17,8 @@ import type {
 type DirectionPriorityPanelProps = {
   priority: DirectionPriority;
 };
+
+type ScoreDetailKind = "market" | "entry" | "zone";
 
 const statusClassName: Record<ReviewStatus, string> = {
   pass: "border-emerald-300/18 bg-emerald-300/8 text-emerald-100",
@@ -66,6 +71,7 @@ function DirectionCard({
   candidate: DirectionCandidate;
   isPreferred: boolean;
 }) {
+  const [activeDetail, setActiveDetail] = useState<ScoreDetailKind | null>(null);
   const levels = candidate.review.levels;
   const rewardToRisk = levels.rewardToRisk;
   const reaction = levels.zoneReaction;
@@ -75,6 +81,13 @@ function DirectionCard({
   const priceAction = levels.priceAction;
   const moveStage = levels.moveStage;
   const review = candidate.review;
+  const scoreDetail = activeDetail
+    ? getScoreDetail(activeDetail, candidate)
+    : null;
+
+  function toggleScoreDetail(kind: ScoreDetailKind) {
+    setActiveDetail((currentDetail) => (currentDetail === kind ? null : kind));
+  }
 
   return (
     <div
@@ -112,18 +125,26 @@ function DirectionCard({
           label="Ринок"
           value={`${review.marketScore}/100`}
           status={getScoreStatus(review.marketScore)}
+          isActive={activeDetail === "market"}
+          onClick={() => toggleScoreDetail("market")}
         />
         <QualityStat
           label="Вхід"
           value={`${review.entryScore}/100`}
           status={getScoreStatus(review.entryScore)}
+          isActive={activeDetail === "entry"}
+          onClick={() => toggleScoreDetail("entry")}
         />
         <QualityStat
           label="Зона"
           value={`${review.zoneScore}/100`}
           status={getScoreStatus(review.zoneScore)}
+          isActive={activeDetail === "zone"}
+          onClick={() => toggleScoreDetail("zone")}
         />
       </div>
+
+      {scoreDetail ? <ScoreDetailPanel detail={scoreDetail} /> : null}
 
       <div className="mt-4 grid grid-cols-3 gap-2">
         <LevelStat label="Вхід" value={formatTradingViewPrice(levels.entryPrice)} />
@@ -227,22 +248,106 @@ function QualityStat({
   label,
   value,
   status,
+  isActive,
+  onClick,
 }: {
   label: string;
   value: string;
   status: ReviewStatus;
+  isActive: boolean;
+  onClick: () => void;
 }) {
   return (
-    <div
+    <button
+      type="button"
+      onClick={onClick}
       className={[
-        "rounded-[0.85rem] border px-3 py-2",
+        "rounded-[0.85rem] border px-3 py-2 text-left transition hover:border-white/24 hover:bg-white/[0.08]",
         statusClassName[status],
+        isActive ? "ring-1 ring-white/30" : "",
       ].join(" ")}
     >
       <p className="text-[0.58rem] uppercase tracking-[0.18em] opacity-60">
         {label}
       </p>
       <p className="mt-1 font-mono text-sm font-semibold text-white">{value}</p>
+    </button>
+  );
+}
+
+function getSignalDetail(candidate: DirectionCandidate, id: string) {
+  return candidate.review.signals.find((signal) => signal.id === id)?.detail ?? "";
+}
+
+function getScoreDetail(kind: ScoreDetailKind, candidate: DirectionCandidate) {
+  const levels = candidate.review.levels;
+  const rewardToRisk = levels.rewardToRisk;
+
+  if (kind === "market") {
+    return {
+      title: "Ринок",
+      includes: ["тренд", "поточний рух", "BTC", "Open Interest", "волатильність"],
+      current: [
+        getSignalDetail(candidate, "market-quality"),
+        levels.openInterest.status === "ok"
+          ? `OI: ${levels.openInterest.summary}`
+          : `OI: ${levels.openInterest.status === "partial" ? "є тільки поточне значення" : "немає нормальних даних"}`,
+      ],
+    };
+  }
+
+  if (kind === "entry") {
+    return {
+      title: "Вхід",
+      includes: ["точка входу", "R/R", "ATR", "стоп і ціль", "стадія руху"],
+      current: [
+        getSignalDetail(candidate, "entry-quality"),
+        getSignalDetail(candidate, "rr-noise"),
+        getSignalDetail(candidate, "move-exhaustion"),
+        getSignalDetail(candidate, "levels-risk"),
+        `R/R: ${rewardToRisk === null ? "не пораховано" : `${rewardToRisk.toFixed(2)}R`}`,
+      ],
+    };
+  }
+
+  return {
+    title: "Зона",
+    includes: ["MTF-підтвердження", "реакція", "обсяг у зоні", "сила зони", "відстань до зони"],
+    current: [
+      getSignalDetail(candidate, "zone-quality"),
+      levels.directionalVolume.detail,
+      `Зона: ${levels.zoneReaction.zoneLabel} ${formatTradingViewPrice(levels.zoneReaction.zoneLow)} - ${formatTradingViewPrice(levels.zoneReaction.zoneHigh)}`,
+    ],
+  };
+}
+
+function ScoreDetailPanel({
+  detail,
+}: {
+  detail: { title: string; includes: string[]; current: string[] };
+}) {
+  return (
+    <div className="mt-3 rounded-[0.95rem] border border-white/10 bg-black/18 px-3 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium uppercase tracking-[0.18em] text-white/42">
+          {detail.title}
+        </span>
+        {detail.includes.map((item) => (
+          <span
+            key={item}
+            className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[0.68rem] text-white/58"
+          >
+            {item}
+          </span>
+        ))}
+      </div>
+      <div className="mt-2 grid gap-1.5 text-xs leading-5 text-white/58">
+        {detail.current
+          .filter((item) => item.length > 0)
+          .map((item) => (
+            <p key={item}>{item}</p>
+          ))}
+      </div>
     </div>
   );
 }
