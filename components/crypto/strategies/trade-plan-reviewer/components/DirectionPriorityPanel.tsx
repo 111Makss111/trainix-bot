@@ -52,6 +52,35 @@ const openInterestClassName: Record<OpenInterestState["status"], string> = {
   unavailable: "border-white/10 bg-white/[0.04] text-white/52",
 };
 
+function getOpenInterestBadgeClassName(
+  openInterest: OpenInterestState,
+  direction: DirectionCandidate["direction"],
+) {
+  if (openInterest.status !== "ok") {
+    return openInterestClassName[openInterest.status];
+  }
+
+  if (
+    (direction === "long" && openInterest.signal === "bullish-build") ||
+    (direction === "short" && openInterest.signal === "bearish-build")
+  ) {
+    return "border-emerald-300/18 bg-emerald-300/8 text-emerald-100";
+  }
+
+  if (
+    (direction === "long" &&
+      (openInterest.signal === "bearish-build" ||
+        openInterest.signal === "long-flush")) ||
+    (direction === "short" &&
+      (openInterest.signal === "bullish-build" ||
+        openInterest.signal === "short-covering"))
+  ) {
+    return "border-rose-300/18 bg-rose-300/8 text-rose-100";
+  }
+
+  return "border-amber-300/18 bg-amber-300/8 text-amber-100";
+}
+
 function getScoreStatus(score: number): ReviewStatus {
   if (score >= 70) {
     return "pass";
@@ -198,10 +227,10 @@ function DirectionCard({
           <span
             className={[
               "rounded-full border px-2.5 py-1",
-              openInterestClassName[openInterest.status],
+              getOpenInterestBadgeClassName(openInterest, candidate.direction),
             ].join(" ")}
           >
-            OI {openInterest.label}
+            OI {openInterest.label} {openInterest.score}/100
           </span>
         ) : null}
         <span

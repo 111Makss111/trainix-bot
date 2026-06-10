@@ -154,11 +154,14 @@ export type OpenInterestStatus = "ok" | "partial" | "unavailable";
 export type OpenInterestDirection = "rising" | "falling" | "flat" | "unknown";
 
 export type OpenInterestSignal =
-  | "new-longs"
-  | "new-shorts"
-  | "longs-closing"
-  | "short-squeeze"
+  | "bullish-build"
+  | "bearish-build"
+  | "long-flush"
+  | "short-covering"
+  | "position-build"
+  | "position-unwind"
   | "neutral"
+  | "noise"
   | "unknown";
 
 export type OpenInterestPoint = {

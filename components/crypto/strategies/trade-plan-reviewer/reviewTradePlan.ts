@@ -538,12 +538,36 @@ function getOpenInterestStatus(
     return "pass";
   }
 
-  if (direction === "long" && openInterest.signal === "new-longs") {
+  if (openInterest.signal === "noise" || openInterest.signal === "neutral") {
+    return "warning";
+  }
+
+  if (direction === "long" && openInterest.signal === "bullish-build") {
     return "pass";
   }
 
-  if (direction === "short" && openInterest.signal === "new-shorts") {
+  if (direction === "short" && openInterest.signal === "bearish-build") {
     return "pass";
+  }
+
+  if (
+    (direction === "long" && openInterest.signal === "short-covering") ||
+    (direction === "short" && openInterest.signal === "long-flush") ||
+    openInterest.signal === "position-build" ||
+    openInterest.signal === "position-unwind"
+  ) {
+    return "warning";
+  }
+
+  if (
+    (direction === "long" &&
+      (openInterest.signal === "bearish-build" ||
+        openInterest.signal === "long-flush")) ||
+    (direction === "short" &&
+      (openInterest.signal === "bullish-build" ||
+        openInterest.signal === "short-covering"))
+  ) {
+    return "fail";
   }
 
   return "warning";
@@ -558,7 +582,7 @@ function getOpenInterestSignalDetail(openInterest: OpenInterestState) {
     return `${openInterest.summary} Показуємо без оцінки динаміки.`;
   }
 
-  return `${openInterest.label}. ${openInterest.summary}`;
+  return openInterest.detail;
 }
 
 function getPriceActionStatus(

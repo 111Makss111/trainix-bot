@@ -66,20 +66,32 @@ function getPercentChange(from: number, to: number) {
 }
 
 function getOpenInterestLabel(signal: OpenInterestState["signal"]) {
-  if (signal === "new-longs") {
-    return "лонги додаються";
+  if (signal === "bullish-build") {
+    return "підтримує ріст";
   }
 
-  if (signal === "new-shorts") {
-    return "шорти додаються";
+  if (signal === "bearish-build") {
+    return "підтримує злив";
   }
 
-  if (signal === "longs-closing") {
-    return "лонги закривають";
+  if (signal === "long-flush") {
+    return "лонги виходять";
   }
 
-  if (signal === "short-squeeze") {
+  if (signal === "short-covering") {
     return "можливий squeeze";
+  }
+
+  if (signal === "position-build") {
+    return "позиції набирають";
+  }
+
+  if (signal === "position-unwind") {
+    return "позиції закривають";
+  }
+
+  if (signal === "noise") {
+    return "шумний";
   }
 
   if (signal === "neutral") {
@@ -110,11 +122,11 @@ function getFallbackOpenInterest(
 }
 
 function getOpenInterestDirection(changePercent: number): OpenInterestState["direction"] {
-  if (changePercent >= 1.5) {
+  if (changePercent >= 2) {
     return "rising";
   }
 
-  if (changePercent <= -1.5) {
+  if (changePercent <= -2) {
     return "falling";
   }
 
@@ -122,11 +134,11 @@ function getOpenInterestDirection(changePercent: number): OpenInterestState["dir
 }
 
 function getPriceDirection(changePercent: number) {
-  if (changePercent >= 0.25) {
+  if (changePercent >= 0.35) {
     return "up";
   }
 
-  if (changePercent <= -0.25) {
+  if (changePercent <= -0.35) {
     return "down";
   }
 
@@ -136,43 +148,147 @@ function getPriceDirection(changePercent: number) {
 function getOpenInterestSignal({
   oiDirection,
   priceDirection,
+  oiChangeAbs,
+  priceChangeAbs,
 }: {
   oiDirection: OpenInterestState["direction"];
   priceDirection: "up" | "down" | "flat";
+  oiChangeAbs: number;
+  priceChangeAbs: number;
 }): OpenInterestState["signal"] {
+  const hasMeaningfulOi = oiChangeAbs >= 2;
+  const hasMeaningfulPriceMove = priceChangeAbs >= 0.35;
+
+  if (!hasMeaningfulOi && !hasMeaningfulPriceMove) {
+    return "noise";
+  }
+
+  if (!hasMeaningfulOi) {
+    return "neutral";
+  }
+
+  if (priceDirection === "flat" && oiDirection === "rising") {
+    return "position-build";
+  }
+
+  if (priceDirection === "flat" && oiDirection === "falling") {
+    return "position-unwind";
+  }
+
   if (priceDirection === "up" && oiDirection === "rising") {
-    return "new-longs";
+    return "bullish-build";
   }
 
   if (priceDirection === "down" && oiDirection === "rising") {
-    return "new-shorts";
+    return "bearish-build";
   }
 
   if (priceDirection === "down" && oiDirection === "falling") {
-    return "longs-closing";
+    return "long-flush";
   }
 
   if (priceDirection === "up" && oiDirection === "falling") {
-    return "short-squeeze";
+    return "short-covering";
   }
 
   return "neutral";
 }
 
-function getOpenInterestScore(signal: OpenInterestState["signal"]) {
-  if (signal === "new-longs" || signal === "new-shorts") {
-    return 78;
+function getOpenInterestScore({
+  signal,
+  oiChangeAbs,
+  priceChangeAbs,
+  volumeRatio,
+}: {
+  signal: OpenInterestState["signal"];
+  oiChangeAbs: number;
+  priceChangeAbs: number;
+  volumeRatio: number;
+}) {
+  const activityScore = clamp(
+    oiChangeAbs * 7 + priceChangeAbs * 7 + Math.max(volumeRatio - 1, 0) * 18,
+    0,
+    45,
+  );
+
+  if (signal === "bullish-build" || signal === "bearish-build") {
+    return Math.round(clamp(55 + activityScore, 55, 100));
   }
 
-  if (signal === "longs-closing" || signal === "short-squeeze") {
-    return 52;
+  if (signal === "long-flush" || signal === "short-covering") {
+    return Math.round(clamp(45 + activityScore, 45, 82));
+  }
+
+  if (signal === "position-build" || signal === "position-unwind") {
+    return Math.round(clamp(38 + activityScore * 0.7, 38, 68));
   }
 
   if (signal === "neutral") {
-    return 45;
+    return 40;
+  }
+
+  if (signal === "noise") {
+    return 18;
   }
 
   return 0;
+}
+
+function getRecentVolumeRatio(candles: Candle[]) {
+  const recentCandles = getRecentCandles(candles, 3);
+  const baselineCandles = getRecentCandles(candles.slice(0, -3), 20);
+  const recentVolume = average(recentCandles.map((candle) => candle.volume));
+  const baselineVolume = average(baselineCandles.map((candle) => candle.volume));
+
+  return baselineVolume > 0 ? recentVolume / baselineVolume : 1;
+}
+
+function getOpenInterestDetail({
+  label,
+  signal,
+  score,
+  changePercent,
+  priceChangePercent,
+  volumeRatio,
+}: {
+  label: string;
+  signal: OpenInterestState["signal"];
+  score: number;
+  changePercent: number;
+  priceChangePercent: number;
+  volumeRatio: number;
+}) {
+  const base = `OI ${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(1)}%, ціна ${priceChangePercent >= 0 ? "+" : ""}${priceChangePercent.toFixed(1)}%, обсяг ${volumeRatio.toFixed(1)}x.`;
+
+  if (signal === "noise") {
+    return `${base} Зміна OI або ціни замала, тому система не робить висновок по великих грошах.`;
+  }
+
+  if (signal === "bullish-build") {
+    return `${base} ${score}/100: нові позиції підтримують рух вгору. Це корисно для Long, але ще треба перевіряти вхід і зону.`;
+  }
+
+  if (signal === "bearish-build") {
+    return `${base} ${score}/100: нові позиції підтримують рух вниз. Це корисно для Short, але ще треба перевіряти вхід і зону.`;
+  }
+
+  if (signal === "long-flush") {
+    return `${base} ${score}/100: ціна падає, але OI зменшується. Це більше схоже на вихід лонгів, а не на чистий набір нових шортів.`;
+  }
+
+  if (signal === "short-covering") {
+    return `${base} ${score}/100: ціна росте, але OI зменшується. Це може бути закриття шортів або squeeze, переслідувати рух небезпечно.`;
+  }
+
+  if (signal === "position-build") {
+    return `${base} ${score}/100: OI росте, але ціна ще не дала напрям. Ринок набирає позиції, висновок по Long/Short ще слабкий.`;
+  }
+
+  if (signal === "position-unwind") {
+    return `${base} ${score}/100: OI падає без чіткого руху ціни. Частина позицій виходить з ринку.`;
+  }
+
+  return `${base} ${label}. OI не дає чистої переваги напрямку.`;
 }
 
 function getOpenInterestState({
@@ -220,9 +336,22 @@ function getOpenInterestState({
   const currentCandle = candles.at(-1) ?? referenceCandle;
   const priceChangePercent = getPercentChange(referenceCandle.close, currentCandle.close);
   const priceDirection = getPriceDirection(priceChangePercent);
-  const signal = getOpenInterestSignal({ oiDirection, priceDirection });
+  const oiChangeAbs = Math.abs(changePercent);
+  const priceChangeAbs = Math.abs(priceChangePercent);
+  const volumeRatio = getRecentVolumeRatio(candles);
+  const signal = getOpenInterestSignal({
+    oiDirection,
+    priceDirection,
+    oiChangeAbs,
+    priceChangeAbs,
+  });
   const label = getOpenInterestLabel(signal);
-  const score = getOpenInterestScore(signal);
+  const score = getOpenInterestScore({
+    signal,
+    oiChangeAbs,
+    priceChangeAbs,
+    volumeRatio,
+  });
 
   return {
     status: "ok",
@@ -234,8 +363,15 @@ function getOpenInterestState({
     signal,
     score,
     label,
-    summary: `OI ${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(1)}%, ціна ${priceChangePercent >= 0 ? "+" : ""}${priceChangePercent.toFixed(1)}%.`,
-    detail: `${label}. Якщо ціна рухається разом зі зростанням OI, рух частіше підтриманий новими позиціями. Якщо OI падає, рух може бути закриттям позицій або squeeze.`,
+    summary: `${label} ${score}/100. OI ${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(1)}%, ціна ${priceChangePercent >= 0 ? "+" : ""}${priceChangePercent.toFixed(1)}%.`,
+    detail: getOpenInterestDetail({
+      label,
+      signal,
+      score,
+      changePercent,
+      priceChangePercent,
+      volumeRatio,
+    }),
     updatedAt: new Date(lastPoint.timestamp).toISOString(),
     samples: sortedPoints.length,
   };
