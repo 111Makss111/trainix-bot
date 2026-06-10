@@ -75,6 +75,57 @@ export type ZoneVolumePressure = "buying" | "selling" | "balanced" | "unknown";
 
 export type ZoneVolumeAlignment = "supports" | "neutral" | "against" | "unknown";
 
+export type VolumePressureState = {
+  pressure: ZoneVolumePressure;
+  score: number;
+  buyerScore: number;
+  sellerScore: number;
+  recentVolumeRatio: number;
+  samples: number;
+  label: string;
+  summary: string;
+  detail: string;
+  status: ReviewStatus;
+};
+
+export type AdxTrendMode = "trend" | "transition" | "range" | "unknown";
+
+export type AdxState = {
+  value: number | null;
+  plusDi: number | null;
+  minusDi: number | null;
+  mode: AdxTrendMode;
+  direction: TradeDirection | "neutral";
+  label: string;
+  summary: string;
+  detail: string;
+  status: ReviewStatus;
+};
+
+export type MarketStructureBias = "bullish" | "bearish" | "range" | "unknown";
+
+export type MarketStructureEvent =
+  | "bos-up"
+  | "bos-down"
+  | "choch-up"
+  | "choch-down"
+  | "inside-range"
+  | "unknown";
+
+export type MarketStructureState = {
+  bias: MarketStructureBias;
+  event: MarketStructureEvent;
+  direction: TradeDirection | "neutral";
+  score: number;
+  lastSwingHigh: number | null;
+  lastSwingLow: number | null;
+  brokenLevel: number | null;
+  label: string;
+  summary: string;
+  detail: string;
+  status: ReviewStatus;
+};
+
 export type ZoneVolumeProfile = {
   zoneKind: ZoneKind;
   zoneLow: number;
@@ -220,6 +271,9 @@ export type MarketSnapshot = {
   rangeToNoiseRatio: number;
   volatilityState: VolatilityState;
   volumeState: string;
+  volumePressure: VolumePressureState;
+  adx: AdxState;
+  marketStructure: MarketStructureState;
   openInterest: OpenInterestState;
   nearestSupport: MarketZone;
   nearestResistance: MarketZone;
@@ -293,6 +347,9 @@ export type ReviewLevels = {
   targetAtrMultiple: number | null;
   priceAction: PriceActionState;
   moveStage: MoveStageState;
+  volumePressure: VolumePressureState;
+  adx: AdxState;
+  marketStructure: MarketStructureState;
   zoneReaction: MarketZoneReaction;
   zoneVolume: ZoneVolumeProfile;
   directionalVolume: DirectionalZoneVolume;

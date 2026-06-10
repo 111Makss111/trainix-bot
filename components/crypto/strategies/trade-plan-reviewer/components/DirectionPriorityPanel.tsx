@@ -81,6 +81,26 @@ function getOpenInterestBadgeClassName(
   return "border-amber-300/18 bg-amber-300/8 text-amber-100";
 }
 
+function getDirectionAwareClassName({
+  direction,
+  signalDirection,
+  fallbackStatus,
+}: {
+  direction: DirectionCandidate["direction"];
+  signalDirection: DirectionCandidate["direction"] | "neutral";
+  fallbackStatus: ReviewStatus;
+}) {
+  if (signalDirection === direction) {
+    return statusClassName.pass;
+  }
+
+  if (signalDirection !== "neutral") {
+    return statusClassName.fail;
+  }
+
+  return statusClassName[fallbackStatus];
+}
+
 function getScoreStatus(score: number): ReviewStatus {
   if (score >= 70) {
     return "pass";
@@ -236,6 +256,47 @@ function DirectionCard({
         <span
           className={[
             "rounded-full border px-2.5 py-1",
+            getDirectionAwareClassName({
+              direction: candidate.direction,
+              signalDirection:
+                levels.volumePressure.pressure === "buying"
+                  ? "long"
+                  : levels.volumePressure.pressure === "selling"
+                    ? "short"
+                    : "neutral",
+              fallbackStatus: levels.volumePressure.status,
+            }),
+          ].join(" ")}
+        >
+          обсяг {levels.volumePressure.label} {levels.volumePressure.score}/100
+        </span>
+        <span
+          className={[
+            "rounded-full border px-2.5 py-1",
+            getDirectionAwareClassName({
+              direction: candidate.direction,
+              signalDirection: levels.adx.direction,
+              fallbackStatus: levels.adx.status,
+            }),
+          ].join(" ")}
+        >
+          ADX {levels.adx.label}
+        </span>
+        <span
+          className={[
+            "rounded-full border px-2.5 py-1",
+            getDirectionAwareClassName({
+              direction: candidate.direction,
+              signalDirection: levels.marketStructure.direction,
+              fallbackStatus: levels.marketStructure.status,
+            }),
+          ].join(" ")}
+        >
+          структура {levels.marketStructure.label}
+        </span>
+        <span
+          className={[
+            "rounded-full border px-2.5 py-1",
             priceActionClassName[priceAction.direction],
           ].join(" ")}
         >
@@ -315,9 +376,21 @@ function getScoreDetail(kind: ScoreDetailKind, candidate: DirectionCandidate) {
   if (kind === "market") {
     return {
       title: "Ринок",
-      includes: ["тренд", "поточний рух", "BTC", "Open Interest", "волатильність"],
+      includes: [
+        "тренд",
+        "поточний рух",
+        "обсяг",
+        "ADX",
+        "структура",
+        "BTC",
+        "Open Interest",
+        "волатильність",
+      ],
       current: [
         getSignalDetail(candidate, "market-quality"),
+        `Обсяг: ${levels.volumePressure.detail}`,
+        `ADX: ${levels.adx.detail}`,
+        `Структура: ${levels.marketStructure.detail}`,
         levels.openInterest.status === "ok"
           ? `OI: ${levels.openInterest.summary}`
           : `OI: ${levels.openInterest.status === "partial" ? "є тільки поточне значення" : "немає нормальних даних"}`,

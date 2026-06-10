@@ -585,6 +585,65 @@ function getOpenInterestSignalDetail(openInterest: OpenInterestState) {
   return openInterest.detail;
 }
 
+function getVolumePressureStatus(
+  direction: TradeDirection,
+  market: MarketSnapshot,
+): ReviewStatus {
+  const pressure = market.volumePressure;
+
+  if (pressure.pressure === "unknown" || pressure.pressure === "balanced") {
+    return "warning";
+  }
+
+  if (
+    (direction === "long" && pressure.pressure === "buying") ||
+    (direction === "short" && pressure.pressure === "selling")
+  ) {
+    return "pass";
+  }
+
+  return pressure.score >= 65 ? "fail" : "warning";
+}
+
+function getAdxStatus(direction: TradeDirection, market: MarketSnapshot): ReviewStatus {
+  const adx = market.adx;
+
+  if (adx.mode === "unknown") {
+    return "warning";
+  }
+
+  if (adx.mode === "range") {
+    return "warning";
+  }
+
+  if (adx.direction === "neutral") {
+    return "warning";
+  }
+
+  if (adx.direction === direction) {
+    return adx.mode === "trend" ? "pass" : "warning";
+  }
+
+  return adx.mode === "trend" ? "fail" : "warning";
+}
+
+function getMarketStructureStatus(
+  direction: TradeDirection,
+  market: MarketSnapshot,
+): ReviewStatus {
+  const structure = market.marketStructure;
+
+  if (structure.event === "unknown" || structure.event === "inside-range") {
+    return "warning";
+  }
+
+  if (structure.direction === direction) {
+    return "pass";
+  }
+
+  return "fail";
+}
+
 function getPriceActionStatus(
   direction: TradeDirection,
   priceAction: PriceActionState,
@@ -777,6 +836,9 @@ function getMarketScore({
   trendStatus,
   btcStatus,
   priceActionStatus,
+  volumePressureStatus,
+  adxStatus,
+  marketStructureStatus,
   openInterestStatus,
   volatilityStatus,
   market,
@@ -784,19 +846,25 @@ function getMarketScore({
   trendStatus: ReviewStatus;
   btcStatus: ReviewStatus;
   priceActionStatus: ReviewStatus;
+  volumePressureStatus: ReviewStatus;
+  adxStatus: ReviewStatus;
+  marketStructureStatus: ReviewStatus;
   openInterestStatus: ReviewStatus;
   volatilityStatus: ReviewStatus;
   market: MarketSnapshot;
 }) {
   const openInterestWeight = market.openInterest.status === "ok" ? 12 : 0;
-  const availableWeight = 78 + openInterestWeight;
+  const availableWeight = 100 + openInterestWeight;
   const rawScore =
-    getStatusWeight(trendStatus) * 25 +
-    getStatusWeight(priceActionStatus) * 25 +
-    getStatusWeight(btcStatus) * 18 +
+    getStatusWeight(trendStatus) * 18 +
+    getStatusWeight(priceActionStatus) * 18 +
+    getStatusWeight(adxStatus) * 15 +
+    getStatusWeight(marketStructureStatus) * 15 +
+    getStatusWeight(volumePressureStatus) * 12 +
+    getStatusWeight(btcStatus) * 12 +
     getStatusWeight(openInterestStatus) * openInterestWeight +
     getStatusWeight(volatilityStatus) * 10;
-  const strengthBonus = market.trend === "sideways" ? 0 : market.trendStrength * 0.08;
+  const strengthBonus = market.trend === "sideways" ? 0 : market.trendStrength * 0.05;
 
   return Math.round(Math.min((rawScore / availableWeight) * 100 + strengthBonus, 100));
 }
@@ -1208,6 +1276,9 @@ export function reviewTradePlan(
     plan.direction,
     market.openInterest,
   );
+  const volumePressureStatus = getVolumePressureStatus(plan.direction, market);
+  const adxStatus = getAdxStatus(plan.direction, market);
+  const marketStructureStatus = getMarketStructureStatus(plan.direction, market);
   const targetSpacePercent = rewardDistancePercent;
   const rangeWidth = market.nearestResistance.price - market.nearestSupport.price;
   const pricePositionPercent =
@@ -1237,6 +1308,9 @@ export function reviewTradePlan(
     trendStatus,
     btcStatus,
     priceActionStatus,
+    volumePressureStatus,
+    adxStatus,
+    marketStructureStatus,
     openInterestStatus,
     volatilityStatus,
     market,
@@ -1310,8 +1384,13 @@ export function reviewTradePlan(
           : market.btcBias === "bearish"
             ? "тисне вниз"
             : "нейтральний"
-      }, волатильність ${market.volatilityState === "extreme" ? "екстремальна" : market.volatilityState === "high" ? "висока" : market.volatilityState === "quiet" ? "тиха" : "нормальна"}.`,
-      getStatusByScore(marketScore),
+      }, обсяг ${market.volumePressure.label}, ADX ${market.adx.label}, структура ${market.marketStructure.label}.`,
+      getWorstStatus([
+        getStatusByScore(marketScore),
+        volumePressureStatus,
+        adxStatus,
+        marketStructureStatus,
+      ]),
     ),
     buildSignal(
       "entry-quality",
@@ -1426,6 +1505,9 @@ export function reviewTradePlan(
       targetAtrMultiple,
       priceAction: market.priceAction,
       moveStage: market.moveStage,
+      volumePressure: market.volumePressure,
+      adx: market.adx,
+      marketStructure: market.marketStructure,
       zoneReaction,
       zoneVolume,
       directionalVolume,

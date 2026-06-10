@@ -169,6 +169,24 @@ export function MarketSnapshotPanel({
         />
       </div>
 
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        <SnapshotStat
+          label="Обсяг"
+          value={market.volumePressure.label.toUpperCase()}
+          detail={market.volumePressure.summary}
+        />
+        <SnapshotStat
+          label="ADX"
+          value={market.adx.value === null ? "НЕМАЄ" : String(market.adx.value)}
+          detail={market.adx.summary}
+        />
+        <SnapshotStat
+          label="Структура"
+          value={market.marketStructure.label.toUpperCase()}
+          detail={market.marketStructure.summary}
+        />
+      </div>
+
       {error ? (
         <div className="mt-4 rounded-[1.1rem] border border-amber-300/18 bg-amber-300/8 px-4 py-3 text-sm leading-6 text-amber-100">
           {error}

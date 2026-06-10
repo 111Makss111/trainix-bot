@@ -1,7 +1,9 @@
 import type {
+  AdxState,
   BtcBias,
   MarketAnalysisTimeframe,
   MarketSnapshot,
+  MarketStructureState,
   MoveStageState,
   OpenInterestPoint,
   OpenInterestState,
@@ -11,6 +13,7 @@ import type {
   MarketZone,
   TradeTimeframe,
   TrendDirection,
+  VolumePressureState,
   VolatilityState,
   ZoneKind,
   ZoneVolumeProfile,
@@ -377,8 +380,8 @@ function getOpenInterestState({
   };
 }
 
-function getRecentCandles(candles: Candle[], count: number) {
-  return candles.slice(Math.max(0, candles.length - count));
+function getRecentCandles<T>(items: T[], count: number) {
+  return items.slice(Math.max(0, items.length - count));
 }
 
 function getClosedCandles(candles: Candle[]) {
@@ -401,6 +404,349 @@ function getCandleBodyRatio(candle: Candle) {
   }
 
   return Math.abs(candle.close - candle.open) / range;
+}
+
+function getCandleClosePosition(candle: Candle) {
+  const range = candle.high - candle.low;
+
+  if (range <= 0) {
+    return 0.5;
+  }
+
+  return clamp((candle.close - candle.low) / range, 0, 1);
+}
+
+function getCandleDirectionalVolume(candle: Candle) {
+  const closePosition = getCandleClosePosition(candle);
+  const bodyRatio = getCandleBodyRatio(candle);
+  const bodyBias = candle.close > candle.open ? bodyRatio * 0.18 : -bodyRatio * 0.18;
+  const buyerShare = clamp(closePosition * 0.72 + 0.14 + bodyBias, 0.05, 0.95);
+
+  return {
+    buying: candle.volume * buyerShare,
+    selling: candle.volume * (1 - buyerShare),
+  };
+}
+
+function getPressureLabel(pressure: VolumePressureState["pressure"]) {
+  if (pressure === "buying") {
+    return "покупець";
+  }
+
+  if (pressure === "selling") {
+    return "продавець";
+  }
+
+  if (pressure === "balanced") {
+    return "баланс";
+  }
+
+  return "невідомо";
+}
+
+function getVolumePressureState(candles: Candle[]): VolumePressureState {
+  const closedCandles = getClosedCandles(candles);
+  const pressureCandles = getRecentCandles(closedCandles, 12);
+  const recentCandles = getRecentCandles(closedCandles, 3);
+  const baselineCandles = getRecentCandles(closedCandles.slice(0, -3), 20);
+  const baselineVolume = average(baselineCandles.map((candle) => candle.volume));
+  const recentVolume = average(recentCandles.map((candle) => candle.volume));
+
+  if (pressureCandles.length < 6 || baselineVolume <= 0) {
+    return {
+      pressure: "unknown",
+      score: 0,
+      buyerScore: 0,
+      sellerScore: 0,
+      recentVolumeRatio: 0,
+      samples: pressureCandles.length,
+      label: "обсяг невідомий",
+      summary: "Недостатньо свічок для оцінки тиску.",
+      detail: "Потрібно більше живих свічок, щоб порівняти покупця і продавця.",
+      status: "warning",
+    };
+  }
+
+  const directionalVolume = pressureCandles.reduce(
+    (sum, candle) => {
+      const candleVolume = getCandleDirectionalVolume(candle);
+
+      return {
+        buying: sum.buying + candleVolume.buying,
+        selling: sum.selling + candleVolume.selling,
+      };
+    },
+    { buying: 0, selling: 0 },
+  );
+  const totalVolume = directionalVolume.buying + directionalVolume.selling;
+  const buyerScore =
+    totalVolume > 0 ? Math.round((directionalVolume.buying / totalVolume) * 100) : 0;
+  const sellerScore = totalVolume > 0 ? 100 - buyerScore : 0;
+  const imbalance = Math.abs(buyerScore - sellerScore);
+  const pressure: VolumePressureState["pressure"] =
+    imbalance < 12 ? "balanced" : buyerScore > sellerScore ? "buying" : "selling";
+  const recentVolumeRatio = recentVolume / baselineVolume;
+  const score =
+    pressure === "balanced"
+      ? Math.round(clamp(100 - imbalance * 2, 40, 100))
+      : Math.round(clamp(48 + imbalance * 0.85 + Math.max(recentVolumeRatio - 1, 0) * 18, 0, 100));
+  const label = getPressureLabel(pressure);
+  const status: ReviewStatus =
+    pressure === "balanced"
+        ? "warning"
+        : score >= 65
+          ? "pass"
+          : "warning";
+
+  return {
+    pressure,
+    score,
+    buyerScore,
+    sellerScore,
+    recentVolumeRatio,
+    samples: pressureCandles.length,
+    label,
+    summary: `${label} ${score}/100. Покупець ${buyerScore}%, продавець ${sellerScore}%.`,
+    detail: `Оцінка за останні ${pressureCandles.length} закритих свічок. Обсяг останніх 3 свічок ${recentVolumeRatio.toFixed(1)}x від середнього за 20. Це оцінка по OHLCV, не повний стакан.`,
+    status,
+  };
+}
+
+function getAdxState(candles: Candle[], period = 14): AdxState {
+  const closedCandles = getClosedCandles(candles);
+  const recentCandles = getRecentCandles(closedCandles, period * 3);
+
+  if (recentCandles.length < period + 2) {
+    return {
+      value: null,
+      plusDi: null,
+      minusDi: null,
+      mode: "unknown",
+      direction: "neutral",
+      label: "ADX невідомий",
+      summary: "Недостатньо свічок для ADX.",
+      detail: "ADX потребує більше історії, щоб відрізнити тренд від боковика.",
+      status: "warning",
+    };
+  }
+
+  const points = recentCandles.slice(1).map((candle, index) => {
+    const previousCandle = recentCandles[index];
+    const upMove = candle.high - previousCandle.high;
+    const downMove = previousCandle.low - candle.low;
+    const plusDm = upMove > downMove && upMove > 0 ? upMove : 0;
+    const minusDm = downMove > upMove && downMove > 0 ? downMove : 0;
+    const trueRange = Math.max(
+      candle.high - candle.low,
+      Math.abs(candle.high - previousCandle.close),
+      Math.abs(candle.low - previousCandle.close),
+    );
+
+    return { plusDm, minusDm, trueRange };
+  });
+  const dxValues: number[] = [];
+  let lastPlusDi = 0;
+  let lastMinusDi = 0;
+
+  for (let index = period; index <= points.length; index += 1) {
+    const slice = points.slice(index - period, index);
+    const trueRangeSum = slice.reduce((sum, point) => sum + point.trueRange, 0);
+
+    if (trueRangeSum <= 0) {
+      continue;
+    }
+
+    const plusDi =
+      (slice.reduce((sum, point) => sum + point.plusDm, 0) / trueRangeSum) * 100;
+    const minusDi =
+      (slice.reduce((sum, point) => sum + point.minusDm, 0) / trueRangeSum) * 100;
+    const diTotal = plusDi + minusDi;
+    const dx = diTotal > 0 ? (Math.abs(plusDi - minusDi) / diTotal) * 100 : 0;
+
+    dxValues.push(dx);
+    lastPlusDi = plusDi;
+    lastMinusDi = minusDi;
+  }
+
+  if (dxValues.length === 0) {
+    return {
+      value: null,
+      plusDi: null,
+      minusDi: null,
+      mode: "unknown",
+      direction: "neutral",
+      label: "ADX невідомий",
+      summary: "ADX не порахувався через слабкий діапазон свічок.",
+      detail: "True Range занадто малий або даних недостатньо.",
+      status: "warning",
+    };
+  }
+
+  const adx = average(getRecentCandles(dxValues, period));
+  const direction =
+    Math.abs(lastPlusDi - lastMinusDi) < 3
+      ? "neutral"
+      : lastPlusDi > lastMinusDi
+        ? "long"
+        : "short";
+  const mode: AdxState["mode"] =
+    adx >= 25 ? "trend" : adx >= 18 ? "transition" : "range";
+  const label =
+    mode === "trend"
+      ? "тренд"
+      : mode === "transition"
+        ? "перехід"
+        : "боковик";
+  const sideText =
+    direction === "long" ? "перевага покупця" : direction === "short" ? "перевага продавця" : "без переваги";
+
+  return {
+    value: Math.round(adx),
+    plusDi: Math.round(lastPlusDi),
+    minusDi: Math.round(lastMinusDi),
+    mode,
+    direction,
+    label,
+    summary: `ADX ${Math.round(adx)}: ${label}, ${sideText}.`,
+    detail: `ADX рахується по ${period} періодах. DI+ ${Math.round(lastPlusDi)}, DI- ${Math.round(lastMinusDi)}. ADX вище 25 підтверджує трендовість, нижче 18 частіше означає боковик.`,
+    status: mode === "trend" ? "pass" : mode === "transition" ? "warning" : "fail",
+  };
+}
+
+type SwingPoint = {
+  type: "high" | "low";
+  price: number;
+  index: number;
+};
+
+function getSwingPoints(candles: Candle[]) {
+  const closedCandles = getRecentCandles(getClosedCandles(candles), 90);
+  const swings: SwingPoint[] = [];
+
+  for (let index = 2; index < closedCandles.length - 2; index += 1) {
+    const candle = closedCandles[index];
+    const left = closedCandles.slice(index - 2, index);
+    const right = closedCandles.slice(index + 1, index + 3);
+    const isSwingHigh = [...left, ...right].every(
+      (nearbyCandle) => candle.high >= nearbyCandle.high,
+    );
+    const isSwingLow = [...left, ...right].every(
+      (nearbyCandle) => candle.low <= nearbyCandle.low,
+    );
+
+    if (isSwingHigh) {
+      swings.push({ type: "high", price: candle.high, index });
+    }
+
+    if (isSwingLow) {
+      swings.push({ type: "low", price: candle.low, index });
+    }
+  }
+
+  return swings;
+}
+
+function getPreviousStructureBias(highs: SwingPoint[], lows: SwingPoint[]) {
+  const lastHigh = highs.at(-1);
+  const previousHigh = highs.at(-2);
+  const lastLow = lows.at(-1);
+  const previousLow = lows.at(-2);
+
+  if (!lastHigh || !previousHigh || !lastLow || !previousLow) {
+    return "range" as MarketStructureState["bias"];
+  }
+
+  if (lastHigh.price > previousHigh.price && lastLow.price > previousLow.price) {
+    return "bullish";
+  }
+
+  if (lastHigh.price < previousHigh.price && lastLow.price < previousLow.price) {
+    return "bearish";
+  }
+
+  return "range";
+}
+
+function getMarketStructureState(candles: Candle[]): MarketStructureState {
+  const closedCandles = getClosedCandles(candles);
+  const currentClose = closedCandles.at(-1)?.close ?? 0;
+  const swings = getSwingPoints(candles);
+  const highs = swings.filter((point) => point.type === "high");
+  const lows = swings.filter((point) => point.type === "low");
+  const lastHigh = highs.at(-1);
+  const lastLow = lows.at(-1);
+
+  if (!lastHigh || !lastLow || currentClose <= 0) {
+    return {
+      bias: "unknown",
+      event: "unknown",
+      direction: "neutral",
+      score: 0,
+      lastSwingHigh: lastHigh?.price ?? null,
+      lastSwingLow: lastLow?.price ?? null,
+      brokenLevel: null,
+      label: "структура невідома",
+      summary: "Недостатньо swing-рівнів.",
+      detail: "Потрібно більше свічок, щоб знайти локальні high/low.",
+      status: "warning",
+    };
+  }
+
+  const previousBias = getPreviousStructureBias(highs, lows);
+  const brokeHigh = currentClose > lastHigh.price;
+  const brokeLow = currentClose < lastLow.price;
+  const event: MarketStructureState["event"] = brokeHigh
+    ? previousBias === "bearish"
+      ? "choch-up"
+      : "bos-up"
+    : brokeLow
+      ? previousBias === "bullish"
+        ? "choch-down"
+        : "bos-down"
+      : "inside-range";
+  const direction: MarketStructureState["direction"] =
+    event === "bos-up" || event === "choch-up"
+      ? "long"
+      : event === "bos-down" || event === "choch-down"
+        ? "short"
+        : "neutral";
+  const bias: MarketStructureState["bias"] =
+    direction === "long" ? "bullish" : direction === "short" ? "bearish" : previousBias;
+  const brokenLevel = brokeHigh ? lastHigh.price : brokeLow ? lastLow.price : null;
+  const breakDistancePercent =
+    brokenLevel !== null ? (Math.abs(currentClose - brokenLevel) / currentClose) * 100 : 0;
+  const score =
+    event === "inside-range"
+      ? 42
+      : Math.round(clamp(58 + breakDistancePercent * 120, 58, 96));
+  const label =
+    event === "bos-up"
+      ? "BOS вгору"
+      : event === "bos-down"
+        ? "BOS вниз"
+        : event === "choch-up"
+          ? "CHoCH вгору"
+          : event === "choch-down"
+            ? "CHoCH вниз"
+            : "всередині структури";
+  const summary =
+    event === "inside-range"
+      ? `Ціна між swing high ${lastHigh.price.toFixed(6)} і swing low ${lastLow.price.toFixed(6)}.`
+      : `${label}: пробито рівень ${brokenLevel?.toFixed(6)}.`;
+
+  return {
+    bias,
+    event,
+    direction,
+    score,
+    lastSwingHigh: lastHigh.price,
+    lastSwingLow: lastLow.price,
+    brokenLevel,
+    label,
+    summary,
+    detail: `${summary} Попередній bias: ${previousBias}. Останній swing high ${lastHigh.price.toFixed(6)}, swing low ${lastLow.price.toFixed(6)}.`,
+    status: event === "inside-range" ? "warning" : "pass",
+  };
 }
 
 function getMoveStageLabel(phase: MoveStageState["phase"]) {
@@ -1261,6 +1607,9 @@ export function buildMarketSnapshotFromCandles({
   const trend = getTrend(candles);
   const averageRangePercent = getAverageRangePercent(candles);
   const atr = getAtr(candles);
+  const volumePressure = getVolumePressureState(candles);
+  const adx = getAdxState(candles);
+  const marketStructure = getMarketStructureState(candles);
   const atrPercent = currentPrice > 0 ? (atr / currentPrice) * 100 : 0;
   const zones = buildConfirmedWorkingZones({
     currentPrice,
@@ -1324,6 +1673,9 @@ export function buildMarketSnapshotFromCandles({
     rangeToNoiseRatio,
     volatilityState: getVolatilityState(averageRangePercent),
     volumeState: getVolumeState(candles),
+    volumePressure,
+    adx,
+    marketStructure,
     openInterest: getOpenInterestState({
       candles,
       points: openInterestPoints,
@@ -1386,6 +1738,42 @@ export function getFallbackMarketSnapshot(
     rangeToNoiseRatio: 0,
     volatilityState: "normal",
     volumeState: "очікуємо живі дані",
+    volumePressure: {
+      pressure: "unknown",
+      score: 0,
+      buyerScore: 0,
+      sellerScore: 0,
+      recentVolumeRatio: 0,
+      samples: 0,
+      label: "обсяг невідомий",
+      summary: "Обсяг не рахується без живих свічок.",
+      detail: "Потрібні ринкові свічки, щоб оцінити покупця, продавця або баланс.",
+      status: "warning",
+    },
+    adx: {
+      value: null,
+      plusDi: null,
+      minusDi: null,
+      mode: "unknown",
+      direction: "neutral",
+      label: "ADX невідомий",
+      summary: "ADX не рахується без живих свічок.",
+      detail: "Потрібні ринкові свічки, щоб відрізнити тренд від боковика.",
+      status: "warning",
+    },
+    marketStructure: {
+      bias: "unknown",
+      event: "unknown",
+      direction: "neutral",
+      score: 0,
+      lastSwingHigh: null,
+      lastSwingLow: null,
+      brokenLevel: null,
+      label: "структура невідома",
+      summary: "Структура не рахується без живих свічок.",
+      detail: "Потрібні swing high/low, щоб побачити BOS або CHoCH.",
+      status: "warning",
+    },
     openInterest: getFallbackOpenInterest(),
     nearestSupport: fallbackSupport,
     nearestResistance: fallbackResistance,
